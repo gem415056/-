@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 편의성 7 in 1 통합팩 (V5.3 완벽 복원형)
+// @name         크랙 편의성 7 in 1 통합팩 (V5.4 채팅창 외부 좌우대칭)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.3
-// @description  더블클릭+리롤/전송홀드+턴수/크래커(좌측)+대사도우미+임시저장+라디오존데(채팅창 위 우측배치)
+// @version      5.4
+// @description  입력창 바깥쪽 상단에 좌측(크래커/턴수) 우측(라디오존데) 완벽 대칭 배치
 // @author       User & Gemini
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -280,7 +280,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 좌측 배치 턴수 & 소모 크래커 표시기
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -300,7 +300,6 @@
         let updateTimer, observer, lastRenderedText = '';
         let cachedTurns, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
         let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
-        let lastSafeLeftOffset;
 
         function start() {
             injectBaseStyle();
@@ -312,12 +311,12 @@
             if (document.getElementById('info-display-base-style')) return;
             const style = document.createElement('style');
             style.id = 'info-display-base-style';
-            // 좌측에 배치되도록 CSS 복원
+            // 외부 좌측 배치 CSS (top/left는 js에서 컨트롤)
             style.textContent = `
-            #my-custom-info-display { position: absolute; left: 0; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 12px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
+            #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
             #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
             .my-counter-part { all: unset; display: inline-flex; align-items: center; border-radius: 4px; padding: 1px 4px; user-select: none; }
-            .my-counter-separator { opacity: 0.3; margin: 0 4px; user-select: none; }
+            .my-counter-separator { opacity: 0.3; margin: 0 2px; user-select: none; }
             @keyframes info-pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
             .pulse-anim { animation: info-pulse 1s infinite ease-in-out; }
             `;
@@ -347,20 +346,6 @@
             return { bg, text: isDark ? '#888' : '#777' };
         }
 
-        function initUI(textarea) {
-            document.getElementById('my-custom-info-display')?.remove();
-            lastRenderedText = ''; currentTextarea = textarea;
-            const inputWrapper = textarea.parentElement;
-            if (!inputWrapper) return;
-            inputWrapper.style.position = 'relative';
-            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display';
-            textSpan = document.createElement('span'); textSpan.id = 'my-counter-text';
-            counterBadge.appendChild(textSpan); inputWrapper.appendChild(counterBadge);
-            const colors = getThemeColors(textarea);
-            counterBadge.style.color = colors.text;
-            updateLayout(textarea);
-        }
-
         function getCrackerCount() {
             const label = Array.from(document.querySelectorAll('span')).find(span => span.textContent.trim() === '나의 크래커');
             if (label?.nextElementSibling?.textContent.match(/[\d,]+/)) return parseInt(label.nextElementSibling.textContent.match(/[\d,]+/)[0].replace(/,/g, ''), 10);
@@ -373,21 +358,36 @@
             return null;
         }
 
+        function initUI(textarea) {
+            document.getElementById('my-custom-info-display')?.remove();
+            lastRenderedText = ''; currentTextarea = textarea;
+            
+            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display';
+            textSpan = document.createElement('span'); textSpan.id = 'my-counter-text';
+            counterBadge.appendChild(textSpan); 
+            
+            const colors = getThemeColors(textarea);
+            counterBadge.style.color = colors.text;
+            updateLayout(textarea);
+        }
+
         function updateLayout(textarea) {
-            if (!counterBadge?.parentElement) return;
-            const compStyle = getComputedStyle(textarea);
-            
-            // 좌측 패딩 맞추기
-            const leftOffset = textarea.getBoundingClientRect().left - counterBadge.parentElement.getBoundingClientRect().left + (parseFloat(compStyle.paddingLeft) || 0) + (parseFloat(compStyle.borderLeftWidth) || 0);
-            if (Number.isFinite(leftOffset) && leftOffset > 4) lastSafeLeftOffset = leftOffset;
-            counterBadge.style.paddingLeft = `${Math.max(0, lastSafeLeftOffset ?? Math.max(0, leftOffset))}px`;
-            
-            const hasTop = !!document.getElementById('my-custom-btn-menu');
-            counterBadge.style.top = hasTop ? '34px' : '2px';
-            counterBadge.style.paddingTop = hasTop ? '4px' : '10px';
-            
-            textarea.style.setProperty('padding-top', hasTop ? '86px' : '54px', 'important');
-            textarea.style.setProperty('min-height', hasTop ? '126px' : '94px', 'important');
+            if (!counterBadge) return;
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
+            if (!container) return;
+
+            if (counterBadge.parentElement !== container) {
+                container.appendChild(counterBadge);
+                container.style.position = 'relative';
+            }
+
+            // 외부 좌측 상단으로 완벽 배치
+            counterBadge.style.top = '-26px';
+            counterBadge.style.left = '4px';
+
+            // 과거 버전에서 입력창을 넓히던 강제 스타일 제거 (원래 크기로 복구)
+            textarea.style.removeProperty('padding-top');
+            textarea.style.removeProperty('min-height');
         }
 
         function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
@@ -439,7 +439,7 @@
             const now = Date.now();
             const textarea = document.querySelector(SELECTOR.textarea);
             if (!textarea) { counterBadge?.remove(); counterBadge = null; currentTextarea = null; return; }
-            if (!counterBadge || currentTextarea !== textarea || counterBadge.parentElement !== textarea.parentElement) initUI(textarea);
+            if (!counterBadge || currentTextarea !== textarea || !counterBadge.parentElement) initUI(textarea);
             if (!counterBadge || !textSpan) return;
             const currentChatId = typeof CrackUtil !== 'undefined' ? CrackUtil.path().chatRoom() : null;
             let forceCalculate = false;
@@ -485,14 +485,14 @@
             // 1. 턴수 표시
             html += `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
 
-            // 2. 총 잔여 크래커
+            // 2. 총 크래커 표시
             const crackerCount = getCrackerCount();
             if (crackerCount !== null) {
                 html += `<span class="my-counter-separator">|</span>`;
                 html += `<div class="my-counter-part">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
             }
 
-            // 3. 방금 소모한 크래커
+            // 3. 소모 크래커 표시
             html += `<span class="my-counter-separator">|</span>`;
             let cumText = '...';
             let anim = '';
@@ -674,7 +674,7 @@
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (입력창 위 우측 배치, 파동 아이콘 설정)
+    // 모듈 7: 라디오존데 (외부 우측 배치, 파동 아이콘 설정)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -851,7 +851,7 @@
             // 채팅창 '밖(위쪽)' 오른쪽 정렬
             host.style.position = 'absolute';
             host.style.top = '-26px'; // 입력창 바로 위에 띄움
-            host.style.right = '0';   // 오른쪽에 딱 붙임
+            host.style.right = '4px'; // 오른쪽에 딱 붙임
 
             const theme = getThemeColors(textarea);
             host.style.color = theme.text;
@@ -879,7 +879,7 @@
         try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
         try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
         try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
-        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 인라인 모듈 오류:", e); }
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
     }
 
     if (document.readyState === 'loading') {
