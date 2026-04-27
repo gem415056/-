@@ -1,0 +1,1182 @@
+// ==UserScript==
+// @name         크랙 편의성 7 in 1 통합팩 (최적화 완료)
+// @namespace    https://crack.wrtn.ai/
+// @version      4.0
+// @description  더블클릭+리롤홀드+전송홀드+턴수표시+대사도우미+임시저장+라디오존데 통합본
+// @author       User & Gemini
+// @match        https://crack.wrtn.ai/*
+// @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
+// @connect      rs.igx.kr
+// @run-at       document-idle
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // ==========================================
+    // 모듈 1: 더블클릭 수정 기능
+    // ==========================================
+    function initDoubleClick() {
+        function findMessageContainer(target) {
+            let el = target;
+            while (el && el !== document.body) {
+                if (el.hasAttribute('data-message-group-id')) return el;
+                el = el.parentElement;
+            }
+            return null;
+        }
+
+        function getReactProps(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactProps'));
+            return key ? el[key] : null;
+        }
+
+        function firePointerClick(el) {
+            const opts = { bubbles: true, cancelable: true };
+            el.dispatchEvent(new PointerEvent('pointerover', opts));
+            el.dispatchEvent(new PointerEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+            el.dispatchEvent(new PointerEvent('pointerdown', opts));
+            el.dispatchEvent(new PointerEvent('pointerup', opts));
+            el.click();
+        }
+
+        function tryReactEditClick(container) {
+            const trigger = container.querySelector('div[aria-haspopup="menu"]');
+            if (!trigger) return false;
+
+            const style = document.createElement('style');
+            style.id = 'igx-hide-dropdown';
+            style.textContent = `[data-radix-popper-content-wrapper], [role="menu"] { opacity: 0 !important; pointer-events: none !important; }`;
+            document.head.appendChild(style);
+
+            firePointerClick(trigger);
+
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const item = Array.from(document.querySelectorAll('div[role="menuitem"]')).find(el => el.textContent.includes('수정'));
+                if (item) {
+                    clearInterval(timer);
+                    const props = getReactProps(item);
+                    if (props?.onSelect) props.onSelect();
+                    else firePointerClick(item);
+                    setTimeout(() => style.remove(), 100);
+                } else if (Date.now() - start > 1500) {
+                    clearInterval(timer);
+                    style.remove();
+                }
+            }, 30);
+            return true;
+        }
+
+        document.addEventListener('dblclick', (e) => {
+            const container = findMessageContainer(e.target);
+            if (!container) return;
+            window.getSelection().removeAllRanges();
+            tryReactEditClick(container);
+        });
+    }
+
+    // ==========================================
+    // 모듈 2: 리롤 길게 누르기 기능
+    // ==========================================
+    function initRerollHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #rr-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #rr-progress-ring.active { display: block; }
+            #rr-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #rr-progress-ring circle.fill { fill: none; stroke: #e8302a; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'rr-progress-ring';
+        ring.innerHTML = `<svg id="rr-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isRerollBtn(el) {
+            if (!el) return false;
+            if (el.id === 'exp-reroll-btn') return true;
+            return el.querySelector?.('svg path')?.getAttribute('d')?.startsWith('M3.8 12a8.2') ?? false;
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left}px`; ring.style.top  = `${rect.top}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        });
+
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            e.preventDefault(); showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능
+    // ==========================================
+    function initSendHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #sh-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #sh-progress-ring.active { display: block; }
+            #sh-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #sh-progress-ring circle.fill { fill: none; stroke: #f97316; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'sh-progress-ring';
+        ring.innerHTML = `<svg id="sh-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isStopButton(btn) {
+            const path = btn.querySelector('svg path');
+            const d = path?.getAttribute('d') || '';
+            return d.includes('M6 6h12v12H6Z');
+        }
+
+        function isGeneralSendButton(btn) {
+            if (!btn) return false;
+            const cls = btn.className || '';
+            return (
+                cls.includes('bg-primary') &&
+                cls.includes('rounded-full') &&
+                cls.includes('text-primary-foreground')
+            );
+        }
+
+        function isHoldableSendBtn(el) {
+            return isGeneralSendButton(el) && !isStopButton(el);
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height) + 4;
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left - 2}px`; ring.style.top  = `${rect.top - 2}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        function handlePressStart(e) {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (e.type === 'touchstart') e.preventDefault();
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }
+
+        document.addEventListener('mousedown', handlePressStart);
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', handlePressStart, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 4: 턴수 크래커 표시기 기능
+    // ==========================================
+    function initTurnCracker() {
+        const DETAIL_PARTS_STORAGE_KEY = 'info_display_detail_parts';
+        const VISIBLE_PARTS_STORAGE_KEY = 'info_display_visible_parts';
+        const OUTPUT_COST_STORAGE_KEY = 'info_display_output_costs';
+
+        const SELECTOR = {
+            textarea: 'textarea[placeholder*="메시지"]',
+            messageGroup: 'div[data-message-group-id]',
+            modelIcon: 'img[src*="model-icon"]'
+        };
+
+        const MODEL_INFO = {
+            "하이퍼챗 1.5": { cost: 85 }, "하이퍼챗 1.0": { cost: 75 },
+            "슈퍼챗 2.5": { cost: 50 }, "슈퍼챗 2.0": { cost: 50 }, "슈퍼챗 1.5": { cost: 50 },
+            "프로챗 2.5": { cost: 58 }, "프로챗 1.0": { cost: 50 }, "파워챗": { cost: 20 }
+        };
+
+        const MODEL_ICON_MAP = {
+            'hyperchat1_5.webp': '하이퍼챗 1.5', 'hyperchat.webp': '하이퍼챗 1.0',
+            'superchat2_5.webp': '슈퍼챗 2.5', 'superchat2_0.webp': '슈퍼챗 2.0', 'superchat1_5.webp': '슈퍼챗 1.5',
+            'prochat2_5.webp': '프로챗 2.5', 'prochat1_0.webp': '프로챗 1.0', 'powerchat.webp': '파워챗'
+        };
+
+        const DEFAULT_DETAIL_PARTS = { turn: false, cumulative: false, cracker: false };
+        const DEFAULT_VISIBLE_PARTS = { turn: true, cumulative: true, cracker: true };
+
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.10.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+
+        const ICON = {
+            settings: `<svg width="6" height="18" viewBox="0 0 6 18" fill="currentColor" class="my-counter-settings-icon"><circle cx="3" cy="3.5" r="1.8"/><circle cx="3" cy="9" r="1.8"/><circle cx="3" cy="14.5" r="1.8"/></svg>`,
+            clock: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="my-counter-small-icon"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" class="my-counter-cracker-icon"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
+            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" class="my-counter-cracker-icon"><defs><mask id="bite-mask-cracker"><rect width="24" height="24" fill="white" /><circle cx="24" cy="0" r="12" fill="black" /></mask></defs><path fill="currentColor" mask="url(#bite-mask-cracker)" d="${CRACKER_PATH}"></path></svg>`
+        };
+
+        let counterBadge, textSpan, settingsBtn, settingsMenu, currentTextarea;
+        let detailParts = loadDetailParts();
+        let visibleParts = loadVisibleParts();
+        let updateTimer, observer, lastRenderedText = '';
+        let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
+        let cachedCumulative, isCalculatingCumulative = false, lastProcessedTurns = -1, cumulativeRetryDoneForChat;
+        let lastDialogCheckTime = 0, lastSafeLeftOffset;
+
+        function start() {
+            injectBaseStyle();
+            bindGlobalEvents();
+            startObserver();
+            scheduleUpdate();
+        }
+
+        function injectBaseStyle() {
+            if (document.getElementById('info-display-base-style')) return;
+            const style = document.createElement('style');
+            style.id = 'info-display-base-style';
+            style.textContent = `
+            #my-custom-info-display { position: absolute; left: 0; right: 14px; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 13px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
+            #my-custom-info-display #my-counter-settings-button { all: unset; position: relative; pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; margin-left: 0; margin-right: 8px; transition: opacity 0.15s; touch-action: manipulation; color: inherit; }
+            #my-custom-info-display #my-counter-settings-button::after { content: ''; position: absolute; top: -10px; bottom: -10px; left: -8px; right: -10px; }
+            #my-custom-info-display #my-counter-settings-button:hover { opacity: 0.7; }
+            .my-counter-settings-icon { display: block; flex-shrink: 0; }
+            #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
+            .my-counter-part { all: unset; display: inline-flex; align-items: center; pointer-events: auto; border-radius: 4px; padding: 1px 2px; touch-action: manipulation; user-select: none; transition: background 0.15s; cursor: pointer; }
+            .my-counter-separator { opacity: 0.45; margin: 0 3px; pointer-events: none; user-select: none; }
+            #info-display-settings-menu { display: none; position: fixed; border-radius: 8px; padding: 4px; flex-direction: column; gap: 1px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); z-index: 9999999; min-width: 132px; font-size: 13px; border-style: solid; border-width: 1px; font-family: 'Pretendard', sans-serif; }
+            .my-counter-settings-title { font-size: 12px; font-weight: 700; opacity: 0.7; padding: 0 4px 2px; }
+            .my-counter-settings-row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 5px; cursor: pointer; user-select: none; touch-action: manipulation; }
+            .my-counter-settings-row:hover { background: rgba(128,128,128,0.16); }
+            .my-counter-settings-row input { margin: 0; cursor: pointer; }
+            .my-counter-small-icon { margin-right: 5px; flex-shrink: 0; }
+            .my-counter-cracker-icon { margin: 0 4px 0 0; flex-shrink: 0; }
+            @keyframes info-pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+            .pulse-anim { animation: info-pulse 1s infinite ease-in-out; }
+            @media (max-width: 520px) { #my-custom-info-display { right: 8px; font-size: 12px; } .my-counter-separator { margin: 0 2px; } .my-counter-part { padding: 1px; } }`;
+            document.head.appendChild(style);
+        }
+
+        function bindGlobalEvents() {
+            document.addEventListener('click', (e) => {
+                if (!settingsBtn?.contains(e.target) && !settingsMenu?.contains(e.target) && settingsMenu?.style.display === 'flex') hideSettingsMenu();
+            });
+            window.addEventListener('scroll', hideSettingsMenu, true);
+            window.addEventListener('resize', hideSettingsMenu);
+        }
+
+        function startObserver() {
+            if (observer) return;
+            observer = new MutationObserver((mutations) => {
+                if (mutations.every(m => m.target.closest?.('#my-custom-info-display, #info-display-settings-menu'))) return;
+                scheduleUpdate();
+            });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow'] });
+        }
+
+        function scheduleUpdate() { clearTimeout(updateTimer); updateTimer = setTimeout(updateTurnCount, 80); }
+        function loadDetailParts() { try { return { ...DEFAULT_DETAIL_PARTS, ...JSON.parse(localStorage.getItem(DETAIL_PARTS_STORAGE_KEY) || '{}') }; } catch { return { ...DEFAULT_DETAIL_PARTS }; } }
+        function saveDetailParts() { localStorage.setItem(DETAIL_PARTS_STORAGE_KEY, JSON.stringify(detailParts)); }
+        function loadVisibleParts() { try { return { ...DEFAULT_VISIBLE_PARTS, ...JSON.parse(localStorage.getItem(VISIBLE_PARTS_STORAGE_KEY) || '{}') }; } catch { return { ...DEFAULT_VISIBLE_PARTS }; } }
+        function saveVisibleParts() { localStorage.setItem(VISIBLE_PARTS_STORAGE_KEY, JSON.stringify(visibleParts)); }
+        function toggleDetailPart(partKey) {
+            if (!Object.prototype.hasOwnProperty.call(detailParts, partKey) || visibleParts[partKey] === false || partKey === 'cumulative') return;
+            detailParts[partKey] = !detailParts[partKey];
+            saveDetailParts();
+            lastRenderedText = '';
+            scheduleUpdate();
+        }
+
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { bg, text: isDark ? '#888' : '#777', menuBg: isDark ? '#282828' : '#fff', menuBorder: isDark ? '#444' : '#e5e5e5', itemText: isDark ? '#ccc' : '#444' };
+        }
+
+        function initUI(textarea) {
+            document.getElementById('my-custom-info-display')?.remove();
+            document.getElementById('info-display-settings-menu')?.remove();
+            lastRenderedText = ''; currentTextarea = textarea;
+            const inputWrapper = textarea.parentElement;
+            if (!inputWrapper) return;
+            inputWrapper.style.position = 'relative';
+            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display';
+            settingsBtn = document.createElement('button'); settingsBtn.id = 'my-counter-settings-button'; settingsBtn.type = 'button'; settingsBtn.innerHTML = ICON.settings;
+            settingsBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleSettingsMenu(); };
+            textSpan = document.createElement('span'); textSpan.id = 'my-counter-text';
+            textSpan.onclick = (e) => { const part = e.target.closest('.my-counter-part'); if (part) { e.preventDefault(); e.stopPropagation(); toggleDetailPart(part.dataset.part); } };
+            counterBadge.append(settingsBtn, textSpan); inputWrapper.appendChild(counterBadge);
+            settingsMenu = buildSettingsMenu(); document.body.appendChild(settingsMenu);
+            const colors = getThemeColors(textarea);
+            counterBadge.style.backgroundColor = colors.bg; counterBadge.style.color = colors.text;
+            settingsMenu.style.background = colors.menuBg; settingsMenu.style.borderColor = colors.menuBorder; settingsMenu.style.color = colors.itemText;
+            updateLayout(textarea);
+        }
+
+        function buildSettingsMenu() {
+            const menu = document.createElement('div'); menu.id = 'info-display-settings-menu';
+            menu.innerHTML = `<div class="my-counter-settings-title">정보 표시</div>`;
+            [{ key: 'turn', label: '턴수' }, { key: 'cumulative', label: '누적 크래커' }, { key: 'cracker', label: '잔여 크래커' }].forEach(item => {
+                const row = document.createElement('label'); row.className = 'my-counter-settings-row';
+                row.innerHTML = `<input type="checkbox" data-part="${item.key}"><span>${item.label}</span>`;
+                const input = row.querySelector('input');
+                input.onchange = (e) => {
+                    e.stopPropagation(); visibleParts[item.key] = input.checked; saveVisibleParts();
+                    lastRenderedText = '__FORCE__'; scheduleUpdate(); syncSettingsMenu();
+                };
+                menu.appendChild(row);
+            });
+            return menu;
+        }
+
+        function toggleSettingsMenu() { if (!settingsMenu || !settingsBtn) return; if (settingsMenu.style.display === 'flex') { hideSettingsMenu(); return; } settingsMenu.style.display = 'flex'; syncSettingsMenu(); positionSettingsMenu(); }
+        function hideSettingsMenu() { if (settingsMenu) settingsMenu.style.display = 'none'; }
+        function positionSettingsMenu() {
+            if (!settingsMenu || !settingsBtn) return;
+            const rect = settingsBtn.getBoundingClientRect(), gap = 8;
+            const width = settingsMenu.offsetWidth, height = settingsMenu.offsetHeight;
+            let left = Math.max(gap, Math.min(rect.left, window.innerWidth - width - gap));
+            let top = rect.top - height - gap < gap ? rect.bottom + gap : rect.top - height - gap;
+            settingsMenu.style.left = `${left}px`; settingsMenu.style.top = `${top}px`;
+        }
+        function syncSettingsMenu() { if (settingsMenu) settingsMenu.querySelectorAll('input[data-part]').forEach(input => { input.checked = visibleParts[input.dataset.part] !== false; }); }
+
+        function getCrackerCount() {
+            const label = Array.from(document.querySelectorAll('span')).find(span => span.textContent.trim() === '나의 크래커');
+            if (label?.nextElementSibling?.textContent.match(/[\d,]+/)) return parseInt(label.nextElementSibling.textContent.match(/[\d,]+/)[0].replace(/,/g, ''), 10);
+            const topBar = document.getElementById('chasm-cracker-text');
+            if (topBar) {
+                const text = topBar.getAttribute('chasm-tmi-current') || topBar.textContent;
+                const parsed = parseInt(String(text).replace(/,/g, ''), 10);
+                if (!Number.isNaN(parsed)) return parsed;
+            }
+            return null;
+        }
+
+        function getCurrentModelName() {
+            for (const icon of Array.from(document.querySelectorAll(SELECTOR.modelIcon))) {
+                if (icon.closest('[role="menuitem"], [role="dialog"]')) continue;
+                const fromSrc = Object.entries(MODEL_ICON_MAP).find(([file]) => (icon.src || '').includes(file));
+                if (fromSrc) return fromSrc[1];
+                const fromAlt = Object.keys(MODEL_INFO).find(model => (icon.alt || '').includes(model));
+                if (fromAlt) return fromAlt;
+            }
+            return null;
+        }
+
+        function readOutputCostsFromOpenDialog() {
+            const dialog = Array.from(document.querySelectorAll('[role="dialog"]')).find(el => el.textContent.includes('최대 출력량 조절'));
+            if (!dialog) return null;
+            const result = {};
+            for (const icon of Array.from(dialog.querySelectorAll('img[src*="/model-icon/"]'))) {
+                const modelName = Object.entries(MODEL_ICON_MAP).find(([file]) => (icon.src || '').includes(file))?.[1];
+                if (!modelName) continue;
+                let block = icon; for (let i = 0; i < 8 && block; i++, block = block.parentElement) if (block.querySelector?.('span[role="slider"]') && /최대\s*\d+\s*개/.test(block.innerText)) break;
+                const maxMatch = block?.innerText?.match(/최대\s*(\d+)\s*개/);
+                if (maxMatch) result[modelName] = { maxCost: parseInt(maxMatch[1], 10), updatedAt: Date.now() };
+            }
+            if (Object.keys(result).length > 0) { localStorage.setItem(OUTPUT_COST_STORAGE_KEY, JSON.stringify(result)); return result; }
+            return null;
+        }
+
+        function getOutputAdjustedCost(modelName) {
+            if (!modelName) return null;
+            try { const costs = JSON.parse(localStorage.getItem(OUTPUT_COST_STORAGE_KEY) || '{}'); return costs?.[modelName]?.maxCost || MODEL_INFO[modelName]?.cost || null; }
+            catch { return MODEL_INFO[modelName]?.cost || null; }
+        }
+
+        function updateLayout(textarea) {
+            if (!counterBadge?.parentElement) return;
+            const compStyle = getComputedStyle(textarea);
+            const leftOffset = textarea.getBoundingClientRect().left - counterBadge.parentElement.getBoundingClientRect().left + (parseFloat(compStyle.paddingLeft) || 0) + (parseFloat(compStyle.borderLeftWidth) || 0);
+            if (Number.isFinite(leftOffset) && leftOffset > 4) lastSafeLeftOffset = leftOffset;
+            counterBadge.style.paddingLeft = `${Math.max(0, lastSafeLeftOffset ?? Math.max(0, leftOffset))}px`;
+            const hasTop = !!document.getElementById('my-custom-btn-menu');
+            counterBadge.style.top = hasTop ? '34px' : '2px';
+            counterBadge.style.paddingTop = hasTop ? '4px' : '10px';
+            counterBadge.style.paddingBottom = '8px';
+            textarea.style.setProperty('padding-top', hasTop ? '86px' : '54px', 'important');
+            textarea.style.setProperty('min-height', hasTop ? '126px' : '94px', 'important');
+        }
+
+        function renderParts(parts) {
+            if (!textSpan) return;
+            const visible = parts.filter(p => visibleParts[p.key] !== false);
+            if (visible.length === 0) { textSpan.replaceChildren(); lastRenderedText = '__EMPTY__'; return; }
+            const html = visible.map((p, i) => `${i > 0 ? '<span class="my-counter-separator">|</span>' : ''}<button class="my-counter-part" data-part="${p.key}" ${p.key === 'cumulative' ? 'style="cursor:default;"' : ''}>${detailParts[p.key] ? p.detailHtml : p.summaryHtml}</button>`).join('');
+            if (html === lastRenderedText) return;
+            textSpan.innerHTML = html; lastRenderedText = html;
+        }
+
+        function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
+        function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
+
+        async function fetchRoomData() {
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+            try {
+                const pathInfo = CrackUtil.path();
+                if (!pathInfo.isChattingPath()) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                const chatId = pathInfo.chatRoom();
+                if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                let chatCounts = 0, totalMessages = 0; const timestamps = [];
+                for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
+                    totalMessages++;
+                    if (log.isUser()) continue;
+                    chatCounts++; timestamps.push(getTimeFromObjectId(log.id));
+                }
+                return { chatCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
+            } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
+        }
+
+        async function fetchCumulativeCrackers(timestamps) {
+            const token = extractAccessToken();
+            if (!token || timestamps.length === 0) return 0;
+            let total = 0, page = 1, lastSafePage = 1, warping = true;
+            const oldest = Math.min(...timestamps), latest = Math.max(...timestamps);
+            for(let i=0; i < 500; i++) {
+                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) break;
+                const json = await res.json();
+                if (!json?.data?.length) break;
+                const pageLatestTime = new Date(json.data[0].date).getTime();
+                if (warping && pageLatestTime < latest) { page = lastSafePage + 1; warping = false; continue; }
+                if (warping && pageLatestTime > latest + 600000) { lastSafePage = page; page += 15; continue; }
+                warping = false;
+                let pageDone = false;
+                for (let item of json.data) {
+                    const itemTime = new Date(item.date).getTime();
+                    if (itemTime < oldest - 120000) { pageDone = true; break; }
+                    if (item.isConsumed && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) total += item.balance.total * (item.product === 'superchat' ? 35 : 1);
+                }
+                if (pageDone) break;
+                page++; await new Promise(r => setTimeout(r, 40));
+            }
+            return total;
+        }
+
+        function updateTurnCount() {
+            const now = Date.now();
+            if (now - lastDialogCheckTime > 1500) { readOutputCostsFromOpenDialog(); lastDialogCheckTime = now; }
+            const textarea = document.querySelector(SELECTOR.textarea);
+            if (!textarea) { counterBadge?.remove(); counterBadge = null; currentTextarea = null; hideSettingsMenu(); return; }
+            if (!counterBadge || currentTextarea !== textarea || counterBadge.parentElement !== textarea.parentElement) initUI(textarea);
+            if (!counterBadge || !textSpan) return;
+            const currentChatId = typeof CrackUtil !== 'undefined' ? CrackUtil.path().chatRoom() : null;
+            let forceCalculate = false;
+            if (currentChatId && currentChatId !== lastChatId) { lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; cachedCumulative = null; lastProcessedTurns = -1; cumulativeRetryDoneForChat = null; }
+            const currentModelName = getCurrentModelName();
+            if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
+                isCalculatingTurns = true;
+                fetchRoomData().then(data => {
+                    const domTotal = document.querySelectorAll(SELECTOR.messageGroup).length;
+                    if (data.chatCounts !== -1) {
+                        cachedTurns = data.chatCounts === 0 && domTotal > 0 ? Math.ceil(domTotal / 2) : data.chatCounts;
+                        cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
+                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea, currentModelName);
+                            fetchCumulativeCrackers(data.timestamps).then(async cum => {
+                                if (cum === 0 && cachedTurns >= 2 && currentChatId && cumulativeRetryDoneForChat !== currentChatId) { cumulativeRetryDoneForChat = currentChatId; await new Promise(r => setTimeout(r, 1000)); cum = await fetchCumulativeCrackers(data.timestamps); }
+                                cachedCumulative = cum; isCalculatingCumulative = false; renderUpdate(textarea, currentModelName);
+                            }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea, currentModelName); });
+                        }
+                    } else { cachedTotalMessages = domTotal; cachedTurns = Math.ceil(domTotal / 2); }
+                    lastCalculatedTime = Date.now(); isCalculatingTurns = false; renderUpdate(textarea, currentModelName);
+                }).catch(() => { isCalculatingTurns = false; renderUpdate(textarea, currentModelName); });
+            } else { renderUpdate(textarea, currentModelName); }
+        }
+
+        function renderUpdate(textarea, currentModelName) {
+            if (!textSpan) return;
+            const parts = [];
+            let displayTurns = cachedTurns ?? Math.ceil(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
+            parts.push({ key: 'turn', summaryHtml: `${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴`, detailHtml: `${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴&nbsp;<span style="opacity:.75;">(총 메시지 ${(cachedTotalMessages ?? document.querySelectorAll(SELECTOR.messageGroup).length).toLocaleString()}개)</span>` });
+            if (visibleParts.cumulative !== false) {
+                let cumText = '...', suffix = '', anim = '';
+                if (isCalculatingCumulative) anim = 'pulse-anim';
+                else if (cachedCumulative !== null) { cumText = cachedCumulative.toLocaleString(); suffix = '개'; }
+                else if (displayTurns <= 0) { cumText = '0'; suffix = '개'; }
+                parts.push({ key: 'cumulative', summaryHtml: `${ICON.bittenCracker.replace('class="', `class="${anim} `)}<span style="font-weight:700;">${cumText}</span>${suffix}`, detailHtml: `${ICON.bittenCracker}<span style="font-weight:700;">${cumText}</span>${suffix}` });
+            }
+            const crackerCount = getCrackerCount(), modelCost = currentModelName ? getOutputAdjustedCost(currentModelName) : null;
+            if (crackerCount !== null) {
+                let detail = `${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개`;
+                if (modelCost) detail += `&nbsp;<span style="opacity:.75;">(${Math.floor(crackerCount / modelCost).toLocaleString()}턴 가능, 1회 ${modelCost.toLocaleString()}개)</span>`;
+                parts.push({ key: 'cracker', summaryHtml: `${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개`, detailHtml: detail });
+            }
+            renderParts(parts); updateLayout(textarea);
+            if (settingsMenu?.style.display === 'flex') positionSettingsMenu();
+        }
+
+        start();
+    }
+
+    // ==========================================
+    // 모듈 5: 고정형 RP 대사 입력 도우미
+    // ==========================================
+    function initRPToolbar() {
+        const fixedTools = [
+            { icon: '★', pre: '*', suf: '*' },
+            { icon: '♠', pre: '"', suf: '"' },
+            { icon: '♤', pre: "'", suf: "'" },
+            { icon: '◆', pre: '`', suf: '`' },
+            { icon: '■', pre: '[', suf: ']' },
+            { icon: '♣', pre: '(!', suf: ')' },
+            { icon: '♧', pre: '(OOC：', suf: ')' }
+        ];
+
+        function wrapText(prefix, suffix) {
+            const textarea = document.querySelector('textarea');
+            if (!textarea) return;
+
+            const start = textarea.selectionStart || 0;
+            const end = textarea.selectionEnd || 0;
+            const text = textarea.value || '';
+            const selected = text.substring(start, end);
+            const before = text.substring(0, start);
+            const after = text.substring(end, text.length);
+
+            const newValue = before + prefix + selected + suffix + after;
+
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+            nativeInputValueSetter.call(textarea, newValue);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+            textarea.focus();
+            textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+        }
+
+        function createToolButton(iconText, onClick) {
+            const btn = document.createElement('button');
+            btn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            btn.type = "button";
+            btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
+
+            btn.onmousedown = (e) => e.preventDefault();
+            btn.onclick = (e) => {
+                e.preventDefault();
+                onClick();
+            };
+            return btn;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!e.altKey) return;
+            let idx = -1;
+            const code = e.code;
+            const key = e.key;
+
+            if (code === 'Backquote' || key === '`' || key === '~') idx = 0;
+            else if (code === 'Digit1' || key === '1') idx = 1;
+            else if (code === 'Digit2' || key === '2') idx = 2;
+            else if (code === 'Digit3' || key === '3') idx = 3;
+            else if (code === 'Digit4' || key === '4') idx = 4;
+            else if (code === 'Digit5' || key === '5') idx = 5;
+            else if (code === 'Digit6' || key === '6') idx = 6;
+
+            if (idx !== -1) {
+                const textarea = document.querySelector('textarea');
+                if (document.activeElement === textarea) {
+                    if (fixedTools[idx]) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        wrapText(fixedTools[idx].pre, fixedTools[idx].suf);
+                    }
+                }
+            }
+        }, true);
+
+        setInterval(() => {
+            const btnContainer = document.querySelector('.flex.items-center.space-x-2');
+            if (!btnContainer) return;
+            if (document.getElementById('custom-rp-tools')) return;
+
+            const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
+
+            const toolWrapper = document.createElement('div');
+            toolWrapper.id = 'custom-rp-tools';
+            toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
+
+            fixedTools.forEach((t) => {
+                const btn = createToolButton(t.icon, () => wrapText(t.pre, t.suf));
+                toolWrapper.appendChild(btn);
+            });
+
+            if (recommendBtn) {
+                btnContainer.insertBefore(toolWrapper, recommendBtn);
+            } else {
+                btnContainer.appendChild(toolWrapper);
+            }
+        }, 500);
+    }
+
+    // ==========================================
+    // 모듈 6: 입력창 자동 임시저장
+    // ==========================================
+    function initAutoSaver() {
+        function getRoomId() {
+            const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
+            return match ? match[1] : 'global_room';
+        }
+
+        function getDraftKey() {
+            return 'crack_typing_draft_' + getRoomId();
+        }
+
+        let isRestoredForCurrentRoom = false;
+        let currentRoomId = '';
+
+        function setNativeValue(element, value) {
+            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+            const prototype = Object.getPrototypeOf(element);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+
+            if (valueSetter && valueSetter !== prototypeValueSetter) {
+                prototypeValueSetter.call(element, value);
+            } else {
+                valueSetter.call(element, value);
+            }
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function processAutoSave() {
+            const textarea = document.querySelector('textarea.__chat_input_textarea') || document.querySelector('textarea[placeholder*="메시지"]');
+            if (!textarea) return;
+
+            const newRoomId = getRoomId();
+            if (currentRoomId !== newRoomId) {
+                currentRoomId = newRoomId;
+                isRestoredForCurrentRoom = false;
+                textarea.dataset.draftHooked = 'false';
+            }
+
+            const DRAFT_KEY = getDraftKey();
+
+            if (!isRestoredForCurrentRoom) {
+                const savedDraft = localStorage.getItem(DRAFT_KEY);
+                if (savedDraft && textarea.value.trim() === '') {
+                    setNativeValue(textarea, savedDraft);
+                }
+                isRestoredForCurrentRoom = true;
+            }
+
+            if (textarea.dataset.draftHooked !== 'true') {
+                textarea.dataset.draftHooked = 'true';
+                textarea.addEventListener('input', (e) => {
+                    const text = e.target.value;
+                    if (text.trim() === '') {
+                        localStorage.removeItem(getDraftKey());
+                    } else {
+                        localStorage.setItem(getDraftKey(), text);
+                    }
+                });
+            }
+        }
+        setInterval(processAutoSave, 1000);
+    }
+
+    // ==========================================
+    // 모듈 7: 라디오존데 라이브 팝업창
+    // ==========================================
+    function initRadiosonde() {
+        const MODELS = [
+            { slug: "claude-opus-4.7", label: "Claude 4.7 Opus", short: "O4.7" },
+            { slug: "claude-opus-4.6", label: "Claude 4.6 Opus", short: "O4.6" },
+            { slug: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet", short: "S4.6" },
+            { slug: "gemini-3-1-pro", label: "Gemini 3.1 Pro", short: "G3.1" },
+            { slug: "gemini-2.5-pro", label: "Gemini 2.5 Pro", short: "G2.5" },
+        ];
+
+        const API_BASE = "https://rs.igx.kr/api/simple/";
+        const POLL_MS = 60 * 1000;
+
+        const STORE_KEY_LAYOUT = "igx_rs_popup_layout_v3";
+        const STORE_KEY_INLINE = "igx_rs_popup_inline_v3";
+        const STORE_KEY_POS_TOP = "igx_rs_popup_top_v3";
+        const STORE_KEY_POS_RIGHT = "igx_rs_popup_right_v3";
+        const STORE_KEY_VISIBILITY = "igx_rs_popup_vis_v3";
+
+        GM_addStyle(`
+            #igx-live-popup {
+            --bg-main: rgba(20, 20, 20, .92);
+            --border-main: rgba(255, 255, 255, .12);
+            --text-title: rgba(255, 255, 255, .85);
+            --bg-head: rgba(255, 255, 255, .03);
+            --border-head: rgba(255, 255, 255, .10);
+            --btn-border: rgba(255, 255, 255, .14);
+            --btn-bg: rgba(255, 255, 255, .06);
+            --btn-bg-hover: rgba(255, 255, 255, .10);
+            --text-name: rgba(255, 255, 255, .88);
+            --border-row: rgba(255, 255, 255, .08);
+            --text-metric: rgba(255, 255, 255, .70);
+            --text-unknown: rgba(255, 255, 255, .80);
+            --text-foot: rgba(255, 255, 255, .55);
+            --bg-set-row: rgba(255, 255, 255, .05);
+            --bg-bitem: rgba(255, 255, 255, .04);
+            --bg-settings: rgba(0, 0, 0, 0.2);
+
+            --c-active: #3ddc84;
+            --c-degraded: #ffd54a;
+            --c-impacted: #ff5c5c;
+            --c-unknown: #9aa0a6;
+            --c-fail: #ff9b9b;
+            }
+
+            #igx-live-popup.igx-light {
+            --bg-main: rgba(250, 250, 250, .92);
+            --border-main: rgba(0, 0, 0, .12);
+            --text-title: rgba(0, 0, 0, .85);
+            --bg-head: rgba(0, 0, 0, .03);
+            --border-head: rgba(0, 0, 0, .10);
+            --btn-border: rgba(0, 0, 0, .14);
+            --btn-bg: rgba(0, 0, 0, .06);
+            --btn-bg-hover: rgba(0, 0, 0, .10);
+            --text-name: rgba(0, 0, 0, .88);
+            --border-row: rgba(0, 0, 0, .08);
+            --text-metric: rgba(0, 0, 0, .70);
+            --text-unknown: rgba(0, 0, 0, .60);
+            --text-foot: rgba(0, 0, 0, .55);
+            --bg-set-row: rgba(0, 0, 0, .05);
+            --bg-bitem: rgba(0, 0, 0, .04);
+            --bg-settings: rgba(0, 0, 0, 0.05);
+
+            --c-active: #1da851;
+            --c-degraded: #d49500;
+            --c-impacted: #e03535;
+            --c-unknown: #7b8086;
+            --c-fail: #e03535;
+            }
+
+            #igx-live-popup {
+            position: fixed;
+            width: 220px;
+            background: var(--bg-main);
+            border: 1px solid var(--border-main);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+            z-index: 999999;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+            user-select: none;
+            backdrop-filter: blur(6px);
+            cursor: grab;
+            color: var(--text-title);
+            transition: background 0.3s, border-color 0.3s, color 0.3s;
+            }
+            #igx-live-popup:active { cursor: grabbing; }
+            #igx-live-popup * { box-sizing: border-box; }
+
+            #igx-live-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px; background: var(--bg-head); border-bottom: 1px solid var(--border-head); gap: 6px; }
+            #igx-live-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden; }
+            #igx-live-title { font-size: 12px; white-space: nowrap; }
+            #igx-live-actions { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+
+            .igx-btn { width: 22px; height: 22px; border-radius: 8px; border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--text-title); cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 13px; line-height: 0; }
+            .igx-btn:hover { background: var(--btn-bg-hover); }
+
+            #igx-live-body { padding: 8px; }
+            .igx-row { padding: 5px 0; border-bottom: 1px solid var(--border-row); }
+            .igx-row:last-child { border-bottom: none; }
+            .igx-top { display: flex; justify-content: space-between; align-items: center; gap: 4px; width: 100%; }
+            .igx-name { font-size: 11px; color: var(--text-name); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; letter-spacing: -0.2px; }
+            .igx-state { font-size: 10px; opacity: .95; white-space: nowrap; font-weight: 700; flex: 0 0 auto; letter-spacing: -0.2px; }
+
+            .dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+            .igx-metric { margin-top: 3px; font-size: 10px; color: var(--text-metric); line-height: 1.35; letter-spacing: -0.2px; }
+            .score { font-weight: 800; }
+            .fail { font-weight: 800; color: var(--c-fail); }
+
+            #igx-live-settings { display: none; padding: 8px; background: var(--bg-settings); }
+            .igx-set-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--bg-set-row); font-size: 11px; color: var(--text-name); letter-spacing: -0.2px; }
+            .igx-set-row:last-child { border-bottom: none; }
+            .igx-set-label { display: flex; align-items: center; gap: 6px; cursor: pointer; flex: 1; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .igx-set-chk { margin: 0; width: 13px; height: 13px; accent-color: #3ddc84; cursor: pointer; flex-shrink: 0; }
+
+            #igx-live-popup.show-settings #igx-live-settings { display: block; }
+            #igx-live-popup.show-settings #igx-live-body { display: none; }
+
+            .s-active .dot { background: var(--c-active); }
+            .s-degraded .dot { background: var(--c-degraded); }
+            .s-impacted .dot { background: var(--c-impacted); }
+            .s-unknown .dot { background: var(--c-unknown); }
+
+            .s-active .igx-state .stxt { color: var(--c-active); }
+            .s-degraded .igx-state .stxt { color: var(--c-degraded); }
+            .s-impacted .igx-state .stxt { color: var(--c-impacted); }
+            .s-unknown .igx-state .stxt { color: var(--c-unknown); }
+
+            .s-active .score { color: var(--c-active); }
+            .s-degraded .score { color: var(--c-degraded); }
+            .s-impacted .score { color: var(--c-impacted); }
+            .s-unknown .score { color: var(--text-unknown); }
+
+            #igx-live-foot { margin-top: 6px; font-size: 10px; color: var(--text-foot); display: flex; justify-content: space-between; align-items: center; letter-spacing: -0.2px; }
+            #igx-live-foot a { color: rgba(120, 200, 255, .85); text-decoration: none; border-bottom: 1px dotted rgba(120, 200, 255, .35); cursor: pointer; }
+
+            #igx-live-popup.bar { width: auto; max-width: calc(100vw - 32px); border-radius: 999px; }
+            #igx-live-popup.bar #igx-live-body, #igx-live-popup.bar #igx-live-settings, #igx-live-popup.bar .btn-settings, #igx-live-popup.bar #igx-live-title { display: none; }
+
+            .igx-inline-overlay-host { position: relative !important; }
+
+            #igx-live-popup.inline { position: absolute !important; top: 6px !important; left: 0 !important; right: 0 !important; width: auto !important; max-width: none !important; background: transparent !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; transform: none !important; cursor: default !important; margin: 0 !important; padding: 0 !important; border-radius: 0 !important; z-index: 3 !important; overflow: visible !important; pointer-events: none !important; }
+            #igx-live-popup.inline #igx-live-head { background: transparent; border: none; padding: 0 4px !important; min-height: 0 !important; gap: 4px !important; pointer-events: auto; }
+            #igx-live-popup.inline #igx-live-left { gap: 8px !important; }
+            #igx-live-popup.inline #igx-live-actions { gap: 2px !important; }
+            #igx-live-popup.inline #igx-live-body, #igx-live-popup.inline #igx-live-settings, #igx-live-popup.inline .btn-layout, #igx-live-popup.inline .btn-settings, #igx-live-popup.inline #igx-live-title { display: none; }
+            #igx-live-popup.inline .igx-btn { width: 18px !important; height: 18px !important; min-width: 18px !important; padding: 0 !important; background: transparent; border-color: transparent; opacity: 0.65; }
+            #igx-live-popup.inline .igx-btn:hover { background: var(--btn-bg); opacity: 1; }
+            #igx-live-popup.inline .bitem { background: transparent; border: none; padding: 1px 2px !important; gap: 6px !important; min-height: 0 !important; }
+            #igx-live-popup.inline .bname, #igx-live-popup.inline .bscore, #igx-live-popup.inline .blat { line-height: 1 !important; }
+            #igx-live-popup.inline .bname { opacity: 1; }
+            #igx-live-popup.inline .bdot { width: 6px !important; height: 6px !important; }
+
+            #igx-live-barline { display: none; align-items: center; gap: 6px; min-width: 0; flex: 1; white-space: nowrap; color: var(--text-unknown); font-size: 11px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            #igx-live-barline::-webkit-scrollbar { display: none; }
+            #igx-live-popup.bar #igx-live-barline, #igx-live-popup.inline #igx-live-barline { display: flex; }
+
+            .bitem { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--btn-border); background: var(--bg-bitem); }
+            .bname { opacity: .9; font-weight: 700; color: var(--text-title); }
+            .bscore { font-weight: 900; }
+            .blat { opacity: .75; color: var(--text-name); }
+            .bdot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; }
+
+            .b-active .bdot { background: var(--c-active); }
+            .b-degraded .bdot { background: var(--c-degraded); }
+            .b-impacted .bdot { background: var(--c-impacted); }
+            .b-unknown .bdot { background: var(--c-unknown); }
+
+            .inline-icon { display: none; width: 14px; height: 14px; opacity: 0.6; margin-right: 2px; color: var(--text-title); }
+            #igx-live-popup.inline .inline-icon { display: block; }
+
+            @media (max-width: 600px) {
+            #igx-live-popup.bar { width: auto !important; max-width: none !important; left: 2px !important; right: 2px !important; }
+            #igx-live-popup.bar #igx-live-head { padding: 7px 6px; gap: 4px; }
+            #igx-live-popup.bar #igx-live-left { gap: 4px; }
+            #igx-live-popup.bar #igx-live-barline { gap: 4px; }
+            #igx-live-popup.bar .bitem { flex: 1 1 0; justify-content: center; padding: 5px 2px; min-width: 0; }
+            #igx-live-popup.bar .bname, #igx-live-popup.bar .bscore, #igx-live-popup.bar .blat { font-size: 11px; letter-spacing: -0.3px; }
+            #igx-live-popup.bar .bdot { width: 6px; height: 7px; margin-right: -1px; flex-shrink: 0; }
+            #igx-live-popup.bar .igx-btn { width: 26px; height: 24px; flex-shrink: 0; }
+            #igx-live-popup.inline #igx-live-head { padding: 0 4px 2px 4px !important; }
+            }
+        `);
+
+        function px(v) { const n = Number(String(v).replace("px", "")); return Number.isFinite(n) ? n : 0; }
+        function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+        let visibility = {};
+        try { visibility = JSON.parse(localStorage.getItem(STORE_KEY_VISIBILITY)) || {}; } catch {}
+
+        MODELS.forEach(m => { if (visibility[m.slug] === undefined) visibility[m.slug] = true; });
+
+        const popup = document.createElement("div"); popup.id = "igx-live-popup";
+        const head = document.createElement("div"); head.id = "igx-live-head";
+        const left = document.createElement("div"); left.id = "igx-live-left";
+
+        const inlineIcon = document.createElement("div");
+        inlineIcon.className = "inline-icon";
+        inlineIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
+
+        const title = document.createElement("div"); title.id = "igx-live-title"; title.textContent = "Radiosonde";
+        const barline = document.createElement("div"); barline.id = "igx-live-barline"; barline.textContent = "불러오는 중…";
+
+        left.append(inlineIcon, title, barline);
+        const actions = document.createElement("div"); actions.id = "igx-live-actions";
+
+        const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-btn"; btnRefresh.title = "갱신"; btnRefresh.textContent = "↻";
+        const btnSettings = document.createElement("button"); btnSettings.className = "igx-btn btn-settings"; btnSettings.title = "모델 설정"; btnSettings.textContent = "⚙";
+        const btnLayout = document.createElement("button"); btnLayout.className = "igx-btn btn-layout"; btnLayout.title = "레이아웃 전환 (세로/가로)"; btnLayout.textContent = "↔";
+        const btnPin = document.createElement("button"); btnPin.className = "igx-btn btn-pin"; btnPin.title = "채팅창에 고정"; btnPin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg>';
+
+        actions.append(btnRefresh, btnSettings, btnLayout, btnPin);
+        head.append(left, actions);
+
+        const body = document.createElement("div"); body.id = "igx-live-body";
+        const settingsArea = document.createElement("div"); settingsArea.id = "igx-live-settings";
+        settingsArea.innerHTML = `<div style="font-size:11px; color:var(--text-unknown); margin-bottom:10px; text-align:center;">표시할 모델을 선택하세요</div>`;
+
+        const rows = new Map();
+        for (const m of MODELS) {
+            const row = document.createElement("div"); row.className = "igx-row s-unknown"; row.style.display = visibility[m.slug] ? "" : "none";
+            const top = document.createElement("div"); top.className = "igx-top";
+            const name = document.createElement("div"); name.className = "igx-name"; name.textContent = m.label; name.title = m.label;
+            const state = document.createElement("div"); state.className = "igx-state"; state.innerHTML = `<span class="dot"></span><span class="stxt">WAIT</span>`;
+            top.append(name, state);
+            const metric = document.createElement("div"); metric.className = "igx-metric"; metric.textContent = "불러오는 중…";
+            row.append(top, metric); body.appendChild(row); rows.set(m.slug, { row, state, metric });
+
+            const sRow = document.createElement("div"); sRow.className = "igx-set-row";
+            const sLabel = document.createElement("label"); sLabel.className = "igx-set-label"; sLabel.title = m.label;
+            const sChk = document.createElement("input"); sChk.type = "checkbox"; sChk.className = "igx-set-chk"; sChk.checked = visibility[m.slug];
+
+            sChk.addEventListener("change", (e) => {
+                visibility[m.slug] = e.target.checked;
+                localStorage.setItem(STORE_KEY_VISIBILITY, JSON.stringify(visibility));
+                rows.get(m.slug).row.style.display = visibility[m.slug] ? "" : "none";
+                renderBarline(); requestAnimationFrame(() => clampNow());
+            });
+
+            sLabel.append(sChk, document.createTextNode(" " + m.label)); sRow.append(sLabel); settingsArea.appendChild(sRow);
+        }
+
+        const foot = document.createElement("div"); foot.id = "igx-live-foot";
+        foot.innerHTML = `<span class="ts">—</span><a href="https://rs.igx.kr/" target="_blank" rel="noreferrer">rs.igx.kr</a>`;
+        body.appendChild(foot); popup.append(head, body, settingsArea);
+
+        function setFooter(text) { foot.querySelector(".ts").textContent = text; }
+        function setStateClass(el, status) {
+            el.classList.remove("s-active", "s-degraded", "s-impacted", "s-unknown");
+            if (status === "active") el.classList.add("s-active");
+            else if (status === "degraded") el.classList.add("s-degraded");
+            else if (status === "impacted") el.classList.add("s-impacted");
+            else el.classList.add("s-unknown");
+        }
+        function upperStatus(s) { const v = String(s || "unknown").toUpperCase(); if (v === "ACTIVE" || v === "DEGRADED" || v === "IMPACTED") return v; return "UNKNOWN"; }
+
+        function gmGetJson(url, timeoutMs = 6000) {
+            return new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET", url, timeout: timeoutMs, headers: { Accept: "application/json" },
+                    onload: (res) => { try { resolve(JSON.parse(res.responseText)); } catch (e) { reject(e); } },
+                    onerror: reject, ontimeout: () => reject(new Error("timeout")),
+                });
+            });
+        }
+
+        function fmt2(x) { const n = Number(x); return Number.isFinite(n) ? n.toFixed(2) : null; }
+        function fmt0(x) { const n = Number(x); return Number.isFinite(n) ? Math.round(n).toString() : null; }
+        function latencySeconds(latencyInt) { const n = Number(latencyInt); if (!Number.isFinite(n)) return null; return (n >= 50 ? n / 1000 : n).toFixed(2); }
+
+        const last = new Map();
+        function renderBarline() {
+            const parts = MODELS.filter(m => visibility[m.slug]).map((m) => {
+                const d = last.get(m.slug) || { status: "unknown", score: "—", lat: "—" };
+                const cls = d.status ? `b-${d.status}` : "b-unknown";
+                return `<span class="bitem ${cls}"><span class="bdot"></span><span class="bname">${m.short}</span><span class="bscore">${d.score ?? "—"}</span><span class="blat">${d.lat ?? "—"}s</span></span>`.trim();
+            }).join("");
+            barline.innerHTML = parts || "<span style='opacity:0.6; padding: 0 4px;'>선택된 모델 없음</span>";
+        }
+
+        async function refreshAll() {
+            setFooter("갱신중…");
+            const results = await Promise.allSettled(MODELS.map((m) => gmGetJson(API_BASE + encodeURIComponent(m.slug))));
+            for (let i = 0; i < MODELS.length; i++) {
+                const m = MODELS[i], ui = rows.get(m.slug);
+                if (results[i].status !== "fulfilled" || !results[i].value || results[i].value.success !== true) {
+                    setStateClass(ui.row, "unknown"); ui.state.querySelector(".stxt").textContent = "ERROR"; ui.metric.textContent = "요청 실패";
+                    last.set(m.slug, { status: "unknown", score: "—", lat: "—" }); continue;
+                }
+                const d = results[i].value.data, status = d.status || "unknown";
+                setStateClass(ui.row, status); ui.state.querySelector(".stxt").textContent = upperStatus(status);
+                const lat = latencySeconds(d.latency), tps = fmt2(d.tps), score = fmt0(d.score), fail = Number.isFinite(Number(d.failureCount)) ? Number(d.failureCount) : 0;
+                last.set(m.slug, { status, score: score ?? "—", lat: lat ?? "—" });
+                const scoreHtml = (score != null) ? `<span class="score">${score}점</span>` : `<span class="score">—점</span>`;
+                const failHtml = (fail > 0) ? ` · <span class="fail">실패 ${fail}</span>` : "";
+                ui.metric.innerHTML = `응답 ${lat ?? "—"}s · TPS ${tps ?? "—"} · ${scoreHtml}${failHtml}`;
+            }
+            renderBarline(); setFooter(`수신 ${new Date().toLocaleTimeString()}`);
+        }
+
+        const EDGE = 8;
+        function loadPos() { let t = localStorage.getItem(STORE_KEY_POS_TOP), r = localStorage.getItem(STORE_KEY_POS_RIGHT); return { top: t ? parseInt(t, 10) : 120, right: r ? parseInt(r, 10) : 16 }; }
+        function savePos(t, r) { localStorage.setItem(STORE_KEY_POS_TOP, t); localStorage.setItem(STORE_KEY_POS_RIGHT, r); }
+        function applyClampedPosition(targetTop, targetRight) {
+            if (popup.classList.contains("inline")) return;
+            const rect = popup.getBoundingClientRect(), maxTop = Math.max(0, window.innerHeight - rect.height - EDGE), maxRight = Math.max(0, window.innerWidth - rect.width - EDGE);
+            const t = clamp(targetTop, EDGE, maxTop), r = clamp(targetRight, 0, maxRight);
+            popup.style.top = `${t}px`; if (window.innerWidth > 600 || !popup.classList.contains("bar")) { popup.style.right = `${r}px`; }
+            popup.style.bottom = "auto"; savePos(t, r);
+        }
+        function clampNow() { applyClampedPosition(px(getComputedStyle(popup).top), px(getComputedStyle(popup).right)); }
+
+        const initPos = loadPos(); popup.style.top = `${initPos.top}px`; popup.style.right = `${initPos.right}px`;
+        btnSettings.addEventListener("click", (e) => { e.stopPropagation(); popup.classList.toggle("show-settings"); requestAnimationFrame(() => clampNow()); });
+
+        function cleanupInlineOverlayHosts() { document.querySelectorAll(".igx-inline-overlay-host").forEach(el => { el.classList.remove("igx-inline-overlay-host"); }); }
+        function ensureInlinePosition() {
+            const target = document.querySelector('textarea[placeholder*="메시지"]');
+            if (!target) return;
+            const container = target.closest(".flex.w-full.flex-col.rounded-lg"), host = container?.parentNode;
+            if (!container || !host) return;
+            cleanupInlineOverlayHosts();
+            if (host.classList) host.classList.add("igx-inline-overlay-host");
+            if (popup.parentNode !== host) host.appendChild(popup);
+        }
+
+        function updateLayout() {
+            const isInline = localStorage.getItem(STORE_KEY_INLINE) === "1", baseLayout = localStorage.getItem(STORE_KEY_LAYOUT) === "bar" ? "bar" : "card";
+            popup.classList.remove("card", "bar", "inline", "show-settings");
+            if (isInline) {
+                popup.classList.add("inline"); btnPin.textContent = "↗"; btnPin.title = "팝업으로 분리"; ensureInlinePosition();
+            } else {
+                cleanupInlineOverlayHosts(); popup.classList.add(baseLayout);
+                btnPin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg>';
+                btnPin.title = "채팅창에 고정";
+                if (popup.parentNode !== document.documentElement) { document.documentElement.appendChild(popup); }
+                requestAnimationFrame(() => clampNow());
+            }
+        }
+
+        if (!localStorage.getItem(STORE_KEY_LAYOUT)) { localStorage.setItem(STORE_KEY_LAYOUT, window.innerWidth <= 520 ? "bar" : "card"); }
+        updateLayout();
+        btnLayout.addEventListener("click", (e) => { e.stopPropagation(); const current = localStorage.getItem(STORE_KEY_LAYOUT) === "bar" ? "card" : "bar"; localStorage.setItem(STORE_KEY_LAYOUT, current); updateLayout(); });
+        btnPin.addEventListener("click", (e) => { e.stopPropagation(); const isInline = localStorage.getItem(STORE_KEY_INLINE) === "1"; localStorage.setItem(STORE_KEY_INLINE, isInline ? "0" : "1"); updateLayout(); });
+        btnRefresh.addEventListener("click", (e) => { e.stopPropagation(); refreshAll(); });
+
+        setInterval(refreshAll, POLL_MS); setTimeout(refreshAll, 800);
+        window.addEventListener("resize", () => clampNow(), { passive: true });
+        setInterval(() => { if (popup.classList.contains("inline")) ensureInlinePosition(); }, 1000);
+
+        let dragging = false, sx = 0, sy = 0, st = 0, sr = 0;
+        function isInteractive(target) { if (!target || !target.closest) return false; return !!target.closest(".igx-btn, a, input, label"); }
+        function startDrag(clientX, clientY) { if (popup.classList.contains("inline")) return; dragging = true; sx = clientX; sy = clientY; st = px(getComputedStyle(popup).top); sr = px(getComputedStyle(popup).right); }
+        function moveDrag(clientX, clientY) { if (!dragging) return; applyClampedPosition(st + (clientY - sy), sr - (clientX - sx)); }
+        function endDrag() { dragging = false; }
+
+        popup.addEventListener("pointerdown", (e) => { if (isInteractive(e.target)) return; try { popup.setPointerCapture(e.pointerId); } catch {} startDrag(e.clientX, e.clientY); e.preventDefault(); });
+        popup.addEventListener("pointermove", (e) => moveDrag(e.clientX, e.clientY));
+        popup.addEventListener("pointerup", () => endDrag()); popup.addEventListener("pointercancel", () => endDrag());
+        popup.addEventListener("touchstart", (e) => { if (isInteractive(e.target)) return; const t = e.touches && e.touches[0]; if (!t) return; startDrag(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+        popup.addEventListener("touchmove", (e) => { const t = e.touches && e.touches[0]; if (!t) return; moveDrag(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+        popup.addEventListener("touchend", () => endDrag());
+        popup.addEventListener("mousedown", (e) => { if (isInteractive(e.target)) return; startDrag(e.clientX, e.clientY); document.addEventListener("mousemove", onMouseMove); document.addEventListener("mouseup", onMouseUp); e.preventDefault(); });
+        function onMouseMove(e) { moveDrag(e.clientX, e.clientY); }
+        function onMouseUp() { endDrag(); document.removeEventListener("mousemove", onMouseMove); document.removeEventListener("mouseup", onMouseUp); }
+
+        function applyTheme() { const isDark = document.body.getAttribute("data-theme") === "dark"; if (isDark) popup.classList.remove("igx-light"); else popup.classList.add("igx-light"); }
+        applyTheme(); const themeObserver = new MutationObserver(() => applyTheme()); themeObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] });
+        document.documentElement.appendChild(popup);
+    }
+
+
+    // ==========================================
+    // 통합팩 동시 실행 관리
+    // ==========================================
+    function startAll() {
+        // @require로 불러온 외부 라이브러리가 로드될 시간을 잠시 기다립니다.
+        setTimeout(() => {
+            try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+        }, 100);
+
+        try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
+        try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+        try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
+        try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
+        try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); } // 새로 추가
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 모듈 오류:", e); } // 새로 추가
+    }
+
+    // 페이지 로딩이 완료된 후 모든 모듈을 순차적으로 실행
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
