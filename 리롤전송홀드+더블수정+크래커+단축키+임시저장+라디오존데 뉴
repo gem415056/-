@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 편의성 7 in 1 통합팩 (V5.4 채팅창 외부 좌우대칭)
+// @name         크랙 편의성 7 in 1 통합팩 (V5.5 팝업 방향 수정)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.4
-// @description  입력창 바깥쪽 상단에 좌측(크래커/턴수) 우측(라디오존데) 완벽 대칭 배치
+// @version      5.5
+// @description  입력창 바깥쪽 상단에 좌측(크래커/턴수) 우측(라디오존데) 완벽 대칭 배치 및 팝업 상향 오픈
 // @author       User & Gemini
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -311,7 +311,6 @@
             if (document.getElementById('info-display-base-style')) return;
             const style = document.createElement('style');
             style.id = 'info-display-base-style';
-            // 외부 좌측 배치 CSS (top/left는 js에서 컨트롤)
             style.textContent = `
             #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
             #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
@@ -381,11 +380,10 @@
                 container.style.position = 'relative';
             }
 
-            // 외부 좌측 상단으로 완벽 배치
             counterBadge.style.top = '-26px';
             counterBadge.style.left = '4px';
 
-            // 과거 버전에서 입력창을 넓히던 강제 스타일 제거 (원래 크기로 복구)
+            // 입력창 크기 원래 사이트 기본으로 유지 (강제 스타일 제거)
             textarea.style.removeProperty('padding-top');
             textarea.style.removeProperty('min-height');
         }
@@ -674,7 +672,7 @@
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (외부 우측 배치, 파동 아이콘 설정)
+    // 모듈 7: 라디오존데 (외부 우측 배치, 위쪽 팝업)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -722,8 +720,8 @@
             .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
 
             #igx-rs-settings {
-                display: none; position: absolute; top: 100%; right: 0; margin-top: 4px;
-                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px;
+                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 -4px 15px rgba(0,0,0,0.4);
                 flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
                 background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
             }
@@ -742,17 +740,13 @@
 
         const host = document.createElement("div"); host.id = "igx-rs-inline-host";
         
-        // 1. 파동 (모델 설정) 버튼 (제일 왼쪽)
         const btnSettings = document.createElement("button"); btnSettings.className = "igx-rs-btn"; 
         btnSettings.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
         
-        // 2. 정보 바 (가운데)
         const barline = document.createElement("div"); barline.className = "igx-rs-barline"; barline.textContent = "불러오는 중…";
 
-        // 3. 새로고침 버튼 (제일 오른쪽)
         const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-rs-btn"; btnRefresh.textContent = "↻"; btnRefresh.style.fontSize = "13px";
 
-        // 설정 드롭다운 창
         const settings = document.createElement("div"); settings.id = "igx-rs-settings";
         settings.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; font-size:12px; border-bottom:1px solid rgba(128,128,128,0.2); padding-bottom:4px;">모델 표시 설정</div>`;
         
@@ -767,7 +761,6 @@
             label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
         }
 
-        // 요소들을 [파동] - [정보] - [새로고침] 순서대로 조립
         host.append(btnSettings, barline, btnRefresh, settings);
 
         btnSettings.addEventListener("click", e => { e.stopPropagation(); host.classList.toggle("show-settings"); });
@@ -838,20 +831,17 @@
                 return;
             }
             
-            // 입력창을 감싸고 있는 큰 컨테이너를 찾음
             const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
             if (!container) return;
 
-            // 컨테이너 자체에 붙임 (채팅창 위에 고정)
             if (host.parentElement !== container) {
                 container.appendChild(host);
-                container.style.position = 'relative'; // 부모를 기준으로 위치 잡기
+                container.style.position = 'relative';
             }
 
-            // 채팅창 '밖(위쪽)' 오른쪽 정렬
-            host.style.position = 'absolute';
-            host.style.top = '-26px'; // 입력창 바로 위에 띄움
-            host.style.right = '4px'; // 오른쪽에 딱 붙임
+            // 외부 우측 상단으로 완벽 배치
+            host.style.top = '-26px';
+            host.style.right = '4px';
 
             const theme = getThemeColors(textarea);
             host.style.color = theme.text;
@@ -879,7 +869,7 @@
         try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
         try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
         try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
-        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 모듈 오류:", e); }
     }
 
     if (document.readyState === 'loading') {
