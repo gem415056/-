@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 편의성 7 in 1 통합팩 (V5.6 팝업 가림 완벽해결)
+// @name         크랙 편의성 7 in 1 통합팩 (V5.5 팝업방향 수정)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.6
-// @description  입력창 바깥쪽 상단 대칭 배치 + 라디오존데 상향 팝업창 가림 현상(z-index) 해결
+// @version      5.5
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시
 // @author       User & Gemini
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -246,7 +246,7 @@
         function hideRing() {
             ring.classList.remove('active');
             fillCircle.style.transition = 'none';
-            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDasharray;
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
         }
 
         function cancel() {
@@ -311,6 +311,7 @@
             if (document.getElementById('info-display-base-style')) return;
             const style = document.createElement('style');
             style.id = 'info-display-base-style';
+            // 외부 좌측 배치 CSS (top/left는 js에서 컨트롤)
             style.textContent = `
             #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
             #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
@@ -378,11 +379,15 @@
             if (counterBadge.parentElement !== container) {
                 container.appendChild(counterBadge);
                 container.style.position = 'relative';
-                container.style.zIndex = '9999'; // 가려짐 방지
             }
 
+            // 외부 좌측 상단으로 완벽 배치
             counterBadge.style.top = '-26px';
             counterBadge.style.left = '4px';
+
+            // 과거 버전에서 입력창을 넓히던 강제 스타일 제거 (원래 크기로 복구)
+            textarea.style.removeProperty('padding-top');
+            textarea.style.removeProperty('min-height');
         }
 
         function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
@@ -669,7 +674,7 @@
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (외부 우측 배치, 위쪽 팝업, z-index 수정)
+    // 모듈 7: 라디오존데 (외부 우측 배치, 팝업 상향 표시)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -716,12 +721,14 @@
             .rs-score { font-weight: 900; line-height: 1; }
             .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
 
-            /* bottom: 100% 로 상향 오픈되도록 설정 */
             #igx-rs-settings {
-                display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px;
-                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 -4px 15px rgba(0,0,0,0.4);
+                display: none; position: absolute; z-index: 10;
+                bottom: 100%; /* 위로 팝업되도록 수정 */
+                right: 0; 
+                margin-bottom: 4px; /* 바와 팝업 사이의 간격 */
+                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
                 flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
-                background: var(--rs-bg, #242424); color: var(--rs-text, #eee); z-index: 999999;
+                background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
             }
             #igx-rs-inline-host.show-settings #igx-rs-settings { display: flex; }
             .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
@@ -834,11 +841,10 @@
 
             if (host.parentElement !== container) {
                 container.appendChild(host);
-                container.style.position = 'relative';
-                // 팝업이 채팅 내역 뒤로 숨는 것 방지
-                container.style.zIndex = '9999'; 
+                container.style.position = 'relative'; 
             }
 
+            host.style.position = 'absolute';
             host.style.top = '-26px';
             host.style.right = '4px';
 
@@ -868,7 +874,7 @@
         try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
         try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
         try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
-        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 상향 팝업 모듈 오류:", e); }
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
     }
 
     if (document.readyState === 'loading') {
