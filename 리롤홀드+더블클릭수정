@@ -1,0 +1,188 @@
+// ==UserScript==
+// @name         크랙 편의성 2 in 1 통합팩 (리롤+더블클릭)
+// @namespace    https://crack.wrtn.ai/
+// @version      1.0
+// @description  리롤 홀드, 더블클릭 수정 기능이 통합되어 로딩 충돌을 방지합니다.
+// @author       User
+// @match        https://crack.wrtn.ai/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // ==========================================
+    // 모듈 1: 더블클릭 수정 기능
+    // ==========================================
+    function initDoubleClick() {
+        function findMessageContainer(target) {
+            let el = target;
+            while (el && el !== document.body) {
+                if (el.hasAttribute('data-message-group-id')) return el;
+                el = el.parentElement;
+            }
+            return null;
+        }
+
+        function getReactProps(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactProps'));
+            return key ? el[key] : null;
+        }
+
+        function firePointerClick(el) {
+            const opts = { bubbles: true, cancelable: true };
+            el.dispatchEvent(new PointerEvent('pointerover',  opts));
+            el.dispatchEvent(new PointerEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter',     opts));
+            el.dispatchEvent(new PointerEvent('pointerdown',  opts));
+            el.dispatchEvent(new PointerEvent('pointerup',    opts));
+            el.click();
+        }
+
+        function tryReactEditClick(container) {
+            const trigger = container.querySelector('div[aria-haspopup="menu"]');
+            if (!trigger) return false;
+
+            const style = document.createElement('style');
+            style.id = 'igx-hide-dropdown';
+            style.textContent = `[data-radix-popper-content-wrapper], [role="menu"] { opacity: 0 !important; pointer-events: none !important; }`;
+            document.head.appendChild(style);
+
+            firePointerClick(trigger);
+
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const item = Array.from(document.querySelectorAll('div[role="menuitem"]')).find(el => el.textContent.includes('수정'));
+                if (item) {
+                    clearInterval(timer);
+                    const props = getReactProps(item);
+                    if (props?.onSelect) props.onSelect();
+                    else firePointerClick(item);
+                    setTimeout(() => style.remove(), 100);
+                } else if (Date.now() - start > 1500) {
+                    clearInterval(timer);
+                    style.remove();
+                }
+            }, 30);
+            return true;
+        }
+
+        document.addEventListener('dblclick', (e) => {
+            const container = findMessageContainer(e.target);
+            if (!container) return;
+            window.getSelection().removeAllRanges();
+            tryReactEditClick(container);
+        });
+    }
+
+    // ==========================================
+    // 모듈 2: 리롤 길게 누르기 기능
+    // ==========================================
+    function initRerollHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #rr-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #rr-progress-ring.active { display: block; }
+            #rr-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #rr-progress-ring circle.fill { fill: none; stroke: #e8302a; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'rr-progress-ring';
+        ring.innerHTML = `<svg id="rr-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isRerollBtn(el) {
+            if (!el) return false;
+            if (el.id === 'exp-reroll-btn') return true;
+            return el.querySelector?.('svg path')?.getAttribute('d')?.startsWith('M3.8 12a8.2') ?? false;
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left}px`; ring.style.top  = `${rect.top}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        });
+
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            e.preventDefault(); showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 통합팩 동시 실행 관리
+    // ==========================================
+    function startAll() {
+        try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
+        try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+    }
+    
+    // 페이지 로딩이 완료된 후 모든 모듈을 순차적으로 실행
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
