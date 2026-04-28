@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.0.0
-// @description  묶음 상자 없이 마이너스 마진으로 버튼 간격을 줄인 완벽 독립 모듈형 통합팩 (키워드노트 전면 개편)
+// @version      3.1.0
+// @description  버튼 디자인(하트/투명배경) 변경 및 탭 전환 시 레이아웃 움직임 버그 완벽 수정
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -16,10 +16,28 @@
 (function () {
     'use strict';
 
-    // 공통 버튼 CSS (모듈 독립성을 위해 각 모듈에서 클래스를 호출하지만, 디자인은 통일)
+    // 공통 버튼 CSS (투명 배경, #E6E6E6 테두리, 하트 텍스트)
     const UNI_BTN_CSS = `
-        .crack-uni-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #fba707, #ff6b6b) !important; color: white !important; font-size: 16px; border: none !important; cursor: pointer; transition: transform 0.1s; margin-right: -4px; z-index: 10; }
-        .crack-uni-btn:hover { filter: brightness(1.1); }
+        .crack-uni-btn { 
+            display: inline-flex; align-items: center; justify-content: center; 
+            width: 36px; height: 36px; border-radius: 6px; 
+            background: transparent !important; 
+            color: #555 !important; 
+            font-size: 16px; 
+            border: 1px solid #E6E6E6 !important; 
+            cursor: pointer; transition: 0.2s; 
+            margin-right: -4px; z-index: 10; 
+        }
+        .crack-uni-btn:hover { background: #f5f5f5 !important; }
+        
+        /* 다크모드 대응 */
+        body[data-theme="dark"] .crack-uni-btn {
+            border-color: #42413D !important;
+            color: #F0EFEB !important;
+        }
+        body[data-theme="dark"] .crack-uni-btn:hover {
+            background: #333 !important;
+        }
     `;
 
     // ==========================================
@@ -184,7 +202,7 @@
             
             const btn = document.createElement('button');
             btn.className = 'crack-ext-bm-btn crack-uni-btn';
-            btn.innerHTML = `🌼`;
+            btn.innerHTML = `♥`;
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -298,7 +316,6 @@
                 renderBookmarkList();
             };
 
-            // --- 다중 모드 토글 버튼들 ---
             document.getElementById('cbm-toggle-move').onclick = () => {
                 isMoveMode = !isMoveMode;
                 isDeleteMode = false;
@@ -316,7 +333,6 @@
                 renderBookmarkList();
             };
 
-            // --- 이동 모드 액션 ---
             document.getElementById('cbm-move-select-all').onclick = () => {
                 if (currentFilteredBms.length === 0) return;
                 if (selectedForMove.size === currentFilteredBms.length) selectedForMove.clear();
@@ -342,7 +358,6 @@
                 renderBookmarkList();
             };
 
-            // --- 삭제 모드 액션 ---
             document.getElementById('cbm-del-select-all').onclick = () => {
                 if (currentFilteredBms.length === 0) return;
                 if (selectedForDelete.size === currentFilteredBms.length) selectedForDelete.clear();
@@ -504,7 +519,7 @@
             if (delSelectAllBtn) delSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) ? '■' : '□';
 
             if (bms.length === 0) {
-                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>🌼 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [북마크] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
+                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>🌼 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [♥] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
                 return;
             }
 
@@ -777,12 +792,14 @@
                 .ckw-icon-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
                 .ckw-icon-btn:hover { background: #eee; color: #222; }
                 
-                .ckw-tabs-container { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #eee; margin-bottom: 16px; padding-bottom: 0; }
+                /* 탭 이동(줄바꿈) 현상 완벽 해결을 위해 height 고정 및 flex 정렬 최적화 */
+                .ckw-tabs-container { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #eee; margin-bottom: 16px; padding-bottom: 0; height: 36px; }
                 .ckw-tabs { display: flex; gap: 12px; margin-bottom: -1px; }
                 .ckw-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
                 .ckw-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
                 
-                #ckw-toggle-del { display: none; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; margin-bottom: 6px; cursor: pointer; height: 30px; line-height: 1; }
+                /* visibility: hidden을 사용하여 공간을 유지한 채로 숨김 처리 */
+                #ckw-toggle-del { visibility: hidden; display: flex; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 6px; padding: 0 10px; margin-bottom: 4px; cursor: pointer; height: 28px; line-height: 1; }
                 #ckw-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
 
                 .ckw-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
@@ -838,7 +855,7 @@
             
             const btn = document.createElement('button');
             btn.className = 'crack-ext-kw-btn crack-uni-btn';
-            btn.innerHTML = `💡`;
+            btn.innerHTML = `♡`;
             btn.title = '키워드 노트';
             
             btn.onclick = (e) => { 
@@ -846,7 +863,7 @@
                 openModal(); 
             };
             
-            // 북마크(🌼) 버튼 뒤에 배치, 없으면 맨 앞에 배치
+            // 북마크(♥) 버튼 뒤에 배치, 없으면 맨 앞에 배치
             const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
             if (bmBtn) bmBtn.after(btn);
             else headerContainer.prepend(btn);
@@ -917,7 +934,8 @@
                     selectedForDelete.clear();
                     
                     tabsWrapper.style.display = 'flex';
-                    toggleDelBtn.style.display = (currentTab === 'keyword') ? 'flex' : 'none';
+                    // 탭 쉬프팅 방지: display:none 대신 visibility:hidden 사용
+                    toggleDelBtn.style.visibility = (currentTab === 'keyword') ? 'visible' : 'hidden';
                     
                     renderContent();
                 };
@@ -1004,7 +1022,7 @@
                         renderEditor(data);
                     } else {
                         tabsWrapper.style.display = 'flex';
-                        toggleDelBtn.style.display = 'flex';
+                        toggleDelBtn.style.visibility = 'visible';
                         renderKeywordList(data);
                     }
                 }
@@ -1720,11 +1738,11 @@
             
             const btn = document.createElement('button');
             btn.className = 'crack-ext-ai-btn crack-uni-btn'; 
-            btn.innerHTML = '✨';
+            btn.innerHTML = '♥';
             btn.title = 'AI 요약';
             btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
             
-            // 키워드노트(💡)나 북마크(🌼) 뒤에 배치, 둘 다 없으면 맨 앞에.
+            // 키워드노트(♡)나 북마크(♥) 뒤에 배치, 둘 다 없으면 맨 앞에.
             const kwBtn = headerContainer.querySelector('.crack-ext-kw-btn');
             const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
             
