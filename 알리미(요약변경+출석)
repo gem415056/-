@@ -1,0 +1,382 @@
+// ==UserScript==
+// @name         알리미 (국소지진계 + 자명종)
+// @namespace    https://github.com/milkyway0308/crystallized-chasm/
+// @version      1.0
+// @description  요약 메모리 변경 감지 및 일일 출석 알림 기능을 통합 제공합니다.
+// @author       User & milkyway0308 & Gemini
+// @match        https://crack.wrtn.ai/*
+// @grant        GM_addStyle
+// @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js#sha256-STeEejq7AcFOvsszbzgCDL82AjypbLLjD5O6tUByfuA=
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-toastify-injection@v1.0.0/crack/libraries/toastify-injection.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@decentralized-pre-1.0.15/decentralized-modal.js
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // ==========================================
+    // 모듈 1: 국소지진계 (요약 메모리 변경 감지)
+    // ==========================================
+    async function initLocalSeismometer() {
+        const STANDARD_NOTIFICATION_TIME = 3000;
+        const logger = new LogUtil("Chasm Crystallized Local Sesimometer", false);
+        /** @type {string | undefined} */
+        let lastErrorToken = undefined;
+        // @ts-ignore
+        const db = new Dexie("chasm-local-seismometer");
+        await db.version(1).stores({
+            cache: `roomId, summaryId`,
+        });
+
+        async function check() {
+            if (!CrackUtil.path().isChattingPath()) return;
+            const split = window.location.pathname.substring(1).split("/");
+            const chatRoomId = split[3];
+            const url = `https://contents-api.wrtn.ai/character-chat/v3/chats/${chatRoomId}/summaries?limit=1`;
+            if (
+                lastErrorToken &&
+                lastErrorToken === CrackUtil.cookie().getAuthToken()
+            ) {
+                // To prevent console error spamming
+                return;
+            }
+            const usedToken = CrackUtil.cookie().getAuthToken();
+            const fetch = await CrackUtil.network().authFetch("GET", url);
+            if (fetch instanceof Error) {
+                // @ts-ignore
+                if (fetch.code && fetch.code === 401) {
+                    lastErrorToken = usedToken;
+                    logger.log(
+                        "인증 토큰 만료로 인해 요청에 실패하여 요약 메모리 감시 태스크를 뒤로 미룹니다.",
+                    );
+                }
+                return;
+            }
+            lastErrorToken = undefined;
+            const data = fetch.data?.summaries;
+            if (!data || data.length <= 0) {
+                return;
+            }
+            const result = await db.cache.where("roomId").anyOf(chatRoomId).toArray();
+            if (result.length > 0) {
+                if (result[0].summaryId === data[0]._id) {
+                    return;
+                }
+            }
+            await db.cache.put({
+                roomId: chatRoomId,
+                summaryId: data[0]._id,
+            });
+            ToastifyInjector.findInjector().doToastifyAlert(
+                "요약 메모리의 변경이 감지되었어요.",
+                STANDARD_NOTIFICATION_TIME,
+            );
+        }
+        setInterval(check, 1500);
+    }
+
+
+    // ==========================================
+    // 모듈 2: 자명종 (일일 출석 알림)
+    // ==========================================
+    function initAlarmClock() {
+        GM_addStyle(`
+            body[data-theme="light"] {
+                --chasm-alarm-clock-background: #3E3E3E;
+                --chasm-alarm-clock-text: white;
+            }
+            body[data-theme="dark"] {
+                --chasm-alarm-clock-background: #EFEFEF;
+                --chasm-alarm-clock-text: black;
+            }
+            .chasm-alarm-clock-modal {
+                position: fixed; top: 55px; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                background-color: var(--chasm-alarm-clock-background); color: var(--chasm-alarm-clock-text);
+                padding: 15px 20px; border-radius: 8px; transform: translateX(-46%); margin-top: 5px;
+                width: fit-contents; white-space: nowrap; font-size: 15px; cursor: default;
+                max-width: 200px; max-height: 60px; width: 200px; height: 60px;
+                opacity: 1; transition: max-height 0.15s ease-out, max-width 0.15s ease-out, transform 0.15s ease-out, opacity 0.5s linear; z-index: 9999;
+            }
+            .chasm-alarm-clock-modal[mobile] { transform: translateX(-0%) translateY(0%); }
+            .chasm-alarm-clock-modal[loader] {
+                max-width: 60px; max-height: 57px; transform: translateX(-80%);
+                transition: max-height 0.15s ease-out, max-width 0.15s ease-out, transform 0.22s linear;
+            }
+            .chasm-alarm-clock-modal[mobile][loader] { transform: translateX(-15%) translateY(0%); }
+            .chasm-alarm-clock-active { cursor: pointer; pointer-events: all; color: #FFA600; }
+            .chasm-alarm-clock-loading { animation: chasm-alarm-rotate 1s infinite linear; }
+            .chasm-alarm-clock-modal:after {
+                content: ''; position: absolute; top: 0; left: 80%; width: 0; height: 0;
+                border: 12px solid transparent; border-bottom-color: var(--chasm-alarm-clock-background);
+                border-top: 0; border-right: 0; margin-left: -9.5px; margin-top: -10px;
+            }
+            .chasm-alarm-clock-modal[mobile]:after { left: 90%; }
+            [ac-fade-in] { animation: ac-fade-in 1s; }
+            [ac-fade-out] { animation: ac-fade-out 0.55s; }
+            @keyframes chasm-alarm-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            @keyframes ac-fade-in { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes ac-fade-out { from { opacity: 1; } to { opacity: 0; } }
+        `);
+
+        // SVG 생성 함수
+        function createLoadingIcon() {
+            const element = document.createElement("div");
+            element.innerHTML = '<svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" class="hds-flight-icon--animation-loading"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g fill="var(--icon_secondary)" fill-rule="evenodd" clip-rule="evenodd"> <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z" opacity=".2"></path> <path d="M7.25.75A.75.75 0 018 0a8 8 0 018 8 .75.75 0 01-1.5 0A6.5 6.5 0 008 1.5a.75.75 0 01-.75-.75z"></path> </g> </g></svg>';
+            element.children[0].classList.add("chasm-alarm-clock-loading");
+            return element;
+        }
+
+        function createCheckIcon() {
+            const element = document.createElement("div");
+            element.innerHTML = '<svg width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M4 12.6111L8.92308 17.5L20 6.5" stroke="#20d71d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>';
+            element.children[0].classList.add("chasm-alarm-clock-icon");
+            return element;
+        }
+
+        function createCloseIcon() {
+            const element = document.createElement("div");
+            element.innerHTML = '<svg width="20px" height="20px" viewBox="-0.5 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M3 21.32L21 3.32001" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> <path d="M3 3.32001L21 21.32" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path> </g></svg>';
+            element.children[0].classList.add("chasm-alarm-clock-icon");
+            return element;
+        }
+
+        const logger = new LogUtil("AlarmClock", false);
+        let lastChecked = -1;
+
+        function performFadeout(element, doBefore) {
+            element.setAttribute("ac-fade-out", "true");
+            setTimeout(() => {
+                if(doBefore) doBefore();
+                element.remove();
+            }, 500);
+        }
+
+        function startLoop() {
+            checkAttend().then(() => {
+                setInterval(checkAttend, 5000);
+            });
+        }
+
+        async function checkAttend() {
+            if (!CrackUtil.attend().isAttendableTime()) return;
+            if (new Date().getDate() !== lastChecked) {
+                const isAttendable = await CrackUtil.attend().isAttendable();
+                if (isAttendable instanceof Error) return;
+                if (isAttendable) {
+                    findAndInjectElement();
+                    logger.log("출석이 가능합니다. 모달을 추가합니다.");
+                } else {
+                    lastChecked = new Date().getDate();
+                    logger.log("출석이 확인되었습니다. 오늘은 더 이상 모달을 발생시키지 않습니다.");
+                }
+            }
+        }
+        
+        function doAttend(container) {
+            const childElements = Array.from(container.children);
+            for (const child of childElements) {
+                performFadeout(child);
+            }
+        
+            setTimeout(() => {
+                container.setAttribute("loader", "true");
+                const loader = createLoadingIcon();
+                container.append(loader);
+        
+                CrackUtil.attend()
+                    .performAttend()
+                    .then((result) => {
+                        performFadeout(loader, () => {
+                            const icon = result ? createCheckIcon() : createCloseIcon();
+                            container.append(icon);
+                            setTimeout(() => {
+                                performFadeout(container);
+                            }, result ? 2000 : 1500);
+                        });
+                        if (result) {
+                           lastChecked = new Date().getDate();
+                        }
+                    });
+            }, 500);
+        }
+        
+        function findCrackerButton() {
+            const topContainerElement = document.querySelector(".flex.items-center.gap-2");
+            if (!topContainerElement) return;
+            const hyperLinkElements = topContainerElement.getElementsByTagName("a");
+            for (let button of hyperLinkElements) {
+                if (button.getAttribute("href") === "/cracker") {
+                    return button;
+                }
+            }
+            return undefined;
+        }
+
+        function findAndInjectElement() {
+            if (document.getElementsByClassName("chasm-alarm-clock-modal").length > 0) {
+                return;
+            }
+            
+            let parentElement;
+            const isMobile = !window.matchMedia("(min-width: 768px)").matches;
+
+            if (isMobile) {
+                parentElement = document.querySelector('.fixed.bottom-0.left-0.right-0 .flex.h-16.items-center.justify-around');
+            } else {
+                parentElement = findCrackerButton();
+            }
+
+            if (parentElement) {
+                injectElement(parentElement, isMobile);
+            }
+        }
+
+        function injectElement(parentElement, isMobile) {
+            if (!parentElement) return;
+            const containerElement = document.createElement("div");
+            containerElement.className = "chasm-alarm-clock-modal";
+            if (isMobile) {
+                containerElement.setAttribute("mobile", "true");
+                 // 모바일 스타일 조정
+                containerElement.style.top = 'auto';
+                containerElement.style.bottom = '65px'; // 하단 메뉴바 위에 위치
+                containerElement.style.left = '50%';
+                containerElement.style.transform = 'translateX(-50%)';
+                containerElement.style.width = 'auto';
+
+                const afterElement = containerElement.style;
+                // after 가상 요소 스타일 직접 조작은 불가하므로, 클래스나 다른 방식을 사용해야 하지만,
+                // 여기서는 기존 CSS의 transform을 덮어쓰는 것으로 위치를 맞춤
+            }
+
+            const textElement = document.createElement("p");
+            textElement.textContent = "출석 체크가 가능해요!";
+            const clickableElement = document.createElement("p");
+            clickableElement.textContent = ">> 지금 바로 출석하기 <<";
+            clickableElement.className = "chasm-alarm-clock-active";
+            clickableElement.onclick = () => {
+                doAttend(containerElement);
+            };
+            containerElement.append(textElement, clickableElement);
+            containerElement.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            };
+            containerElement.setAttribute("ac-fade-in", "true");
+
+            if (isMobile) {
+                document.body.appendChild(containerElement);
+            } else {
+                 parentElement.style.position = 'relative';
+                 parentElement.appendChild(containerElement);
+            }
+        }
+        
+        function prepare() {
+            window.addEventListener("resize", () => {
+                const modal = document.querySelector(".chasm-alarm-clock-modal");
+                if (modal) {
+                   modal.remove();
+                   findAndInjectElement();
+                }
+            });
+            startLoop();
+            
+            // Decentralized Modal 메뉴 추가 로직 (원본 스크립트에서 가져옴)
+            function __updateModalMenu() {
+                const modal = document.getElementById("web-modal");
+                if (modal && !document.getElementById("chasm-decentral-menu")) {
+                    const itemFound = modal.getElementsByTagName("a");
+                    for (let item of itemFound) {
+                        if (item.getAttribute("href") === "/setting") {
+                            const clonedElement = GenericUtil.clone(item);
+                            clonedElement.id = "chasm-decentral-menu";
+                            const textElement = clonedElement.getElementsByTagName("p")[0];
+                            textElement.innerText = "결정화 캐즘";
+                            clonedElement.setAttribute("href", "javascript: void(0)");
+                            clonedElement.onclick = (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                ModalManager.getOrCreateManager("c2")
+                                    .withLicenseCredential()
+                                    .display(document.body.getAttribute("data-theme") !== "light");
+                            };
+                            item.parentElement?.append(clonedElement);
+                            break;
+                        }
+                    }
+                } else if (
+                    !document.getElementById("chasm-decentral-menu") &&
+                    !window.matchMedia("(min-width: 768px)").matches
+                ) {
+                    const selected = document.getElementsByTagName("a");
+                    for (const element of selected) {
+                        if (element.getAttribute("href") === "/my-page") {
+                            const clonedElement = GenericUtil.clone(element);
+                            clonedElement.id = "chasm-decentral-menu";
+                            const textElement = clonedElement.getElementsByTagName("p")[0];
+                            textElement.innerText = "결정화 캐즘";
+                            clonedElement.setAttribute("href", "javascript: void(0)");
+                            clonedElement.onclick = (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                ModalManager.getOrCreateManager("c2")
+                                    .withLicenseCredential()
+                                    .display(document.body.getAttribute("data-theme") !== "light");
+                            };
+                            element.parentElement?.append(clonedElement);
+                        }
+                    }
+                }
+            }
+
+            function __doModalMenuInit() {
+                const refined = GenericUtil.refine(document);
+                if (refined.c2ModalInit) return;
+                refined.c2ModalInit = true;
+                GenericUtil.attachObserver(document, () => {
+                    __updateModalMenu();
+                });
+            }
+            __doModalMenuInit();
+        }
+
+        prepare();
+    }
+
+
+    // ==========================================
+    // 통합팩 실행 관리자
+    // ==========================================
+    function startAll() {
+        console.log("[알리미] 통합 스크립트 실행 시작");
+
+        setTimeout(() => {
+            try {
+                initLocalSeismometer();
+                console.log("[알리미] 국소지진계 모듈이 성공적으로 초기화되었습니다.");
+            } catch (e) {
+                console.error("[알리미] 국소지진계 모듈 초기화 중 오류 발생:", e);
+            }
+        }, 500);
+
+        setTimeout(() => {
+            try {
+                initAlarmClock();
+                console.log("[알리미] 자명종 모듈이 성공적으로 초기화되었습니다.");
+            } catch (e) {
+                console.error("[알리미] 자명종 모듈 초기화 중 오류 발생:", e);
+            }
+        }, 500);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
