@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         크랙 편의성 7 in 1 통합팩 (V5.6 UI 색상 및 아이콘 수정)
+// @name         크랙 편의성 7 in 1 통합팩 (V5.6.1 UI 및 팝업 수정)
 // @namespace    https://crack.wrtn.ai/
 // @version      5.6.1
 // @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선
@@ -692,8 +692,7 @@
         GM_addStyle(`
             #igx-rs-inline-host {
                 position: absolute; display: flex; align-items: center; gap: 4px;
-                z-index: 9999; /* [수정] z-index를 매우 높게 설정하여 항상 위에 표시되도록 함 */
-                pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+                z-index: 998; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
                 font-size: 11px; font-weight: 500;
             }
             #igx-rs-inline-host * { pointer-events: auto; }
@@ -722,16 +721,16 @@
             .rs-score { font-weight: 900; line-height: 1; }
             .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
 
+            /* [수정] 팝업창 스타일 변경 */
             #igx-rs-settings {
-                display: none; position: absolute; z-index: 10;
-                bottom: 100%; /* 위로 팝업되도록 수정 */
-                right: 0; 
-                margin-bottom: 4px; /* 바와 팝업 사이의 간격 */
+                display: none; /* JS로 제어 */
+                position: fixed; /* 화면 전체 기준 위치, 항상 위에 표시 */
+                z-index: 100001; /* 다른 모든 요소 위에 오도록 높은 z-index 부여 */
                 border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
                 flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
                 background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
             }
-            #igx-rs-inline-host.show-settings #igx-rs-settings { display: flex; }
+            
             .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
             .igx-rs-set-chk { margin: 0; accent-color: #3ddc84; cursor: pointer; }
 
@@ -767,11 +766,32 @@
             label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
         }
 
-        host.append(btnSettings, barline, btnRefresh, settings);
+        // [수정] 팝업창을 body에 직접 추가하여 다른 요소에 가려지지 않게 함
+        document.body.appendChild(settings);
+        host.append(btnSettings, barline, btnRefresh);
 
-        btnSettings.addEventListener("click", e => { e.stopPropagation(); host.classList.toggle("show-settings"); });
+        // [수정] 팝업창 토글 및 위치 계산 로직 변경
+        btnSettings.addEventListener("click", e => {
+            e.stopPropagation();
+            if (settings.style.display === 'flex') {
+                settings.style.display = 'none';
+            } else {
+                const rect = btnSettings.getBoundingClientRect();
+                settings.style.right = `${window.innerWidth - rect.right}px`;
+                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; // 버튼 위 4px 간격
+                settings.style.display = 'flex';
+            }
+        });
+        
         btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
-        document.addEventListener("click", e => { if (!host.contains(e.target)) host.classList.remove("show-settings"); });
+
+        // [수정] 팝업창 외부 클릭 시 닫기
+        document.addEventListener("click", e => {
+            if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) {
+                 settings.style.display = 'none';
+            }
+        });
+
 
         const last = new Map();
         function renderBarline() {
@@ -852,9 +872,9 @@
             const theme = getThemeColors(textarea);
             host.style.color = theme.text;
             host.style.setProperty('--rs-text-name', theme.textName);
-            host.style.setProperty('--rs-bg', theme.setBg);
-            host.style.setProperty('--rs-border', theme.setBorder);
-            host.style.setProperty('--rs-text', theme.setText);
+            settings.style.setProperty('--rs-bg', theme.setBg);
+            settings.style.setProperty('--rs-border', theme.setBorder);
+            settings.style.setProperty('--rs-text', theme.setText);
         }
 
         setInterval(ensureAttached, 1000);
