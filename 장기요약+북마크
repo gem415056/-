@@ -1,0 +1,1056 @@
+// ==UserScript==
+// @name         크랙 AI요약 & 북마크 통합본
+// @namespace    https://crack.wrtn.ai/
+// @version      1.0.0
+// @description  AI 장기기억 요약 모듈과 모바일 최적화 드래그 북마크 모듈의 통합팩 (북마크 -> AI 버튼 순서 배치)
+// @author       User
+// @match        https://crack.wrtn.ai/*
+// @grant        GM_addStyle
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // ==========================================
+    // 모듈 1: 크랙 드래그 북마크 & 형광펜
+    // ==========================================
+    function initBookmarkSystem() {
+        const FIX_COLORS = ['#F6E19A', '#F2C0C3', '#BCD0D8', '#D5C2DE'];
+        const ACCENT_COLOR = '#FBA707';
+        const ICON_EDIT = '✎';
+
+        let currentPath = window.location.pathname;
+        let realtimeSelectionText = "";
+        let savedSelectionText = "";
+        
+        let isModalOpen = false;
+        let currentTab = 'current';
+        let currentFolderId = 'default';
+        let searchQuery = '';
+        let activeColorFilter = null;
+        let currentFilteredBms = [];
+        
+        let isDeleteMode = false;
+        let selectedForDelete = new Set();
+
+        document.addEventListener('selectionchange', () => {
+            const text = window.getSelection().toString().trim();
+            realtimeSelectionText = text ? (text.includes('\n') ? text.split('\n')[0].trim() : text) : "";
+        });
+
+        const getBookmarks = () => { try { return JSON.parse(localStorage.getItem('Crack_BM_Data')) || []; } catch { return []; } };
+        const saveBookmarks = (bms) => {
+            localStorage.setItem('Crack_BM_Data', JSON.stringify(bms));
+            applyHighlightsToDOM();
+            if (isModalOpen) renderBookmarkList();
+        };
+        const getFolders = () => {
+            try { 
+                let f = JSON.parse(localStorage.getItem('Crack_BM_Folders')); 
+                if (!f || !Array.isArray(f) || f.length === 0) return [{ id: 'default', name: '기본' }];
+                return f;
+            } catch { return [{ id: 'default', name: '기본' }]; }
+        };
+        const saveFolders = (folders) => {
+            localStorage.setItem('Crack_BM_Folders', JSON.stringify(folders));
+            if (isModalOpen) { renderFolderTabs(); renderBookmarkList(); }
+        };
+
+        function getChatId() {
+            let m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
+            if (m) return m[1]; m = location.pathname.match(/\/chat\/([a-f0-9]+)/); return m ? m[1] : null;
+        }
+        function getStoryId() {
+            let m = location.pathname.match(/\/stories\/([a-f0-9]+)/); return m ? m[1] : null;
+        }
+        function toUrl(sid, cid) {
+            return (sid && cid) ? `/stories/${sid}/episodes/${cid}` : (cid ? `/chat/${cid}` : null);
+        }
+
+        function injectStyles() {
+            if (document.getElementById('crack-bm-css')) return;
+            const s = document.createElement('style');
+            s.id = 'crack-bm-css';
+            s.textContent = `
+                .crack-ext-header-bm-btn { display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #6e8efb, #a777e3) !important; color: white !important; font-weight: 600; font-size: 13px; border: none !important; cursor: pointer; transition: transform 0.1s; white-space: nowrap !important; margin-right: 8px;}
+                mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
+                mark.crack-bm-hl:hover { filter: brightness(0.9); }
+                mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
+                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(251,167,7,0.5); } }
+                .crack-bm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
+                .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: 66vh; max-height: 66vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
+                .cbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+                .cbm-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: #222 !important; display: flex; align-items: center; gap: 6px; }
+                .cbm-header-btns { display: flex; gap: 8px; }
+                .cbm-icon-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
+                .cbm-icon-btn:hover { background: #eee; color: #222; }
+                .cbm-tabs-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px; }
+                .cbm-tabs { display: flex; gap: 12px; margin-bottom: -13px; }
+                .cbm-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
+                .cbm-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
+                .cbm-color-palette { display: flex; gap: 8px; align-items: center; }
+                .cbm-pal-btn { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+                .cbm-pal-btn:hover { transform: scale(1.1); }
+                .cbm-pal-btn.active { border-color: #333; transform: scale(1.15); }
+                .cbm-folders { display: flex; gap: 6px; align-items: center; overflow-x: auto; margin-bottom: 12px; padding-bottom: 4px; }
+                .cbm-folders::-webkit-scrollbar { height: 4px; }
+                .cbm-folders::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+                .cbm-ftab { height: 28px; background: #f0f0f0; border: 1px solid #ddd; padding: 0 12px; border-radius: 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; box-sizing: border-box; }
+                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                .cbm-fadd { background: none; border: 1px dashed #aaa; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #666; font-weight: bold; box-sizing: border-box; margin: 0; padding: 0; }
+                .cbm-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
+                .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
+                .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
+                #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
+                #cbm-toggle-del.active { background: #e74c3c; color: white; border-color: #e74c3c; }
+                #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(231,76,60,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(231,76,60,0.3); min-height: 36px; box-sizing: border-box; }
+                #cbm-del-count { color: #e74c3c; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #e74c3c; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                .cbm-del-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+                .cbm-list { flex: 1; overflow-y: auto; padding-right: 4px; }
+                .cbm-item { background: #f9f9f9 !important; border: 1px solid #eee !important; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; position: relative; }
+                .cbm-item:hover { border-color: ${ACCENT_COLOR} !important; }
+                .cbm-item.selected { border-color: #e74c3c !important; background: rgba(231,76,60,0.05) !important; }
+                .cbm-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+                .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
+                .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+                .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
+                .cbm-item-edit:hover { color: ${ACCENT_COLOR}; }
+                .cbm-fsel { border: 1px solid #ddd; border-radius: 4px; font-size: 11px; padding: 2px 4px; background: #fff; color: #333; max-width: 90px;}
+                .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
+                .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
+                body[data-theme="dark"] .crack-bm-modal { background: #242321 !important; color: #F0EFEB !important; }
+                body[data-theme="dark"] .cbm-header h3 { color: #F0EFEB !important; }
+                body[data-theme="dark"] .cbm-icon-btn { color: #aaa; }
+                body[data-theme="dark"] .cbm-icon-btn:hover { background: #333; color: #fff; }
+                body[data-theme="dark"] .cbm-tabs-container { border-bottom-color: #444; }
+                body[data-theme="dark"] .cbm-pal-btn.active { border-color: #fff; }
+                body[data-theme="dark"] .cbm-ftab { background: #141413; border-color: #42413D; color: #ccc; }
+                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] .cbm-search { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
+                body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
+                body[data-theme="dark"] #cbm-toggle-del.active { background: #e74c3c; color: white; border-color: #e74c3c; }
+                body[data-theme="dark"] .cbm-item { background: #1a1918 !important; border-color: #42413D !important; }
+                body[data-theme="dark"] .cbm-item.selected { background: rgba(231,76,60,0.15) !important; border-color: #e74c3c !important; }
+                body[data-theme="dark"] .cbm-item-title { color: #F0EFEB !important; }
+                body[data-theme="dark"] .cbm-item-text { color: #aaa !important; }
+                body[data-theme="dark"] .cbm-fsel { background: #141413; border-color: #42413D; color: #ccc;}
+            `;
+            document.head.appendChild(s);
+        }
+
+        function hexToRgba(hex, alpha = 0.4) {
+            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        function hexToRgb(hex) {
+            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        function escapeHtml(s) {
+            if (!s) return "";
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // 버튼 인젝션: 무조건 맨 앞에 삽입 (왼쪽)
+        function injectHeaderButton() {
+            const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
+            if (!headerContainer || headerContainer.querySelector('.crack-ext-header-bm-btn')) return;
+            
+            const btn = document.createElement('button');
+            btn.className = 'crack-ext-header-bm-btn';
+            btn.innerHTML = `💡 북마크`;
+            btn.onclick = (e) => { 
+                e.preventDefault(); e.stopPropagation(); 
+                savedSelectionText = realtimeSelectionText;
+                openModal(); 
+            };
+            
+            // 맨 앞에 (왼쪽에) 삽입
+            headerContainer.prepend(btn);
+        }
+
+        function addBookmarkDirect(text, colorHex) {
+            if (!text) return;
+            const cid = getChatId();
+            const sid = getStoryId();
+            if (!cid) return alert("대화방 ID를 찾을 수 없습니다.");
+
+            let bms = getBookmarks();
+            bms.push({
+                id: 'bm_' + Date.now(),
+                chatId: cid, storyId: sid, text: text, color: colorHex,
+                label: '새 북마크', folderId: 'default', timestamp: Date.now()
+            });
+            saveBookmarks(bms);
+        }
+
+        function openModal() {
+            if (document.getElementById('cbm-overlay')) return;
+            isModalOpen = true;
+            isDeleteMode = false;
+            selectedForDelete.clear();
+            
+            const overlay = document.createElement('div');
+            overlay.id = 'cbm-overlay';
+            overlay.className = 'crack-bm-overlay';
+            
+            overlay.innerHTML = `
+                <div class="crack-bm-modal">
+                    <div class="cbm-header">
+                        <h3>💡 기억해야할 순간들</h3>
+                        <div class="cbm-header-btns">
+                            <button class="cbm-icon-btn" id="cbm-export" title="백업 내보내기">▼</button>
+                            <button class="cbm-icon-btn" id="cbm-import" title="백업 가져오기">▲</button>
+                            <button class="cbm-icon-btn" id="cbm-close">✕</button>
+                        </div>
+                    </div>
+                    <div class="cbm-tabs-container">
+                        <div class="cbm-tabs">
+                            <button class="cbm-tab active" data-tab="current">현재 대화</button>
+                            <button class="cbm-tab" data-tab="all">전체 보기</button>
+                        </div>
+                        <div class="cbm-color-palette" id="cbm-color-palette"></div>
+                    </div>
+                    <div class="cbm-folders" id="cbm-folders-container"></div>
+                    
+                    <div class="cbm-search-row">
+                        <input type="text" class="cbm-search" id="cbm-search-input" placeholder="북마크 이름/내용 검색...">
+                        <button id="cbm-toggle-del" title="다중 삭제 모드">✄</button>
+                    </div>
+                    
+                    <div id="cbm-delete-actions">
+                        <div style="display:flex; align-items:center;">
+                            <button id="cbm-select-all" title="현재 목록 전체 선택">□</button>
+                            <span id="cbm-del-count">0개 선택됨</span>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button id="cbm-del-confirm" class="cbm-del-btn-sm" style="background:#e74c3c;" title="삭제">✔</button>
+                            <button id="cbm-del-cancel" class="cbm-del-btn-sm" style="background:#888;" title="취소">✘</button>
+                        </div>
+                    </div>
+                    
+                    <div class="cbm-list" id="cbm-list-container"></div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            document.getElementById('cbm-close').onclick = closeModal;
+            overlay.onclick = (e) => { if(e.target === overlay) closeModal(); };
+            
+            const tabs = overlay.querySelectorAll('.cbm-tab');
+            tabs.forEach(tab => {
+                tab.onclick = () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentTab = tab.dataset.tab;
+                    searchQuery = ''; document.getElementById('cbm-search-input').value = '';
+                    if(isDeleteMode) selectedForDelete.clear();
+                    renderBookmarkList();
+                };
+            });
+
+            document.getElementById('cbm-search-input').oninput = (e) => {
+                searchQuery = e.target.value.trim().toLowerCase(); 
+                if(isDeleteMode) selectedForDelete.clear();
+                renderBookmarkList();
+            };
+
+            document.getElementById('cbm-toggle-del').onclick = () => {
+                isDeleteMode = !isDeleteMode;
+                selectedForDelete.clear();
+                document.getElementById('cbm-toggle-del').classList.toggle('active', isDeleteMode);
+                renderBookmarkList();
+            };
+
+            document.getElementById('cbm-select-all').onclick = () => {
+                if (currentFilteredBms.length === 0) return;
+                if (selectedForDelete.size === currentFilteredBms.length) {
+                    selectedForDelete.clear();
+                } else {
+                    currentFilteredBms.forEach(b => selectedForDelete.add(b.id)); 
+                }
+                renderBookmarkList();
+            };
+
+            document.getElementById('cbm-del-cancel').onclick = () => {
+                isDeleteMode = false; selectedForDelete.clear();
+                document.getElementById('cbm-toggle-del').classList.remove('active');
+                renderBookmarkList();
+            };
+
+            document.getElementById('cbm-del-confirm').onclick = () => {
+                if (selectedForDelete.size === 0) return alert("삭제할 항목을 선택해주세요.");
+                if (!confirm(`선택한 ${selectedForDelete.size}개의 북마크를 삭제하시겠습니까?`)) return;
+                
+                let bms = getBookmarks().filter(b => !selectedForDelete.has(b.id));
+                saveBookmarks(bms);
+                
+                selectedForDelete.forEach(id => {
+                    document.querySelectorAll(`mark[data-bm-id="${id}"]`).forEach(m => {
+                        m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
+                    });
+                });
+                
+                isDeleteMode = false; selectedForDelete.clear();
+                document.getElementById('cbm-toggle-del').classList.remove('active');
+                renderBookmarkList();
+            };
+
+            const paletteContainer = document.getElementById('cbm-color-palette');
+            FIX_COLORS.forEach(color => {
+                const btn = document.createElement('div');
+                btn.className = 'cbm-pal-btn';
+                btn.style.backgroundColor = color;
+                
+                btn.onclick = () => {
+                    if (savedSelectionText) {
+                        addBookmarkDirect(savedSelectionText, color);
+                        savedSelectionText = ""; 
+                        window.getSelection().removeAllRanges();
+                        renderBookmarkList();
+                    } else {
+                        if (activeColorFilter === color) activeColorFilter = null;
+                        else activeColorFilter = color;
+                        updatePaletteUI();
+                        if(isDeleteMode) selectedForDelete.clear();
+                        renderBookmarkList();
+                    }
+                };
+                paletteContainer.appendChild(btn);
+            });
+            updatePaletteUI();
+
+            document.getElementById('cbm-export').onclick = () => {
+                const data = JSON.stringify({ bookmarks: getBookmarks(), folders: getFolders() }, null, 2);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'crack-bookmarks-backup.json'; a.click();
+                URL.revokeObjectURL(url);
+            };
+            document.getElementById('cbm-import').onclick = () => {
+                const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0]; if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const data = JSON.parse(ev.target.result);
+                            if(data.bookmarks) localStorage.setItem('Crack_BM_Data', JSON.stringify(data.bookmarks));
+                            if(data.folders) localStorage.setItem('Crack_BM_Folders', JSON.stringify(data.folders));
+                            alert('백업 데이터를 가져왔습니다.');
+                            renderFolderTabs(); renderBookmarkList(); applyHighlightsToDOM();
+                        } catch { alert('올바른 파일이 아닙니다.'); }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            };
+
+            renderFolderTabs();
+            renderBookmarkList();
+        }
+
+        function updatePaletteUI() {
+            document.querySelectorAll('.cbm-pal-btn').forEach(btn => {
+                if (activeColorFilter && btn.style.backgroundColor === hexToRgb(activeColorFilter)) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+        }
+
+        function closeModal() {
+            isModalOpen = false; savedSelectionText = "";
+            const o = document.getElementById('cbm-overlay');
+            if (o) o.remove();
+        }
+
+        function renderFolderTabs() {
+            const container = document.getElementById('cbm-folders-container');
+            if (!container) return;
+            const folders = getFolders();
+            
+            container.innerHTML = folders.map(f => `
+                <button class="cbm-ftab ${currentFolderId === f.id ? 'active' : ''}" data-fid="${f.id}">${escapeHtml(f.name)}</button>
+            `).join('') + `<button class="cbm-fadd" id="cbm-fadd" title="폴더 추가">+</button>`;
+
+            container.querySelectorAll('.cbm-ftab').forEach(btn => {
+                btn.onclick = () => { currentFolderId = btn.dataset.fid; if(isDeleteMode) selectedForDelete.clear(); renderFolderTabs(); renderBookmarkList(); };
+                btn.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if(btn.dataset.fid === 'default') return alert("기본 폴더는 수정할 수 없습니다.");
+                    const action = prompt("폴더 옵션:\n1: 이름 변경\n2: 폴더 삭제(북마크는 기본폴더로 이동)", "1");
+                    if (action === "1") {
+                        const nn = prompt("새 폴더 이름", btn.textContent);
+                        if(nn && nn.trim()) { const f = getFolders(); f.find(x => x.id === btn.dataset.fid).name = nn.trim(); saveFolders(f); }
+                    } else if (action === "2") {
+                        if(!confirm("폴더를 삭제하시겠습니까?")) return;
+                        saveFolders(getFolders().filter(x => x.id !== btn.dataset.fid));
+                        let bms = getBookmarks();
+                        bms.forEach(b => { if(b.folderId === btn.dataset.fid) b.folderId = 'default'; });
+                        saveBookmarks(bms);
+                        currentFolderId = 'default'; renderFolderTabs(); renderBookmarkList();
+                    }
+                };
+            });
+
+            document.getElementById('cbm-fadd').onclick = () => {
+                const name = prompt("새 폴더 이름 입력");
+                if(name && name.trim()) { const f = getFolders(); f.push({ id: 'f' + Date.now(), name: name.trim() }); saveFolders(f); }
+            };
+        }
+
+        function renderBookmarkList() {
+            const container = document.getElementById('cbm-list-container');
+            const actionsDiv = document.getElementById('cbm-delete-actions');
+            if (!container) return;
+
+            actionsDiv.style.display = isDeleteMode ? 'flex' : 'none';
+            document.getElementById('cbm-del-count').textContent = `${selectedForDelete.size}개 선택됨`;
+
+            let bms = getBookmarks();
+            const cid = getChatId();
+
+            if (currentTab === 'current') bms = bms.filter(b => b.chatId === cid);
+            if (searchQuery) bms = bms.filter(b => (b.label && b.label.toLowerCase().includes(searchQuery)) || b.text.toLowerCase().includes(searchQuery));
+            else bms = bms.filter(b => (b.folderId || 'default') === currentFolderId);
+            if (activeColorFilter) bms = bms.filter(b => b.color === activeColorFilter);
+
+            bms.sort((a, b) => b.timestamp - a.timestamp);
+            currentFilteredBms = bms;
+
+            const selectAllBtn = document.getElementById('cbm-select-all');
+            if (selectAllBtn) {
+                if (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) {
+                    selectAllBtn.textContent = '■';
+                } else {
+                    selectAllBtn.textContent = '□';
+                }
+            }
+
+            if (bms.length === 0) {
+                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>💡 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [북마크] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
+                return;
+            }
+
+            const folders = getFolders();
+
+            container.innerHTML = bms.map(b => {
+                const folderOpts = folders.map(f => `<option value="${f.id}" ${(b.folderId||'default') === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('');
+                const isSel = selectedForDelete.has(b.id);
+                
+                return `
+                <div class="cbm-item ${isSel ? 'selected' : ''}" data-id="${b.id}" data-cid="${b.chatId}" data-sid="${b.storyId||''}">
+                    <div class="cbm-item-top">
+                        <div class="cbm-item-title">
+                            ${isDeleteMode ? `<input type="checkbox" ${isSel ? 'checked' : ''} style="margin-right:6px; pointer-events:none;">` : ''}
+                            <div class="cbm-item-color" style="background:${b.color}"></div>
+                            <span class="bm-label-txt">${escapeHtml(b.label)}</span>
+                            ${!isDeleteMode ? `<button class="cbm-item-edit" data-id="${b.id}" title="이름 수정">${ICON_EDIT}</button>` : ''}
+                        </div>
+                        ${!isDeleteMode ? `<select class="cbm-fsel" data-id="${b.id}">${folderOpts}</select>` : ''}
+                    </div>
+                    <div class="cbm-item-text">${escapeHtml(b.text)}</div>
+                </div>`;
+            }).join('');
+
+            container.querySelectorAll('.cbm-item').forEach(item => {
+                item.onclick = (e) => {
+                    if (e.target.closest('button') || e.target.closest('select')) return;
+                    const id = item.dataset.id;
+                    if (isDeleteMode) {
+                        if (selectedForDelete.has(id)) selectedForDelete.delete(id);
+                        else selectedForDelete.add(id);
+                        renderBookmarkList(); 
+                        return;
+                    }
+                    jumpToHighlight(id, item.dataset.cid, item.dataset.sid);
+                };
+            });
+
+            if (!isDeleteMode) {
+                container.querySelectorAll('.cbm-item-edit').forEach(btn => {
+                    btn.onclick = () => {
+                        const target = getBookmarks().find(x => x.id === btn.dataset.id);
+                        if(target) {
+                            const nn = prompt("북마크 이름 수정", target.label);
+                            if(nn !== null) { target.label = nn.trim() || '새 북마크'; saveBookmarks(getBookmarks().map(x => x.id === target.id ? target : x)); }
+                        }
+                    };
+                });
+                container.querySelectorAll('.cbm-fsel').forEach(sel => {
+                    sel.onchange = () => {
+                        let b = getBookmarks();
+                        const t = b.find(x => x.id === sel.dataset.id);
+                        if(t) { t.folderId = sel.value; saveBookmarks(b); }
+                    };
+                });
+            }
+        }
+
+        function applyHighlightsToDOM() {
+            const bms = getBookmarks().filter(b => b.chatId === getChatId());
+            if (bms.length === 0) return;
+
+            bms.forEach(hl => {
+                if (document.querySelector(`mark[data-bm-id="${hl.id}"]`)) return;
+
+                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                const textNodes = []; let node;
+                while (node = walker.nextNode()) {
+                    const parent = node.parentNode;
+                    if (!parent || ['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'NOSCRIPT'].includes(parent.nodeName)) continue;
+                    if (parent.closest('.crack-bm-overlay')) continue;
+                    if (node.nodeValue.trim().length > 0) textNodes.push(node);
+                }
+
+                const targetText = hl.text.replace(/\s+/g, '');
+                if (!targetText) return;
+
+                let globalText = ""; const map = [];
+                textNodes.forEach(n => {
+                    const clean = n.nodeValue.replace(/\s+/g, '');
+                    if (clean.length > 0) { map.push({ node: n, start: globalText.length, end: globalText.length + clean.length, originalText: n.nodeValue }); globalText += clean; }
+                });
+
+                let matches = []; let idx = globalText.indexOf(targetText);
+                while (idx !== -1) { matches.push(idx); idx = globalText.indexOf(targetText, idx + 1); }
+
+                matches.reverse().forEach(matchIdx => {
+                    let matchEnd = matchIdx + targetText.length;
+                    const overlappingNodes = map.filter(m => m.end > matchIdx && m.start < matchEnd);
+                    
+                    overlappingNodes.reverse().forEach(m => {
+                        const nodeStartInMatch = Math.max(0, matchIdx - m.start), nodeEndInMatch = Math.min(m.end - m.start, matchEnd - m.start);
+                        const getOrigIndex = (cleanIdx, origStr) => {
+                            let cCount = 0;
+                            for (let i = 0; i < origStr.length; i++) {
+                                if (!/\s/.test(origStr[i])) { if (cCount === cleanIdx) return i; cCount++; }
+                            }
+                            return origStr.length;
+                        };
+                        const origStart = getOrigIndex(nodeStartInMatch, m.originalText), origEnd = getOrigIndex(nodeEndInMatch, m.originalText);
+
+                        if (origStart < origEnd) {
+                            const mark = document.createElement('mark');
+                            mark.className = 'crack-bm-hl'; mark.style.backgroundColor = hexToRgba(hl.color, 0.45); 
+                            mark.dataset.bmId = hl.id; mark.textContent = m.originalText.substring(origStart, origEnd);
+                            const split1 = m.node.splitText(origStart);
+                            split1.nodeValue = split1.nodeValue.substring(origEnd - origStart);
+                            split1.parentNode.insertBefore(mark, split1);
+                        }
+                    });
+                });
+            });
+        }
+
+        function jumpToHighlight(id, targetChatId, targetStoryId) {
+            closeModal(); const cid = getChatId();
+            if (cid !== targetChatId) {
+                let url = toUrl(targetStoryId, targetChatId);
+                if(url) { localStorage.setItem('cbm_jump_target', id); location.href = url; } 
+                else { alert("해당 대화방 경로를 찾을 수 없습니다."); }
+                return;
+            }
+
+            let maxTries = 15, currentTry = 0;
+            const loadingToast = document.createElement('div');
+            loadingToast.innerHTML = '🔄 북마크 위치 탐색 중...';
+            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#fff; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+            document.body.appendChild(loadingToast);
+
+            const searchLoop = setInterval(() => {
+                applyHighlightsToDOM(); 
+                const target = document.querySelector(`mark[data-bm-id="${id}"]`);
+                if (target) {
+                    clearInterval(searchLoop); loadingToast.remove();
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'), 1500);
+                } else {
+                    currentTry++;
+                    if (currentTry > maxTries) { clearInterval(searchLoop); loadingToast.remove(); alert('탐색 실패. 너무 오래된 대화일 수 있습니다.'); return; }
+                    window.scrollTo(0, 0); document.querySelectorAll('div').forEach(div => { if (div.scrollHeight > div.clientHeight) div.scrollTop = 0; });
+                }
+            }, 800);
+        }
+
+        injectStyles();
+        setTimeout(applyHighlightsToDOM, 1000);
+        
+        const targetId = localStorage.getItem('cbm_jump_target');
+        if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
+
+        setInterval(() => {
+            injectHeaderButton();
+            if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
+        }, 500);
+
+        const observer = new MutationObserver((mutations) => {
+            let shouldApply = false;
+            mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
+            if (shouldApply) { clearTimeout(window.bmDebounce); window.bmDebounce = setTimeout(applyHighlightsToDOM, 500); }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // ==========================================
+    // 모듈 2: 크랙 요약 메모리 편집 & AI 자동 요약
+    // ==========================================
+    function initAiSummarySystem() {
+        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
+        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
+
+## 🎯 목적
+채팅 로그를 분석하여 이후 서사가 어긋나지 않도록 **'사건 단위의 독립적 앵커'**를 생성하되, **인물 간의 감정선과 미묘한 상호작용의 질감(Texture)**을 보존한다.
+생성된 요약문은 향후 AI가 인물 간의 관계 역학부터 소소한 추억까지 생생하고 섬세하게 기억하여, 이후의 롤플레잉을 보다 입체적으로 이끌어가는 참고 자료로 쓰일 예정이다.
+
+---
+
+## 🧩 출력 단위 및 분리 기준
+- **단위**: 출력의 최소 단위는 ‘사건’이다.
+- **분리 필수 조건**: 아래 중 하나라도 해당하면 반드시 **새로운 사건 슬롯**으로 분리하여 출력한다.
+1. **장소 이동** (예: 복도 → 교실 / 교정 → 중앙 정원)
+2. **시간대 변화** (예: 오전 → 오후 / 수업 시간 → 쉬는 시간)
+3. **주요 인물 구성 변화** (예: 1:1 대화 중 제3자 난입)
+- **병합 금지**: 주제가 이어지더라도 장소가 바뀌면 정보를 절대 합치지 않는다.
+- **소급 금지**: 나중에 발생한 일(대사, 결정, 물건 등장 등)을 앞선 사건 요약에 미리 포함하지 않는다.
+
+---
+
+## 📋 출력 형식 (강제)
+
+[제목]
+- 내용
+
+### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)
+- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사(~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
+- **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)
+- 제목은 항상 []로 가둘 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.
+
+### 2. 내용 규칙
+- **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.
+- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.
+- **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)
+- **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.
+- **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.
+- **핵심 기록 요소**:
+- **상호작용의 연쇄(Flow)**: 단순 '자극-반응'을 넘어, **[누군가의 행동/발화] → [상대의 리액션] → [그로 인한 재반응/변화]**의 인과 사슬을 명확히 기록할 것. **대사는 " " 인용**
+- **사건의 배경 및 정보(Context & Lore)**: 단순 결과만 적지 말 것. 떡밥이 되는 맥락 정보를 구체적으로 포함할 것.
+- **구체적 양상(How)**: '애교', '화냄' 등 추상적 표현 대신 **"옷자락을 당김", "미간을 찌푸림", "시선을 피함"** 등 로그에 명시된 행동과 표정을 적을 것.
+- **미묘한 기류(Mood)**: 두 인물 간의 **사소한 장난, 묘한 긴장감, 말투의 변화** 등 질감을 살리는 디테일을 포함할 것.
+- **전환점 (Turning Point)**: **관계 변화** 및 **결정적 약속/은폐** 사실.
+- **구체적 명사(Keywords)**: 상징적인 **선물, 물건, 공간**을 정확한 명칭으로 기록할 것.
+
+---
+
+## 🚫 기록 원칙 (Strict)
+- **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.
+- **❌ 소설 금지**: AI의 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
+- **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.
+- **❌ 순서 변경 금지**: 시간 흐름 엄수.
+- **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
+- **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.
+- **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.
+- **⭕ 주체 보존**: 발단이 누구인지 구분하여 명확히 할 것.`;
+
+        function getChatId() {
+            const m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
+            return m ? m[1] : null;
+        }
+
+        function getToken() {
+            const m = document.cookie.match(/(^| )access_token=([^;]+)/);
+            return m ? m[2] : null;
+        }
+
+        function escapeHtml(s) {
+            if (!s) return "";
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function apiCall(method, path, body) {
+            const token = getToken(), chatId = getChatId();
+            if (!token || !chatId) {
+                alert('인증 정보 또는 채팅 ID를 찾을 수 없습니다.');
+                return Promise.resolve(null);
+            }
+            const opts = {
+                method,
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            };
+            if (body) opts.body = JSON.stringify(body);
+            return fetch(API_BASE + '/' + chatId + path, opts)
+                .then(function (r) {
+                    if (!r.ok) {
+                        return r.text().then(function (t) {
+                            console.error('API Error:', r.status, t);
+                            return null;
+                        });
+                    }
+                    return r.text().then(function (t) {
+                        return t ? JSON.parse(t) : { result: 'SUCCESS' };
+                    });
+                })
+                .catch(function (e) {
+                    alert('네트워크 오류: ' + e.message);
+                    return null;
+                });
+        }
+
+        async function fetchRecentMessages(limit) {
+            let allMessages = [];
+            let currentCursor = null;
+            let requestedLimit = parseInt(limit, 10);
+
+            if (isNaN(requestedLimit)) requestedLimit = 15;
+            const isUnlimited = requestedLimit === 0;
+
+            while (true) {
+                let fetchLimit = isUnlimited ? 50 : Math.min(requestedLimit - allMessages.length, 50);
+                let path = '/messages?limit=' + fetchLimit;
+
+                if (currentCursor) {
+                    path += '&cursor=' + encodeURIComponent(currentCursor);
+                }
+
+                let res = await apiCall('GET', path);
+
+                if (!res || !res.data || !res.data.messages || res.data.messages.length === 0) break;
+
+                allMessages = allMessages.concat(res.data.messages);
+
+                if (!isUnlimited && allMessages.length >= requestedLimit) break;
+                if (res.data.hasNext && res.data.nextCursor) {
+                    currentCursor = res.data.nextCursor;
+                } else {
+                    break;
+                }
+            }
+
+            if (!isUnlimited) allMessages = allMessages.slice(0, requestedLimit);
+            if (allMessages.length === 0) return null;
+
+            let msgs = allMessages.reverse();
+            return msgs.map(m => {
+                let role = m.role === 'user' ? 'User' : 'Character';
+                return `${role}: ${m.content}`;
+            }).join('\n\n');
+        }
+
+        async function callGeminiApi(apiKey, model, chatLog) {
+            const currentPrompt = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const payload = {
+                system_instruction: { parts: [{ text: currentPrompt }] },
+                contents: [{ role: "user", parts: [{ text: chatLog }] }]
+            };
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || 'Gemini API 에러');
+            }
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
+        }
+
+        function parseVertexContent(scriptStr) {
+            try {
+                const match = scriptStr.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\});/);
+                if (match && match[1]) return new Function("return " + match[1])();
+                if (scriptStr.includes("apiKey")) {
+                    const startText = "firebaseConfig = {";
+                    const startIndex = scriptStr.indexOf(startText);
+                    if (startIndex !== -1) {
+                        const endIndex = scriptStr.indexOf("}", startIndex);
+                        if (endIndex !== -1) {
+                            const objStr = scriptStr.substring(startIndex + startText.length - 1, endIndex + 1);
+                            return new Function("return " + objStr)();
+                        }
+                    }
+                }
+            } catch(e) {}
+            return null;
+        }
+
+        async function callFirebaseApi(scriptStr, modelId, chatLog) {
+            const config = parseVertexContent(scriptStr);
+            if (!config) throw new Error("Firebase 스크립트 형식이 올바르지 않습니다.");
+            
+            const currentPrompt = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
+            const { initializeApp } = await import("https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js");
+            const { getAI, getGenerativeModel, VertexAIBackend, HarmBlockThreshold, HarmCategory } = await import("https://www.gstatic.com/firebasejs/12.8.0/firebase-ai.js");
+
+            let app;
+            try { app = initializeApp(config, "crack-ext-" + Date.now()); } 
+            catch(e) { throw new Error("Firebase 초기화 실패: " + e.message); }
+
+            const ai = getAI(app, { backend: new VertexAIBackend('global') });
+            const safetySettings = [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF }
+            ];
+
+            const modelWithSys = getGenerativeModel(ai, { model: modelId, systemInstruction: currentPrompt, safetySettings });
+            const result = await modelWithSys.generateContent(chatLog);
+            const response = await result.response;
+            return response.text();
+        }
+
+        function injectAiStyles() {
+            if (document.getElementById('crack-ext-ai-css')) return;
+            const s = document.createElement('style');
+            s.id = 'crack-ext-ai-css';
+            s.textContent = `
+                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:100000; pointer-events:auto !important; }
+                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; max-height: 90vh; overflow-y: auto; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; }
+                .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+                .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; }
+                .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
+                .crack-ext-ai-modal input, .crack-ext-ai-modal textarea, .crack-ext-ai-modal select { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; pointer-events:auto !important; background-color:#fff !important; color:#222 !important; }
+                .crack-ext-ai-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+                .crack-ext-ai-mbtn { padding:10px 24px; border-radius:8px; border:1px solid #ddd !important; background:#fff !important; color:#222 !important; cursor:pointer; font-size:14px; font-weight:600; transition: background 0.2s;}
+                .crack-ext-ai-mbtn:hover { background: #f5f5f5 !important; }
+                .crack-ext-ai-mbtn-p { background:#222 !important; color:#fff !important; border-color:#222 !important; }
+                .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 16px; }
+                .crack-flex-ai-row .fg { flex:1; }
+                #ce-ai-preview-container { margin-top: 12px; }
+                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 8px; font-size: 13px; font-weight: bold; }
+                #ce-ai-card-nav button { cursor:pointer; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; padding:4px 10px; font-size:12px; transition: background 0.2s; color:#333; }
+                .crack-ext-session-card { background:#f9f9f9 !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; }
+                .crack-ext-session-title { font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+                .crack-ext-session-content { color:#555 !important; line-height:1.4; white-space: pre-wrap; word-break: break-all; }
+                .crack-ext-char-count { font-size:11px; color: #777; }
+                .crack-ext-count-error { color: #e74c3c !important; font-weight:bold; }
+                .crack-ext-header-ai-btn { display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #6e8efb, #a777e3) !important; color: white !important; font-weight: 600; font-size: 13px; border: none !important; cursor: pointer; transition: transform 0.1s; white-space: nowrap !important; margin-right: 8px; }
+                body[data-theme="dark"] .crack-ext-ai-modal { background: #242321 !important; color: #F0EFEB !important; }
+                body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
+                body[data-theme="dark"] .crack-ext-ai-modal input, body[data-theme="dark"] .crack-ext-ai-modal textarea, body[data-theme="dark"] .crack-ext-ai-modal select { background: #141413 !important; color: #F0EFEB !important; border: 1px solid #42413D !important; }
+                body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border: 1px solid #42413D !important; }
+                body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn { background: #2E2D2B !important; color: #F0EFEB !important; border: 1px solid #42413D !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: #F0EFEB !important; color: #1A1918 !important; }
+            `;
+            document.head.appendChild(s);
+        }
+
+        function showToast(message) {
+            var old = document.getElementById('crack-ext-toast');
+            if (old) old.remove();
+            var toast = document.createElement('div');
+            toast.id = 'crack-ext-toast';
+            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-10px);z-index:999999999;background:#1a1a1a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,0.25);transition:opacity 0.3s,transform 0.3s;';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(-50%) translateY(0)'; });
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(-50%) translateY(-10px)'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function refreshCurrentTab(dialog) {
+            var btns = dialog.querySelectorAll('button'), activeBtn = null, otherBtn = null;
+            for (var i = 0; i < btns.length; i++) {
+                var txt = btns[i].textContent.trim();
+                if (txt === '단기 기억' || txt === '장기 기억') {
+                    var bg = getComputedStyle(btns[i]).backgroundColor;
+                    var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)\)/);
+                    if (m && (parseInt(m[1]) + parseInt(m[2]) + parseInt(m[3])) / 3 < 128) activeBtn = btns[i];
+                    else if (txt === '장기 기억') otherBtn = btns[i];
+                }
+            }
+            if (!activeBtn) return;
+            if (otherBtn) { otherBtn.click(); setTimeout(() => { activeBtn.click(); }, 150); }
+            else { activeBtn.click(); }
+        }
+
+        function showAiSummaryModal() {
+            var overlay = document.createElement('div');
+            overlay.className = 'crack-ext-ai-overlay';
+            overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
+
+            const savedApiKey = localStorage.getItem('crack_ext_gemini_key') || '';
+            const savedModel = localStorage.getItem('crack_ext_gemini_model') || 'gemini-3.1-pro-preview';
+            const savedTurnCount = localStorage.getItem('crack_ext_turn_count') || '15';
+            const savedProvider = localStorage.getItem('crack_ext_api_provider') || 'google';
+            const savedFirebaseScript = localStorage.getItem('crack_ext_firebase_script') || '';
+
+            let isPromptMode = false, tempResultContent = "", parsedCards = [], currentCardIndex = 0;
+
+            var html = '<div class="crack-ext-ai-modal"><div class="crack-ext-ai-modal-header"><h3>✨ AI 요약 / 장기 기억 추가</h3></div>';
+            html += '<div class="crack-flex-ai-row" id="ce-ai-top-settings">';
+            html += '<div class="fg" style="flex: 1.2;"><label>API</label><select id="ce-ai-provider"><option value="google" ' + (savedProvider==='google'?'selected':'') + '>Google</option><option value="firebase" ' + (savedProvider==='firebase'?'selected':'') + '>Firebase</option></select></div>';
+            html += '<div class="fg" id="ce-ai-key-container" style="flex: 2;' + (savedProvider==='google'?'':'display:none;') + '"><label>API Key</label><input type="password" id="ce-ai-key" value="' + escapeHtml(savedApiKey) + '"></div>';
+            html += '<div class="fg" style="flex: 1.5;"><label>모델</label><select id="ce-ai-model"><option value="gemini-3.1-pro-preview" ' + (savedModel==='gemini-3.1-pro-preview'?'selected':'') + '>3.1 Pro Preview</option><option value="gemini-3-flash-preview" ' + (savedModel==='gemini-3-flash-preview'?'selected':'') + '>3 Flash Preview</option><option value="gemini-2.5-pro" ' + (savedModel==='gemini-2.5-pro'?'selected':'') + '>2.5 Pro</option></select></div>';
+            html += '<div class="fg" style="flex: 0.8;"><label>턴 수</label><input type="number" id="ce-ai-turns" value="' + escapeHtml(savedTurnCount) + '" min="0"></div></div>';
+
+            html += '<div class="crack-flex-ai-row" id="ce-ai-firebase-container" style="margin-bottom:16px;' + (savedProvider==='firebase'?'':'display:none;') + '"><div class="fg"><label>Firebase 스크립트</label><textarea id="ce-ai-firebase-script" rows="2">' + escapeHtml(savedFirebaseScript) + '</textarea></div></div>';
+
+            html += '<div class="fg"><label id="ce-ai-result-label-wrapper" style="display:flex; justify-content:space-between;"><span id="ce-ai-result-label">생성 결과</span><div style="display:flex; align-items:center; gap:10px;"><span id="ce-ai-selection-counter" style="color:#a777e3; font-size:12px;"></span><button id="ce-ai-toggle-prompt" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">⚙️ 프롬프트 설정</button></div></label>';
+            html += '<textarea id="ce-ai-result" rows="7" placeholder="결과가 여기에 표시됩니다."></textarea>';
+
+            html += '<div id="ce-ai-preview-container"><div id="ce-ai-card-nav" style="display:none;"><button id="ce-ai-card-prev">◀</button><span id="ce-ai-card-page">1 / 1</span><button id="ce-ai-card-next">▶</button></div><div id="ce-ai-preview-cards"></div></div></div>';
+            html += '<div class="crack-ext-ai-modal-btns" style="justify-content: space-between; align-items: flex-end;"><div><button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button></div><div style="display:flex; gap:8px;"><button class="crack-ext-ai-mbtn" id="ce-ai-cancel">취소</button><button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button></div></div></div>';
+
+            overlay.innerHTML = html;
+            document.body.appendChild(overlay);
+
+            const txtResult = overlay.querySelector('#ce-ai-result');
+            const previewCards = overlay.querySelector('#ce-ai-preview-cards'), cardNav = overlay.querySelector('#ce-ai-card-nav'), spanCardPage = overlay.querySelector('#ce-ai-card-page');
+            const selProvider = overlay.querySelector('#ce-ai-provider'), contKey = overlay.querySelector('#ce-ai-key-container'), contFirebase = overlay.querySelector('#ce-ai-firebase-container');
+
+            selProvider.onchange = () => {
+                if(selProvider.value === 'google') { contKey.style.display = 'block'; contFirebase.style.display = 'none'; } 
+                else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
+            };
+
+            function updatePreviewCards() {
+                if(isPromptMode) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; return; }
+                const content = txtResult.value.trim();
+                if(!content) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; parsedCards = []; return; }
+
+                const blocks = content.split(/\[(.*?)\]/);
+                parsedCards = [];
+                for (let i = 1; i < blocks.length; i += 2) {
+                    let title = blocks[i].trim(), summary = blocks[i+1] ? blocks[i+1].replace(/^[\s\n]*[-*]?\s*/, '').trim() : '';
+                    if (title || summary) parsedCards.push({ title, summary });
+                }
+                if (parsedCards.length === 0 && content) parsedCards.push({ title: "수동 요약", summary: content.replace(/^[\s\n]*[-*]?\s*/, '').trim() });
+                
+                if (parsedCards.length === 0) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; return; }
+                if (currentCardIndex >= parsedCards.length) currentCardIndex = parsedCards.length - 1;
+                if (currentCardIndex < 0) currentCardIndex = 0;
+
+                cardNav.style.display = parsedCards.length > 1 ? 'flex' : 'none';
+                spanCardPage.textContent = `${currentCardIndex + 1} / ${parsedCards.length}`;
+
+                let mem = parsedCards[currentCardIndex];
+                let tClass = mem.title.length > 20 ? 'crack-ext-count-error' : '', sClass = mem.summary.length > 300 ? 'crack-ext-count-error' : '';
+                previewCards.innerHTML = '<div class="crack-ext-session-card"><div class="crack-ext-session-title"><div><span style="color:#888;">[ </span>' + escapeHtml(mem.title) + '<span style="color:#888;"> ]</span></div><span class="crack-ext-char-count ' + tClass + '">(' + mem.title.length + '/20자)</span></div><div class="crack-ext-session-content">' + escapeHtml(mem.summary) + '<div style="text-align:right; margin-top:8px;"><span class="crack-ext-char-count ' + sClass + '">(' + mem.summary.length + '/300자)</span></div></div></div>';
+            }
+
+            txtResult.addEventListener('input', updatePreviewCards);
+            overlay.querySelector('#ce-ai-card-prev').onclick = (e) => { e.preventDefault(); if (currentCardIndex > 0) { currentCardIndex--; updatePreviewCards(); } };
+            overlay.querySelector('#ce-ai-card-next').onclick = (e) => { e.preventDefault(); if (currentCardIndex < parsedCards.length - 1) { currentCardIndex++; updatePreviewCards(); } };
+
+            const btnTogglePrompt = overlay.querySelector('#ce-ai-toggle-prompt'), btnSave = overlay.querySelector('#ce-ai-save'), btnGen = overlay.querySelector('#ce-ai-generate');
+            btnTogglePrompt.onclick = (e) => {
+                e.stopPropagation(); e.preventDefault();
+                isPromptMode = !isPromptMode;
+                if (isPromptMode) {
+                    tempResultContent = txtResult.value; txtResult.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
+                    btnTogglePrompt.textContent = '돌아가기'; btnSave.style.display = 'none'; btnGen.style.display = 'none';
+                    overlay.querySelector('#ce-ai-top-settings').style.display = 'none'; if(contFirebase) contFirebase.style.display = 'none';
+                    updatePreviewCards();
+                } else {
+                    localStorage.setItem('crack_ext_custom_prompt', txtResult.value.trim()); txtResult.value = tempResultContent;
+                    btnTogglePrompt.textContent = '⚙️ 프롬프트 설정'; btnSave.style.display = 'block'; btnGen.style.display = 'block';
+                    overlay.querySelector('#ce-ai-top-settings').style.display = 'flex'; if(selProvider.value === 'firebase') contFirebase.style.display = 'flex';
+                    updatePreviewCards();
+                }
+            };
+
+            overlay.querySelector('#ce-ai-cancel').onclick = e => { e.stopPropagation(); overlay.remove(); };
+            ['click', 'mousedown', 'mouseup'].forEach(evt => overlay.addEventListener(evt, e => e.stopPropagation()));
+
+            btnGen.onclick = async (e) => {
+                e.stopPropagation();
+                const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
+                const firebaseScript = overlay.querySelector('#ce-ai-firebase-script').value.trim();
+                if (selProvider.value === 'google' && !apiKey) return alert("API Key를 입력해주세요.");
+                
+                localStorage.setItem('crack_ext_api_provider', selProvider.value);
+                localStorage.setItem('crack_ext_gemini_key', apiKey);
+                localStorage.setItem('crack_ext_firebase_script', firebaseScript);
+                localStorage.setItem('crack_ext_gemini_model', model);
+                localStorage.setItem('crack_ext_turn_count', turns.toString());
+
+                btnGen.disabled = true; btnSave.disabled = true; txtResult.value = "요약 중..."; currentCardIndex = 0; updatePreviewCards();
+                try {
+                    const chatLog = await fetchRecentMessages(turns);
+                    if (!chatLog) throw new Error("내역을 불러올 수 없습니다.");
+                    txtResult.value = (selProvider.value === 'google') ? await callGeminiApi(apiKey, model, chatLog) : await callFirebaseApi(firebaseScript, model, chatLog);
+                } catch (err) { txtResult.value = "오류: " + err.message; } 
+                finally { btnGen.disabled = false; btnSave.disabled = false; btnGen.textContent = "재생성 (리롤)"; updatePreviewCards(); }
+            };
+
+            btnSave.onclick = async (e) => {
+                e.stopPropagation();
+                if (!txtResult.value.trim()) return alert("결과가 비어있습니다.");
+                let errorIndex = parsedCards.findIndex(c => c.title.length > 20 || c.summary.length > 300);
+                if (errorIndex !== -1) { currentCardIndex = errorIndex; updatePreviewCards(); return alert("글자 수 제한 초과 항목이 있습니다."); }
+
+                btnSave.disabled = true; overlay.querySelector('#ce-ai-cancel').disabled = true;
+                let successCount = 0;
+                for (let i = 0; i < parsedCards.length; i++) {
+                    btnSave.textContent = `추가 중... (${i + 1}/${parsedCards.length})`;
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    if (await apiCall('POST', '/summaries', { type: 'shortTerm', title: parsedCards[i].title, summary: parsedCards[i].summary })) successCount++;
+                }
+                if (successCount > 0) {
+                    showToast(`✅ ${successCount}개의 요약이 장기 기억에 추가되었습니다.`);
+                    overlay.remove();
+                    var dialogEl = document.querySelector('[role="dialog"]');
+                    if (dialogEl) refreshCurrentTab(dialogEl);
+                } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; overlay.querySelector('#ce-ai-cancel').disabled = false; }
+            };
+        }
+
+        // 버튼 인젝션: 북마크 버튼이 있다면 그 오른쪽(뒤)에 삽입, 없다면 맨 앞에 삽입
+        function injectTopHeaderBtn() {
+            const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
+            if (!headerContainer || headerContainer.querySelector('.crack-ext-header-ai-btn')) return;
+            
+            const aiBtn = document.createElement('button');
+            aiBtn.className = 'crack-ext-header-ai-btn'; 
+            aiBtn.innerHTML = '✨ AI 요약';
+            aiBtn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
+            
+            const bmBtn = headerContainer.querySelector('.crack-ext-header-bm-btn');
+            if (bmBtn) {
+                bmBtn.after(aiBtn); // 북마크 버튼의 오른쪽에 삽입
+            } else {
+                headerContainer.prepend(aiBtn); 
+            }
+        }
+
+        function inject() { 
+            injectAiStyles(); 
+            injectTopHeaderBtn(); 
+        }
+
+        let timeout;
+        const obs = new MutationObserver(() => {
+            clearTimeout(timeout);
+            timeout = setTimeout(inject, 150);
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        
+        setInterval(inject, 2000);
+    }
+
+    // ==========================================
+    // 통합팩 동시 실행 관리
+    // ==========================================
+    function startAll() {
+        try { initBookmarkSystem(); } catch (e) { console.error("[ 통합팩 ] 북마크 모듈 오류:", e); }
+        try { initAiSummarySystem(); } catch (e) { console.error("[ 통합팩 ] AI 요약 모듈 오류:", e); }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
