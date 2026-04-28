@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         크랙 북마크 & 키워드 & AI요약 통합본 (3 in 1)
+// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.1.0
-// @description  묶음 상자 없이 완벽 독립 모듈형 통합팩 (이모지 아이콘 적용)
-// @author       User (Modified by Assistant)
+// @version      3.0.0
+// @description  묶음 상자 없이 마이너스 마진으로 버튼 간격을 줄인 완벽 독립 모듈형 통합팩 (키워드노트 전면 개편)
+// @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -16,8 +16,11 @@
 (function () {
     'use strict';
 
-    // 공통 버튼 스타일 CSS
-    const BTN_GRADIENT = "linear-gradient(135deg, #fba707, #ff6b6b) !important";
+    // 공통 버튼 CSS (모듈 독립성을 위해 각 모듈에서 클래스를 호출하지만, 디자인은 통일)
+    const UNI_BTN_CSS = `
+        .crack-uni-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #fba707, #ff6b6b) !important; color: white !important; font-size: 16px; border: none !important; cursor: pointer; transition: transform 0.1s; margin-right: -4px; z-index: 10; }
+        .crack-uni-btn:hover { filter: brightness(1.1); }
+    `;
 
     // ==========================================
     // 모듈 1: 크랙 드래그 북마크 & 형광펜
@@ -82,9 +85,7 @@
             if (document.getElementById('crack-bm-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-bm-css';
-            s.textContent = `
-                .crack-ext-header-bm-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: ${BTN_GRADIENT}; color: white !important; font-size: 16px; border: none !important; cursor: pointer; transition: transform 0.1s; margin-right: 4px; }
-                .crack-ext-header-bm-btn:hover { filter: brightness(0.9); }
+            s.textContent = UNI_BTN_CSS + `
                 mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
                 mark.crack-bm-hl:hover { filter: brightness(0.9); }
                 mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
@@ -179,11 +180,12 @@
 
         function injectHeaderButton() {
             const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
-            if (!headerContainer || headerContainer.querySelector('.crack-ext-header-bm-btn')) return;
+            if (!headerContainer || headerContainer.querySelector('.crack-ext-bm-btn')) return;
             
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-header-bm-btn';
-            btn.innerHTML = `💡`; // 텍스트 제거하고 이모지만
+            btn.className = 'crack-ext-bm-btn crack-uni-btn';
+            btn.innerHTML = `🌼`;
+            btn.title = '북마크';
             
             btn.onclick = (e) => { 
                 e.preventDefault(); e.stopPropagation(); 
@@ -191,6 +193,7 @@
                 openModal(); 
             };
             
+            // 제일 왼쪽에 배치 (prepend)
             headerContainer.prepend(btn);
         }
 
@@ -222,7 +225,7 @@
             overlay.innerHTML = `
                 <div class="crack-bm-modal">
                     <div class="cbm-header">
-                        <h3>💡 북마크</h3>
+                        <h3>🌼 기억해야할 순간들</h3>
                         <div class="cbm-header-btns">
                             <button class="cbm-icon-btn" id="cbm-export" title="백업 내보내기">▼</button>
                             <button class="cbm-icon-btn" id="cbm-import" title="백업 가져오기">▲</button>
@@ -295,6 +298,7 @@
                 renderBookmarkList();
             };
 
+            // --- 다중 모드 토글 버튼들 ---
             document.getElementById('cbm-toggle-move').onclick = () => {
                 isMoveMode = !isMoveMode;
                 isDeleteMode = false;
@@ -312,6 +316,7 @@
                 renderBookmarkList();
             };
 
+            // --- 이동 모드 액션 ---
             document.getElementById('cbm-move-select-all').onclick = () => {
                 if (currentFilteredBms.length === 0) return;
                 if (selectedForMove.size === currentFilteredBms.length) selectedForMove.clear();
@@ -337,6 +342,7 @@
                 renderBookmarkList();
             };
 
+            // --- 삭제 모드 액션 ---
             document.getElementById('cbm-del-select-all').onclick = () => {
                 if (currentFilteredBms.length === 0) return;
                 if (selectedForDelete.size === currentFilteredBms.length) selectedForDelete.clear();
@@ -498,7 +504,7 @@
             if (delSelectAllBtn) delSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) ? '■' : '□';
 
             if (bms.length === 0) {
-                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>💡 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [북마크] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
+                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>🌼 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [북마크] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
                 return;
             }
 
@@ -663,8 +669,9 @@
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
+
     // ==========================================
-    // 모듈 2: 크랙 신규 키워드 노트 (Keyword Note)
+    // 모듈 2: 크랙 키워드 노트 (Keyword Note - 개편본)
     // ==========================================
     function initKeywordNoteSystem() {
         const ACCENT_COLOR = '#FBA707';
@@ -680,7 +687,9 @@
             return null;
         }
 
-        function getToken() { return _capturedToken; }
+        function getToken() {
+            return _capturedToken;
+        }
 
         const _origFetch = window.fetch;
         window.fetch = async function(...a) {
@@ -698,14 +707,35 @@
         };
 
         function getNoteData(chatId) {
-            try { const data = localStorage.getItem(`Crack_KW_Note_${chatId}`); if (data) return JSON.parse(data); } catch (e) {}
+            try {
+                const data = localStorage.getItem(`Crack_KW_Note_${chatId}`);
+                if (data) return JSON.parse(data);
+            } catch (e) {}
             return { alwaysNote: "", keywords: [] };
         }
-        function saveNoteData(chatId, data) { localStorage.setItem(`Crack_KW_Note_${chatId}`, JSON.stringify(data)); }
-        function getTurnCount(chatId) { return parseInt(localStorage.getItem(`Crack_KW_Turn_${chatId}`) || '0'); }
-        function incTurnCount(chatId) { const t = getTurnCount(chatId) + 1; localStorage.setItem(`Crack_KW_Turn_${chatId}`, String(t)); return t; }
-        function getHolds(chatId) { try { return JSON.parse(localStorage.getItem(`Crack_KW_Holds_${chatId}`) || '{}'); } catch (e) { return {}; } }
-        function saveHolds(chatId, holds) { localStorage.setItem(`Crack_KW_Holds_${chatId}`, JSON.stringify(holds)); }
+
+        function saveNoteData(chatId, data) {
+            localStorage.setItem(`Crack_KW_Note_${chatId}`, JSON.stringify(data));
+        }
+
+        function getTurnCount(chatId) {
+            return parseInt(localStorage.getItem(`Crack_KW_Turn_${chatId}`) || '0');
+        }
+
+        function incTurnCount(chatId) {
+            const t = getTurnCount(chatId) + 1;
+            localStorage.setItem(`Crack_KW_Turn_${chatId}`, String(t));
+            return t;
+        }
+
+        function getHolds(chatId) {
+            try { return JSON.parse(localStorage.getItem(`Crack_KW_Holds_${chatId}`) || '{}'); } 
+            catch (e) { return {}; }
+        }
+
+        function saveHolds(chatId, holds) {
+            localStorage.setItem(`Crack_KW_Holds_${chatId}`, JSON.stringify(holds));
+        }
 
         function escapeHtml(str) {
             if (!str) return "";
@@ -725,6 +755,7 @@
             const ta = getPlatformTextarea();
             if (!ta) return;
             if (ta.value === text) return;
+            
             ta.value = text;
             for (const key of Object.keys(ta)) {
                 if (key.startsWith('__reactProps')) {
@@ -738,9 +769,7 @@
             if (document.getElementById('crack-kw-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-kw-css';
-            s.textContent = `
-                .crack-ext-header-kw-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: ${BTN_GRADIENT}; color: white !important; font-size: 16px; border: none !important; cursor: pointer; transition: transform 0.1s; margin-right: 4px;}
-                .crack-ext-header-kw-btn:hover { filter: brightness(0.9); }
+            s.textContent = UNI_BTN_CSS + `
                 .crack-kw-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
                 .crack-kw-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
                 .ckw-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -748,12 +777,12 @@
                 .ckw-icon-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
                 .ckw-icon-btn:hover { background: #eee; color: #222; }
                 
-                .ckw-tabs-container { position: relative; display: flex; border-bottom: 1px solid #eee; margin-bottom: 16px; align-items: flex-end;}
-                .ckw-tabs { display: flex; gap: 12px; margin-bottom: -1px;}
-                .ckw-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 10px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
+                .ckw-tabs-container { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #eee; margin-bottom: 16px; padding-bottom: 0; }
+                .ckw-tabs { display: flex; gap: 12px; margin-bottom: -1px; }
+                .ckw-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
                 .ckw-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
                 
-                #ckw-toggle-del { position: absolute; right: 0; bottom: 6px; align-items: center; justify-content: center; font-size: 18px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 0 12px; height: 28px; line-height: 1; cursor: pointer; }
+                #ckw-toggle-del { display: none; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; margin-bottom: 6px; cursor: pointer; height: 30px; line-height: 1; }
                 #ckw-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
 
                 .ckw-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
@@ -789,7 +818,7 @@
                 body[data-theme="dark"] .ckw-icon-btn { color: #aaa; }
                 body[data-theme="dark"] .ckw-icon-btn:hover { background: #333; color: #fff; }
                 body[data-theme="dark"] .ckw-tabs-container { border-bottom-color: #444; }
-                body[data-theme="dark"] #ckw-toggle-del { background: #141413; border-color: #444; color: #aaa;}
+                body[data-theme="dark"] #ckw-toggle-del { border-color: #444; color: #aaa;}
                 body[data-theme="dark"] .ckw-textarea, body[data-theme="dark"] .ckw-input { background: #141413; border-color: #42413D; color: #F0EFEB; }
                 body[data-theme="dark"] .ckw-textarea:focus, body[data-theme="dark"] .ckw-input:focus { background: #1a1918; }
                 body[data-theme="dark"] .ckw-label { color: #aaa; }
@@ -805,18 +834,20 @@
 
         function injectHeaderButton() {
             const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
-            if (!headerContainer || headerContainer.querySelector('.crack-ext-header-kw-btn')) return;
+            if (!headerContainer || headerContainer.querySelector('.crack-ext-kw-btn')) return;
             
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-header-kw-btn';
-            btn.innerHTML = `🌼`; // 이모지 변경
+            btn.className = 'crack-ext-kw-btn crack-uni-btn';
+            btn.innerHTML = `💡`;
+            btn.title = '키워드 노트';
             
             btn.onclick = (e) => { 
                 e.preventDefault(); e.stopPropagation(); 
                 openModal(); 
             };
             
-            const bmBtn = headerContainer.querySelector('.crack-ext-header-bm-btn');
+            // 북마크(🌼) 버튼 뒤에 배치, 없으면 맨 앞에 배치
+            const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
             if (bmBtn) bmBtn.after(btn);
             else headerContainer.prepend(btn);
         }
@@ -829,6 +860,7 @@
             isModalOpen = true;
             let currentTab = 'always';
             let editModeId = null;
+            
             let isDeleteMode = false;
             let selectedForDelete = new Set();
 
@@ -839,7 +871,7 @@
             overlay.innerHTML = `
                 <div class="crack-kw-modal">
                     <div class="ckw-header">
-                        <h3>🌼 키워드 노트</h3>
+                        <h3>💡 키워드 노트</h3>
                         <button class="ckw-icon-btn" id="ckw-close">✕</button>
                     </div>
                     <div class="ckw-tabs-container" id="ckw-tabs-wrapper">
@@ -884,7 +916,9 @@
                     isDeleteMode = false;
                     selectedForDelete.clear();
                     
+                    tabsWrapper.style.display = 'flex';
                     toggleDelBtn.style.display = (currentTab === 'keyword') ? 'flex' : 'none';
+                    
                     renderContent();
                 };
             });
@@ -897,7 +931,8 @@
             };
 
             document.getElementById('ckw-del-cancel').onclick = () => {
-                isDeleteMode = false; selectedForDelete.clear();
+                isDeleteMode = false;
+                selectedForDelete.clear();
                 toggleDelBtn.classList.remove('active');
                 renderContent();
             };
@@ -910,7 +945,8 @@
                 data.keywords = data.keywords.filter(k => !selectedForDelete.has(k.id));
                 saveNoteData(chatId, data);
                 
-                isDeleteMode = false; selectedForDelete.clear();
+                isDeleteMode = false;
+                selectedForDelete.clear();
                 toggleDelBtn.classList.remove('active');
                 renderContent();
             };
@@ -918,8 +954,12 @@
             document.getElementById('ckw-del-select-all').onclick = () => {
                 const data = getNoteData(chatId);
                 if (data.keywords.length === 0) return;
-                if (selectedForDelete.size === data.keywords.length) { selectedForDelete.clear(); } 
-                else { data.keywords.forEach(k => selectedForDelete.add(k.id)); }
+                
+                if (selectedForDelete.size === data.keywords.length) {
+                    selectedForDelete.clear();
+                } else {
+                    data.keywords.forEach(k => selectedForDelete.add(k.id));
+                }
                 renderContent();
             };
 
@@ -927,6 +967,7 @@
 
             function renderContent() {
                 const data = getNoteData(chatId);
+
                 delActions.style.display = isDeleteMode ? 'flex' : 'none';
                 if (isDeleteMode) {
                     document.getElementById('ckw-del-count').textContent = `${selectedForDelete.size}개 선택됨`;
@@ -950,7 +991,11 @@
                         if (len > 500) cnt.classList.add('over'); else cnt.classList.remove('over');
                     };
                     
-                    ta.addEventListener('input', () => { updateCount(); data.alwaysNote = ta.value; saveNoteData(chatId, data); });
+                    ta.addEventListener('input', () => {
+                        updateCount();
+                        data.alwaysNote = ta.value;
+                        saveNoteData(chatId, data);
+                    });
                     updateCount();
                 } 
                 else if (currentTab === 'keyword') {
@@ -967,6 +1012,7 @@
 
             function renderKeywordList(data) {
                 let html = `<div>`;
+                
                 if (!data.keywords || data.keywords.length === 0) {
                     html += `<div style="text-align:center; color:#999; margin-top:40px; font-size:13px; padding-bottom: 20px;">등록된 키워드 노트가 없습니다.</div>`;
                 } else {
@@ -974,6 +1020,7 @@
                         const isSel = isDeleteMode && selectedForDelete.has(kw.id);
                         const selClass = isSel ? 'selected-delete' : '';
                         const isChecked = isSel ? 'checked' : '';
+                        
                         const holdsInfo = getHolds(chatId);
                         const currentTurn = getTurnCount(chatId);
                         const expireTurn = holdsInfo[kw.id];
@@ -981,6 +1028,7 @@
                         if (expireTurn && expireTurn >= currentTurn) {
                             holdStatus = `<span style="color:${ACCENT_COLOR}; font-weight:bold; font-size:12px; margin-left:6px; flex-shrink:0;">[발동중]</span>`;
                         }
+
                         let trigText = kw.triggers.join(', ');
                         
                         html += `
@@ -1020,31 +1068,42 @@
                     item.onclick = (e) => {
                         if (e.target.closest('.ckw-item-right')) return;
                         const id = item.dataset.id;
+                        
                         if (isDeleteMode) {
-                            if (selectedForDelete.has(id)) selectedForDelete.delete(id); else selectedForDelete.add(id);
+                            if (selectedForDelete.has(id)) selectedForDelete.delete(id);
+                            else selectedForDelete.add(id);
                             renderContent();
                         } else {
-                            editModeId = id; renderContent();
+                            editModeId = id;
+                            renderContent();
                         }
                     };
                 });
 
                 document.querySelectorAll('.btn-up').forEach(btn => {
                     btn.onclick = (e) => {
-                        e.stopPropagation(); const idx = parseInt(btn.dataset.idx);
+                        e.stopPropagation();
+                        const idx = parseInt(btn.dataset.idx);
                         if (idx > 0) {
-                            const temp = data.keywords[idx - 1]; data.keywords[idx - 1] = data.keywords[idx]; data.keywords[idx] = temp;
-                            saveNoteData(chatId, data); renderContent();
+                            const temp = data.keywords[idx - 1];
+                            data.keywords[idx - 1] = data.keywords[idx];
+                            data.keywords[idx] = temp;
+                            saveNoteData(chatId, data);
+                            renderContent();
                         }
                     };
                 });
 
                 document.querySelectorAll('.btn-down').forEach(btn => {
                     btn.onclick = (e) => {
-                        e.stopPropagation(); const idx = parseInt(btn.dataset.idx);
+                        e.stopPropagation();
+                        const idx = parseInt(btn.dataset.idx);
                         if (idx < data.keywords.length - 1) {
-                            const temp = data.keywords[idx + 1]; data.keywords[idx + 1] = data.keywords[idx]; data.keywords[idx] = temp;
-                            saveNoteData(chatId, data); renderContent();
+                            const temp = data.keywords[idx + 1];
+                            data.keywords[idx + 1] = data.keywords[idx];
+                            data.keywords[idx] = temp;
+                            saveNoteData(chatId, data);
+                            renderContent();
                         }
                     };
                 });
@@ -1086,9 +1145,13 @@
                     cnt.textContent = `${len} / 500자`;
                     if (len > 500) cnt.classList.add('over'); else cnt.classList.remove('over');
                 };
-                ta.addEventListener('input', updateCount); updateCount();
+                ta.addEventListener('input', updateCount);
+                updateCount();
 
-                document.getElementById('ckw-btn-cancel').onclick = () => { editModeId = null; renderContent(); };
+                document.getElementById('ckw-btn-cancel').onclick = () => {
+                    editModeId = null;
+                    renderContent();
+                };
 
                 document.getElementById('ckw-btn-save').onclick = () => {
                     const nameVal = document.getElementById('ckw-ed-name').value.trim();
@@ -1099,13 +1162,21 @@
                     if (!nameVal) return alert("노트 이름을 입력해주세요.");
                     if (!contVal) return alert("노트 내용을 입력해주세요.");
 
-                    kw.name = nameVal; kw.holdTurns = turnVal; kw.content = contVal;
+                    kw.name = nameVal;
+                    kw.holdTurns = turnVal;
+                    kw.content = contVal;
                     kw.triggers = trigVal.split(',').map(s => s.trim()).filter(Boolean);
 
-                    if (editModeId === 'new') data.keywords.push(kw);
-                    else { const idx = data.keywords.findIndex(k => k.id === editModeId); if (idx !== -1) data.keywords[idx] = kw; }
+                    if (editModeId === 'new') {
+                        data.keywords.push(kw);
+                    } else {
+                        const idx = data.keywords.findIndex(k => k.id === editModeId);
+                        if (idx !== -1) data.keywords[idx] = kw;
+                    }
 
-                    saveNoteData(chatId, data); editModeId = null; renderContent();
+                    saveNoteData(chatId, data);
+                    editModeId = null;
+                    renderContent();
                 };
             }
 
@@ -1119,6 +1190,7 @@
         }
 
         function norm(s) { return (s || '').normalize('NFC').toLowerCase(); }
+        
         function matchTriggers(text, triggers) {
             if (!triggers || !triggers.length) return false;
             const lowText = norm(text);
@@ -1135,13 +1207,16 @@
             try {
                 const isExtend = Array.from(content).length > 500; 
                 const url = `https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}`;
-                const res = await fetch(url, {
-                    method: 'PATCH', credentials: 'include',
+                const res = await _origFetch(url, {
+                    method: 'PATCH',
+                    credentials: 'include',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userNote: { content: content, isExtend: isExtend } })
                 });
                 return res.ok;
-            } catch(e) { return false; }
+            } catch(e) {
+                return false;
+            }
         }
 
         async function processNoteSwap(chatId, userMessage) {
@@ -1152,13 +1227,17 @@
             let holdsChanged = false;
             
             for (const kwId in holds) {
-                if (holds[kwId] < currentTurn) { delete holds[kwId]; holdsChanged = true; }
+                if (holds[kwId] < currentTurn) {
+                    delete holds[kwId];
+                    holdsChanged = true;
+                }
             }
 
             if (data.keywords && data.keywords.length > 0) {
                 for (const kw of data.keywords) {
                     if (matchTriggers(userMessage, kw.triggers)) {
-                        holds[kw.id] = currentTurn + kw.holdTurns; holdsChanged = true;
+                        holds[kw.id] = currentTurn + kw.holdTurns;
+                        holdsChanged = true;
                     }
                 }
             }
@@ -1167,17 +1246,33 @@
 
             let finalNoteText = "";
             const activeKeyword = data.keywords.find(kw => holds[kw.id] && holds[kw.id] >= currentTurn);
-            if (activeKeyword) finalNoteText = activeKeyword.content;
-            else finalNoteText = data.alwaysNote || "";
+
+            if (activeKeyword) {
+                finalNoteText = activeKeyword.content;
+            } else {
+                finalNoteText = data.alwaysNote || "";
+            }
 
             const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
-            if (isSuccess) writeTextarea(finalNoteText);
+            if (isSuccess) {
+                writeTextarea(finalNoteText);
+            }
         }
 
         const _origSend = window.WebSocket.prototype.send;
         window.WebSocket.prototype.send = function(wsData) {
             const ws = this;
             if (typeof wsData === 'string' && wsData.length > 10) {
+                if (!_capturedToken && wsData.startsWith('40')) {
+                    const ji = wsData.indexOf('{');
+                    if (ji > 0) {
+                        try {
+                            const obj = JSON.parse(wsData.slice(ji));
+                            if (obj && typeof obj.token === 'string') _capturedToken = obj.token.replace('Bearer ', '');
+                        } catch(e) {}
+                    }
+                }
+
                 const bi = wsData.indexOf('[');
                 if (bi > 0) {
                     try {
@@ -1204,11 +1299,64 @@
     }
 
     // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 (원상복구)
+    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약
     // ==========================================
     function initAiSummarySystem() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
-        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트\n\n## 🎯 목적\n채팅 로그를 분석하여 이후 서사가 어긋나지 않도록 **'사건 단위의 독립적 앵커'**를 생성하되, **인물 간의 감정선과 미묘한 상호작용의 질감(Texture)**을 보존한다.\n생성된 요약문은 향후 AI가 인물 간의 관계 역학부터 소소한 추억까지 생생하고 섬세하게 기억하여, 이후의 롤플레잉을 보다 입체적으로 이끌어가는 참고 자료로 쓰일 예정이다.\n\n---\n\n## 🧩 출력 단위 및 분리 기준\n- **단위**: 출력의 최소 단위는 ‘사건’이다.\n- **분리 필수 조건**: 아래 중 하나라도 해당하면 반드시 **새로운 사건 슬롯**으로 분리하여 출력한다.\n1. **장소 이동** (예: 복도 → 교실 / 교정 → 중앙 정원)\n2. **시간대 변화** (예: 오전 → 오후 / 수업 시간 → 쉬는 시간)\n3. **주요 인물 구성 변화** (예: 1:1 대화 중 제3자 난입)\n- **병합 금지**: 주제가 이어지더라도 장소가 바뀌면 정보를 절대 합치지 않는다.\n- **소급 금지**: 나중에 발생한 일(대사, 결정, 물건 등장 등)을 앞선 사건 요약에 미리 포함하지 않는다.\n\n---\n\n## 📋 출력 형식 (강제)\n\n[제목]\n- 내용\n\n### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)\n- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사(~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.\n- **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)\n- 제목은 항상 []로 가둘 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.\n\n### 2. 내용 규칙\n- **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.\n- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.\n- **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)\n- **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.\n- **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.\n- **핵심 기록 요소**:\n- **상호작용의 연쇄(Flow)**: 단순 '자극-반응'을 넘어, **[누군가의 행동/발화] → [상대의 리액션] → [그로 인한 재반응/변화]**의 인과 사슬을 명확히 기록할 것. **대사는 " " 인용**\n- **사건의 배경 및 정보(Context & Lore)**: 단순 결과만 적지 말 것. 떡밥이 되는 맥락 정보를 구체적으로 포함할 것.\n- **구체적 양상(How)**: '애교', '화냄' 등 추상적 표현 대신 **"옷자락을 당김", "미간을 찌푸림", "시선을 피함"** 등 로그에 명시된 행동과 표정을 적을 것.\n- **미묘한 기류(Mood)**: 두 인물 간의 **사소한 장난, 묘한 긴장감, 말투의 변화** 등 질감을 살리는 디테일을 포함할 것.\n- **전환점 (Turning Point)**: **관계 변화** 및 **결정적 약속/은폐** 사실.\n- **구체적 명사(Keywords)**: 상징적인 **선물, 물건, 공간**을 정확한 명칭으로 기록할 것.\n\n---\n\n## 🚫 기록 원칙 (Strict)\n- **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.\n- **❌ 소설 금지**: AI의 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.\n- **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.\n- **❌ 순서 변경 금지**: 시간 흐름 엄수.\n- **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.\n- **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.\n- **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.\n- **⭕ 주체 보존**: 발단이 누구인지 구분하여 명확히 할 것.`;
+        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
+
+## 🎯 목적
+채팅 로그를 분석하여 이후 서사가 어긋나지 않도록 **'사건 단위의 독립적 앵커'**를 생성하되, **인물 간의 감정선과 미묘한 상호작용의 질감(Texture)**을 보존한다.
+생성된 요약문은 향후 AI가 인물 간의 관계 역학부터 소소한 추억까지 생생하고 섬세하게 기억하여, 이후의 롤플레잉을 보다 입체적으로 이끌어가는 참고 자료로 쓰일 예정이다.
+
+---
+
+## 🧩 출력 단위 및 분리 기준
+- **단위**: 출력의 최소 단위는 ‘사건’이다.
+- **분리 필수 조건**: 아래 중 하나라도 해당하면 반드시 **새로운 사건 슬롯**으로 분리하여 출력한다.
+1. **장소 이동** (예: 복도 → 교실 / 교정 → 중앙 정원)
+2. **시간대 변화** (예: 오전 → 오후 / 수업 시간 → 쉬는 시간)
+3. **주요 인물 구성 변화** (예: 1:1 대화 중 제3자 난입)
+- **병합 금지**: 주제가 이어지더라도 장소가 바뀌면 정보를 절대 합치지 않는다.
+- **소급 금지**: 나중에 발생한 일(대사, 결정, 물건 등장 등)을 앞선 사건 요약에 미리 포함하지 않는다.
+
+---
+
+## 📋 출력 형식 (강제)
+
+[제목]
+- 내용
+
+### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)
+- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사(~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
+- **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)
+- 제목은 항상 []로 가둘 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.
+
+### 2. 내용 규칙
+- **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.
+- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.
+- **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)
+- **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.
+- **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.
+- **핵심 기록 요소**:
+- **상호작용의 연쇄(Flow)**: 단순 '자극-반응'을 넘어, **[누군가의 행동/발화] → [상대의 리액션] → [그로 인한 재반응/변화]**의 인과 사슬을 명확히 기록할 것. **대사는 " " 인용**
+- **사건의 배경 및 정보(Context & Lore)**: 단순 결과만 적지 말 것. 떡밥이 되는 맥락 정보를 구체적으로 포함할 것.
+- **구체적 양상(How)**: '애교', '화냄' 등 추상적 표현 대신 **"옷자락을 당김", "미간을 찌푸림", "시선을 피함"** 등 로그에 명시된 행동과 표정을 적을 것.
+- **미묘한 기류(Mood)**: 두 인물 간의 **사소한 장난, 묘한 긴장감, 말투의 변화** 등 질감을 살리는 디테일을 포함할 것.
+- **전환점 (Turning Point)**: **관계 변화** 및 **결정적 약속/은폐** 사실.
+- **구체적 명사(Keywords)**: 상징적인 **선물, 물건, 공간**을 정확한 명칭으로 기록할 것.
+
+---
+
+## 🚫 기록 원칙 (Strict)
+- **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.
+- **❌ 소설 금지**: AI의 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
+- **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.
+- **❌ 순서 변경 금지**: 시간 흐름 엄수.
+- **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
+- **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.
+- **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.
+- **⭕ 주체 보존**: 발단이 누구인지 구분하여 명확히 할 것.`;
 
         function getChatId() {
             const m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
@@ -1368,15 +1516,15 @@
             if (document.getElementById('crack-ext-ai-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-ext-ai-css';
-            s.textContent = `
-                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:100000; position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:auto !important; }
-                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; max-height: 90vh; overflow-y: auto; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; box-sizing:border-box;}
+            s.textContent = UNI_BTN_CSS + `
+                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:100000; pointer-events:auto !important; }
+                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; max-height: 90vh; overflow-y: auto; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; }
                 .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
-                .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; }
+                .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; display:flex; align-items:center; gap:6px;}
                 .ce-ai-close-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; line-height: 1; }
                 .ce-ai-close-btn:hover { background: #eee; color: #222; }
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
-                .crack-ext-ai-modal input, .crack-ext-ai-modal textarea, .crack-ext-ai-modal select { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fff !important; color:#222 !important; }
+                .crack-ext-ai-modal input, .crack-ext-ai-modal textarea, .crack-ext-ai-modal select { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; pointer-events:auto !important; background-color:#fff !important; color:#222 !important; }
                 .crack-ext-ai-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
                 .crack-ext-ai-mbtn { padding:10px 24px; border-radius:8px; border:1px solid #ddd !important; background:#fff !important; color:#222 !important; cursor:pointer; font-size:14px; font-weight:600; transition: background 0.2s;}
                 .crack-ext-ai-mbtn:hover { background: #f5f5f5 !important; }
@@ -1391,8 +1539,7 @@
                 .crack-ext-session-content { color:#555 !important; line-height:1.4; white-space: pre-wrap; word-break: break-all; }
                 .crack-ext-char-count { font-size:11px; color: #777; }
                 .crack-ext-count-error { color: #e74c3c !important; font-weight:bold; }
-                .crack-ext-header-ai-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; background: ${BTN_GRADIENT}; color: white !important; font-size: 16px; border: none !important; cursor: pointer; transition: transform 0.1s; }
-                .crack-ext-header-ai-btn:hover { filter: brightness(0.9); }
+                
                 body[data-theme="dark"] .crack-ext-ai-modal { background: #242321 !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
                 body[data-theme="dark"] .ce-ai-close-btn { color: #aaa; }
@@ -1437,6 +1584,7 @@
         function showAiSummaryModal() {
             var overlay = document.createElement('div');
             overlay.className = 'crack-ext-ai-overlay';
+            overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
 
             const savedApiKey = localStorage.getItem('crack_ext_gemini_key') || '';
             const savedModel = localStorage.getItem('crack_ext_gemini_model') || 'gemini-3.1-pro-preview';
@@ -1568,15 +1716,18 @@
 
         function injectTopHeaderBtn() {
             const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
-            if (!headerContainer || headerContainer.querySelector('.crack-ext-header-ai-btn')) return;
+            if (!headerContainer || headerContainer.querySelector('.crack-ext-ai-btn')) return;
             
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-header-ai-btn'; 
+            btn.className = 'crack-ext-ai-btn crack-uni-btn'; 
             btn.innerHTML = '✨';
-            btn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); };
+            btn.title = 'AI 요약';
+            btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
             
-            const kwBtn = headerContainer.querySelector('.crack-ext-header-kw-btn');
-            const bmBtn = headerContainer.querySelector('.crack-ext-header-bm-btn');
+            // 키워드노트(💡)나 북마크(🌼) 뒤에 배치, 둘 다 없으면 맨 앞에.
+            const kwBtn = headerContainer.querySelector('.crack-ext-kw-btn');
+            const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
+            
             if (kwBtn) kwBtn.after(btn);
             else if (bmBtn) bmBtn.after(btn);
             else headerContainer.prepend(btn);
@@ -1610,7 +1761,7 @@
         try { 
             initKeywordNoteSystem(); 
         } catch (e) { 
-            console.error("[ 통합팩 ] ❌ 키워드 노트 모듈 오류 발생:", e); 
+            console.error("[ 통합팩 ] ❌ 키워드노트 모듈 오류 발생:", e); 
         }
 
         try { 
