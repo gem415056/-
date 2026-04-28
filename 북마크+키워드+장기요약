@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.1.0
-// @description  버튼 디자인(하트/투명배경) 변경 및 탭 전환 시 레이아웃 움직임 버그 완벽 수정
+// @version      3.2.0
+// @description  우선순위 화살표 정사각형 수정 및 키워드노트 실시간 강제 동기화 로직 적용
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -780,6 +780,53 @@
             }
         }
 
+        // ==========================================
+        // 강제 동기화 (Force Sync) 로직
+        // ==========================================
+        async function patchUserNoteAPI(chatId, content) {
+            const token = getToken();
+            if (!token || !chatId) return false;
+            try {
+                const isExtend = Array.from(content).length > 500; 
+                const url = `https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}`;
+                const res = await _origFetch(url, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userNote: { content: content, isExtend: isExtend } })
+                });
+                return res.ok;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        async function forceSyncUserNote(chatId) {
+            if (!chatId) return;
+            const data = getNoteData(chatId);
+            let holds = getHolds(chatId);
+            const currentTurn = getTurnCount(chatId);
+            
+            let finalNoteText = "";
+            const activeKeyword = data.keywords.find(kw => holds[kw.id] && holds[kw.id] >= currentTurn);
+            
+            if (activeKeyword) {
+                finalNoteText = activeKeyword.content;
+            } else {
+                finalNoteText = data.alwaysNote || "";
+            }
+
+            const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
+            if (isSuccess) writeTextarea(finalNoteText);
+        }
+
+        let syncTimer = null;
+        function debouncedForceSync(chatId) {
+            clearTimeout(syncTimer);
+            syncTimer = setTimeout(() => forceSyncUserNote(chatId), 500);
+        }
+
+
         function injectStyles() {
             if (document.getElementById('crack-kw-css')) return;
             const s = document.createElement('style');
@@ -799,7 +846,7 @@
                 .ckw-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
                 
                 /* visibility: hidden을 사용하여 공간을 유지한 채로 숨김 처리 */
-                #ckw-toggle-del { visibility: hidden; display: flex; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 6px; padding: 0 10px; margin-bottom: 4px; cursor: pointer; height: 28px; line-height: 1; }
+                #ckw-toggle-del { visibility: hidden; display: flex; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; margin-bottom: 4px; cursor: pointer; height: 28px; line-height: 1; }
                 #ckw-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
 
                 .ckw-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
@@ -819,7 +866,15 @@
                 
                 .ckw-item-left { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
                 .ckw-item-right { display: flex; gap: 4px; flex-shrink: 0; }
-                .ckw-order-btn { background: #eee; border: none; cursor: pointer; font-size: 10px; color: #666; padding: 6px; border-radius: 4px; }
+                
+                /* 우선순위 화살표 버튼을 정사각형으로 수정 */
+                .ckw-order-btn { 
+                    background: #eee; border: none; cursor: pointer; color: #666; 
+                    border-radius: 4px; transition: 0.2s;
+                    width: 24px; height: 24px; 
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 11px; font-weight: bold; padding: 0;
+                }
                 .ckw-order-btn:hover { background: #ddd; color: #222; }
 
                 #ckw-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box;}
@@ -962,6 +1017,7 @@
                 const data = getNoteData(chatId);
                 data.keywords = data.keywords.filter(k => !selectedForDelete.has(k.id));
                 saveNoteData(chatId, data);
+                debouncedForceSync(chatId); // 삭제 시 즉각 반영
                 
                 isDeleteMode = false;
                 selectedForDelete.clear();
@@ -995,7 +1051,7 @@
                 if (currentTab === 'always') {
                     contentArea.innerHTML = `
                         <div style="flex:1; display:flex; flex-direction:column;">
-                            <span class="ckw-label">평소에 상시로 유지될 노트를 입력하세요. (키워드 발동 시 교체됨)</span>
+                            <span class="ckw-label">평소에 상시로 유지될 노트를 입력하세요. (키워드 발동 시 일시적으로 교체됨)</span>
                             <textarea id="ckw-ta-always" class="ckw-textarea" placeholder="상시 노트 내용...">${escapeHtml(data.alwaysNote || '')}</textarea>
                             <div id="ckw-count-always" class="ckw-char-count">0 / 500자</div>
                         </div>
@@ -1013,6 +1069,7 @@
                         updateCount();
                         data.alwaysNote = ta.value;
                         saveNoteData(chatId, data);
+                        debouncedForceSync(chatId); // 상시노트 수정 시 즉각 동기화 반영
                     });
                     updateCount();
                 } 
@@ -1107,6 +1164,7 @@
                             data.keywords[idx - 1] = data.keywords[idx];
                             data.keywords[idx] = temp;
                             saveNoteData(chatId, data);
+                            debouncedForceSync(chatId);
                             renderContent();
                         }
                     };
@@ -1121,6 +1179,7 @@
                             data.keywords[idx + 1] = data.keywords[idx];
                             data.keywords[idx] = temp;
                             saveNoteData(chatId, data);
+                            debouncedForceSync(chatId);
                             renderContent();
                         }
                     };
@@ -1142,10 +1201,10 @@
                         <span class="ckw-label">발동 키워드 (쉼표로 구분 OR, &&로 묶으면 AND)</span>
                         <input type="text" id="ckw-ed-trig" class="ckw-input" placeholder="예: 엘프, 나무 && 마법" value="${escapeHtml(kw.triggers.join(', '))}">
                         
-                        <span class="ckw-label">유지 턴 수 (발동 후 몇 번의 턴 동안 교체 유지할지)</span>
+                        <span class="ckw-label">유지 턴 수 (0: 이번 채팅만 유지, 1 이상: 발동 후 지정한 횟수만큼 유지)</span>
                         <input type="number" id="ckw-ed-turn" class="ckw-input" min="0" value="${kw.holdTurns}">
                         
-                        <span class="ckw-label">노트 내용 (발동 시 상시노트를 대체할 내용)</span>
+                        <span class="ckw-label">노트 내용 (발동 시 상시노트를 일시적으로 대체할 내용)</span>
                         <textarea id="ckw-ed-content" class="ckw-textarea" placeholder="발동 시 주입될 내용...">${escapeHtml(kw.content)}</textarea>
                         <div id="ckw-ed-count" class="ckw-char-count">0 / 500자</div>
                         
@@ -1193,6 +1252,7 @@
                     }
 
                     saveNoteData(chatId, data);
+                    debouncedForceSync(chatId); // 저장 시 즉각 반영
                     editModeId = null;
                     renderContent();
                 };
@@ -1217,24 +1277,6 @@
                 if (parts.length && parts.every(p => lowText.includes(p))) return true;
             }
             return false;
-        }
-
-        async function patchUserNoteAPI(chatId, content) {
-            const token = getToken();
-            if (!token || !chatId) return false;
-            try {
-                const isExtend = Array.from(content).length > 500; 
-                const url = `https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}`;
-                const res = await _origFetch(url, {
-                    method: 'PATCH',
-                    credentials: 'include',
-                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userNote: { content: content, isExtend: isExtend } })
-                });
-                return res.ok;
-            } catch(e) {
-                return false;
-            }
         }
 
         async function processNoteSwap(chatId, userMessage) {
