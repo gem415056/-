@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 편의성 7 in 1 통합팩 (V5.5 팝업방향 수정)
+// @name         크랙 편의성 7 in 1 통합팩 (V5.6 UI 색상 및 아이콘 수정)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.5
-// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시
+// @version      5.6
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선
 // @author       User & Gemini
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -292,8 +292,8 @@
 
         const ICON = {
             clock: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; opacity:0.8;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
-            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:0.8;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
-            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="bite-mask-cracker"><rect width="24" height="24" fill="white" /><circle cx="24" cy="0" r="12" fill="black" /></mask></defs><path fill="currentColor" mask="url(#bite-mask-cracker)" d="${CRACKER_PATH}"></path></svg>`
+            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:1;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
+            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="currentColor" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
         };
 
         let counterBadge, textSpan, currentTextarea;
@@ -485,19 +485,19 @@
             // 1. 턴수 표시
             html += `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
 
-            // 2. 총 크래커 표시
+            // 2. 총 크래커 표시 (색상 및 불투명도 변경됨)
             const crackerCount = getCrackerCount();
             if (crackerCount !== null) {
                 html += `<span class="my-counter-separator">|</span>`;
-                html += `<div class="my-counter-part">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
+                html += `<div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
             }
 
-            // 3. 소모 크래커 표시
+            // 3. 소모 크래커 표시 (마이너스 기호 제거됨)
             html += `<span class="my-counter-separator">|</span>`;
             let cumText = '...';
             let anim = '';
             if (isCalculatingCumulative) { anim = 'pulse-anim'; }
-            else { cumText = `-${lastConsumed}`; }
+            else { cumText = `${lastConsumed}`; }
             html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumText}</span></div>`;
 
             if (html !== lastRenderedText) {
