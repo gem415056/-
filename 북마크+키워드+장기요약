@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.2.0
-// @description  우선순위 화살표 정사각형 수정 및 키워드노트 실시간 강제 동기화 로직 적용
+// @version      3.3.0
+// @description  AI 요약 UI 전면 개편(고정크기, 뷰분리, 모델추가), 북마크 간격 축소
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -129,7 +129,7 @@
                 .cbm-ftab { height: 28px; background: #f0f0f0; border: 1px solid #ddd; padding: 0 12px; border-radius: 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; box-sizing: border-box; }
                 .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
                 .cbm-fadd { background: none; border: 1px dashed #aaa; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #666; font-weight: bold; box-sizing: border-box; margin: 0; padding: 0; }
-                .cbm-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
+                .cbm-search-row { display: flex; gap: 5px; margin-bottom: 12px; align-items: stretch; }
                 .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
                 .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
                 #cbm-toggle-move, #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
@@ -211,7 +211,7 @@
                 openModal(); 
             };
             
-            // 제일 왼쪽에 배치 (prepend)
+            // 제일 왼쪽에 배치
             headerContainer.prepend(btn);
         }
 
@@ -684,7 +684,6 @@
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-
     // ==========================================
     // 모듈 2: 크랙 키워드 노트 (Keyword Note - 개편본)
     // ==========================================
@@ -780,9 +779,7 @@
             }
         }
 
-        // ==========================================
         // 강제 동기화 (Force Sync) 로직
-        // ==========================================
         async function patchUserNoteAPI(chatId, content) {
             const token = getToken();
             if (!token || !chatId) return false;
@@ -839,13 +836,11 @@
                 .ckw-icon-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
                 .ckw-icon-btn:hover { background: #eee; color: #222; }
                 
-                /* 탭 이동(줄바꿈) 현상 완벽 해결을 위해 height 고정 및 flex 정렬 최적화 */
                 .ckw-tabs-container { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #eee; margin-bottom: 16px; padding-bottom: 0; height: 36px; }
                 .ckw-tabs { display: flex; gap: 12px; margin-bottom: -1px; }
                 .ckw-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
                 .ckw-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
                 
-                /* visibility: hidden을 사용하여 공간을 유지한 채로 숨김 처리 */
                 #ckw-toggle-del { visibility: hidden; display: flex; align-items: center; justify-content: center; font-size: 16px; background: none; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; margin-bottom: 4px; cursor: pointer; height: 28px; line-height: 1; }
                 #ckw-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
 
@@ -867,7 +862,6 @@
                 .ckw-item-left { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
                 .ckw-item-right { display: flex; gap: 4px; flex-shrink: 0; }
                 
-                /* 우선순위 화살표 버튼을 정사각형으로 수정 */
                 .ckw-order-btn { 
                     background: #eee; border: none; cursor: pointer; color: #666; 
                     border-radius: 4px; transition: 0.2s;
@@ -918,7 +912,6 @@
                 openModal(); 
             };
             
-            // 북마크(♥) 버튼 뒤에 배치, 없으면 맨 앞에 배치
             const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
             if (bmBtn) bmBtn.after(btn);
             else headerContainer.prepend(btn);
@@ -989,7 +982,6 @@
                     selectedForDelete.clear();
                     
                     tabsWrapper.style.display = 'flex';
-                    // 탭 쉬프팅 방지: display:none 대신 visibility:hidden 사용
                     toggleDelBtn.style.visibility = (currentTab === 'keyword') ? 'visible' : 'hidden';
                     
                     renderContent();
@@ -1017,7 +1009,7 @@
                 const data = getNoteData(chatId);
                 data.keywords = data.keywords.filter(k => !selectedForDelete.has(k.id));
                 saveNoteData(chatId, data);
-                debouncedForceSync(chatId); // 삭제 시 즉각 반영
+                debouncedForceSync(chatId); 
                 
                 isDeleteMode = false;
                 selectedForDelete.clear();
@@ -1069,7 +1061,7 @@
                         updateCount();
                         data.alwaysNote = ta.value;
                         saveNoteData(chatId, data);
-                        debouncedForceSync(chatId); // 상시노트 수정 시 즉각 동기화 반영
+                        debouncedForceSync(chatId); 
                     });
                     updateCount();
                 } 
@@ -1201,7 +1193,7 @@
                         <span class="ckw-label">발동 키워드 (쉼표로 구분 OR, &&로 묶으면 AND)</span>
                         <input type="text" id="ckw-ed-trig" class="ckw-input" placeholder="예: 엘프, 나무 && 마법" value="${escapeHtml(kw.triggers.join(', '))}">
                         
-                        <span class="ckw-label">유지 턴 수 (0: 이번 채팅만 유지, 1 이상: 발동 후 지정한 횟수만큼 유지)</span>
+                        <span class="ckw-label">유지 턴 수 (0: 이번 채팅만 유지, 1 이상: 발동 후 지정한 횟수만큼 추가 유지)</span>
                         <input type="number" id="ckw-ed-turn" class="ckw-input" min="0" value="${kw.holdTurns}">
                         
                         <span class="ckw-label">노트 내용 (발동 시 상시노트를 일시적으로 대체할 내용)</span>
@@ -1252,7 +1244,7 @@
                     }
 
                     saveNoteData(chatId, data);
-                    debouncedForceSync(chatId); // 저장 시 즉각 반영
+                    debouncedForceSync(chatId); 
                     editModeId = null;
                     renderContent();
                 };
@@ -1359,7 +1351,7 @@
     }
 
     // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약
+    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 (전면 개편)
     // ==========================================
     function initAiSummarySystem() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
@@ -1577,24 +1569,39 @@
             const s = document.createElement('style');
             s.id = 'crack-ext-ai-css';
             s.textContent = UNI_BTN_CSS + `
-                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:100000; pointer-events:auto !important; }
-                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; max-height: 90vh; overflow-y: auto; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; }
-                .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:100000; display: flex; align-items: center; justify-content: center; pointer-events:auto !important; }
+                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; box-sizing: border-box; }
+                .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-shrink:0; }
                 .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; display:flex; align-items:center; gap:6px;}
                 .ce-ai-close-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; line-height: 1; }
                 .ce-ai-close-btn:hover { background: #eee; color: #222; }
+                
+                .ce-ai-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
+                .ce-ai-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-shrink: 0; }
+
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
-                .crack-ext-ai-modal input, .crack-ext-ai-modal textarea, .crack-ext-ai-modal select { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; pointer-events:auto !important; background-color:#fff !important; color:#222 !important; }
-                .crack-ext-ai-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
-                .crack-ext-ai-mbtn { padding:10px 24px; border-radius:8px; border:1px solid #ddd !important; background:#fff !important; color:#222 !important; cursor:pointer; font-size:14px; font-weight:600; transition: background 0.2s;}
-                .crack-ext-ai-mbtn:hover { background: #f5f5f5 !important; }
-                .crack-ext-ai-mbtn-p { background:#222 !important; color:#fff !important; border-color:#222 !important; }
-                .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 16px; }
-                .crack-flex-ai-row .fg { flex:1; }
-                #ce-ai-preview-container { margin-top: 12px; }
-                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 8px; font-size: 13px; font-weight: bold; }
+                
+                .ce-ai-ta { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fafafa !important; color:#222 !important; resize: none; flex: 1; }
+                .ce-ai-ta:focus { outline: 1px solid #FBA707; background: #fff !important; }
+                
+                .ce-ai-input { width:100%; height: 36px; padding:0 10px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; }
+                .ce-ai-select { width:100%; height: 36px; padding-left: 10px; padding-right: 28px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; cursor:pointer;}
+                .ce-ai-input:focus, .ce-ai-select:focus { outline: 1px solid #FBA707; background: #fff !important; }
+
+                .crack-ext-ai-mbtn { padding:10px 20px; border-radius:8px; border:1px solid #ddd !important; background:#eee !important; color:#333 !important; cursor:pointer; font-size:13px; font-weight:600; transition: background 0.2s;}
+                .crack-ext-ai-mbtn:hover { background: #ddd !important; }
+                .crack-ext-ai-mbtn-p { background:#FBA707 !important; color:#fff !important; border-color:#FBA707 !important; }
+                .crack-ext-ai-mbtn-p:hover { filter: brightness(0.9); background: #FBA707 !important;}
+
+                .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 12px; }
+                .crack-flex-ai-row .fg { flex:1; display:flex; flex-direction:column; }
+                
+                #ce-ai-preview-container { margin-top: 12px; display:flex; flex-direction:column; flex:1; min-height:0; }
+                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 8px; font-size: 13px; font-weight: bold; flex-shrink:0; }
                 #ce-ai-card-nav button { cursor:pointer; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; padding:4px 10px; font-size:12px; transition: background 0.2s; color:#333; }
-                .crack-ext-session-card { background:#f9f9f9 !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; }
+                #ce-ai-preview-cards { overflow-y: auto; flex:1; padding-right:4px; }
+                
+                .crack-ext-session-card { background:#f9f9f9 !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; margin-bottom: 10px;}
                 .crack-ext-session-title { font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
                 .crack-ext-session-content { color:#555 !important; line-height:1.4; white-space: pre-wrap; word-break: break-all; }
                 .crack-ext-char-count { font-size:11px; color: #777; }
@@ -1604,11 +1611,13 @@
                 body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
                 body[data-theme="dark"] .ce-ai-close-btn { color: #aaa; }
                 body[data-theme="dark"] .ce-ai-close-btn:hover { background: #333; color: #fff; }
-                body[data-theme="dark"] .crack-ext-ai-modal input, body[data-theme="dark"] .crack-ext-ai-modal textarea, body[data-theme="dark"] .crack-ext-ai-modal select { background: #141413 !important; color: #F0EFEB !important; border: 1px solid #42413D !important; }
-                body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border: 1px solid #42413D !important; }
+                body[data-theme="dark"] .ce-ai-ta, body[data-theme="dark"] .ce-ai-input, body[data-theme="dark"] .ce-ai-select { background: #141413 !important; color: #F0EFEB !important; border-color: #42413D !important; }
+                body[data-theme="dark"] .ce-ai-ta:focus, body[data-theme="dark"] .ce-ai-input:focus, body[data-theme="dark"] .ce-ai-select:focus { background: #1a1918 !important; }
+                body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn { background: #2E2D2B !important; color: #F0EFEB !important; border: 1px solid #42413D !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: #F0EFEB !important; color: #1A1918 !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn { background: #333 !important; color: #eee !important; border-color: #42413D !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn:hover { background: #444 !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: #FBA707 !important; color: #fff !important; border-color: #FBA707 !important; }
             `;
             document.head.appendChild(s);
         }
@@ -1644,7 +1653,6 @@
         function showAiSummaryModal() {
             var overlay = document.createElement('div');
             overlay.className = 'crack-ext-ai-overlay';
-            overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.display = 'flex'; overlay.style.alignItems = 'center'; overlay.style.justifyContent = 'center';
 
             const savedApiKey = localStorage.getItem('crack_ext_gemini_key') || '';
             const savedModel = localStorage.getItem('crack_ext_gemini_model') || 'gemini-3.1-pro-preview';
@@ -1652,39 +1660,131 @@
             const savedProvider = localStorage.getItem('crack_ext_api_provider') || 'google';
             const savedFirebaseScript = localStorage.getItem('crack_ext_firebase_script') || '';
 
-            let isPromptMode = false, tempResultContent = "", parsedCards = [], currentCardIndex = 0;
+            let parsedCards = [], currentCardIndex = 0;
 
-            var html = '<div class="crack-ext-ai-modal"><div class="crack-ext-ai-modal-header"><h3>✨ AI 요약 / 장기 기억 추가</h3><button id="ce-ai-close-btn" class="ce-ai-close-btn">✕</button></div>';
-            html += '<div class="crack-flex-ai-row" id="ce-ai-top-settings">';
-            html += '<div class="fg" style="flex: 1.2;"><label>API</label><select id="ce-ai-provider"><option value="google" ' + (savedProvider==='google'?'selected':'') + '>Google</option><option value="firebase" ' + (savedProvider==='firebase'?'selected':'') + '>Firebase</option></select></div>';
-            html += '<div class="fg" id="ce-ai-key-container" style="flex: 2;' + (savedProvider==='google'?'':'display:none;') + '"><label>API Key</label><input type="password" id="ce-ai-key" value="' + escapeHtml(savedApiKey) + '"></div>';
-            html += '<div class="fg" style="flex: 1.5;"><label>모델</label><select id="ce-ai-model"><option value="gemini-3.1-pro-preview" ' + (savedModel==='gemini-3.1-pro-preview'?'selected':'') + '>3.1 Pro Preview</option><option value="gemini-3-flash-preview" ' + (savedModel==='gemini-3-flash-preview'?'selected':'') + '>3 Flash Preview</option><option value="gemini-2.5-pro" ' + (savedModel==='gemini-2.5-pro'?'selected':'') + '>2.5 Pro</option></select></div>';
-            html += '<div class="fg" style="flex: 0.8;"><label>턴 수</label><input type="number" id="ce-ai-turns" value="' + escapeHtml(savedTurnCount) + '" min="0"></div></div>';
-
-            html += '<div class="crack-flex-ai-row" id="ce-ai-firebase-container" style="margin-bottom:16px;' + (savedProvider==='firebase'?'':'display:none;') + '"><div class="fg"><label>Firebase 스크립트</label><textarea id="ce-ai-firebase-script" rows="2">' + escapeHtml(savedFirebaseScript) + '</textarea></div></div>';
-
-            html += '<div class="fg"><label id="ce-ai-result-label-wrapper" style="display:flex; justify-content:space-between;"><span id="ce-ai-result-label">생성 결과</span><div style="display:flex; align-items:center; gap:10px;"><span id="ce-ai-selection-counter" style="color:#a777e3; font-size:12px;"></span><button id="ce-ai-toggle-prompt" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">⚙️ 프롬프트 설정</button></div></label>';
-            html += '<textarea id="ce-ai-result" rows="7" placeholder="결과가 여기에 표시됩니다."></textarea>';
-
-            html += '<div id="ce-ai-preview-container"><div id="ce-ai-card-nav" style="display:none;"><button id="ce-ai-card-prev">◀</button><span id="ce-ai-card-page">1 / 1</span><button id="ce-ai-card-next">▶</button></div><div id="ce-ai-preview-cards"></div></div></div>';
-            html += '<div class="crack-ext-ai-modal-btns" style="justify-content: space-between; align-items: flex-end;"><div><button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button></div><div style="display:flex; gap:8px;"><button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button></div></div></div>';
+            var html = `
+            <div class="crack-ext-ai-modal">
+                <div class="crack-ext-ai-modal-header">
+                    <h3>✨ AI 요약 / 장기 기억 추가</h3>
+                    <button id="ce-ai-close-btn" class="ce-ai-close-btn">✕</button>
+                </div>
+                
+                <div class="ce-ai-body">
+                    <!-- 메인 뷰 -->
+                    <div id="ce-ai-main-view" style="display:flex; flex-direction:column; height:100%;">
+                        <label style="margin-bottom:6px;">
+                            <span>생성 결과</span>
+                            <button id="ce-ai-toggle-settings" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">⚙️ 설정</button>
+                        </label>
+                        <textarea id="ce-ai-result" class="ce-ai-ta" style="flex: 0 0 120px; height:120px;" placeholder="결과가 여기에 표시됩니다. (수동 편집 가능)"></textarea>
+                        
+                        <div id="ce-ai-preview-container">
+                            <div id="ce-ai-card-nav" style="display:none;">
+                                <button id="ce-ai-card-prev">◀</button>
+                                <span id="ce-ai-card-page">1 / 1</span>
+                                <button id="ce-ai-card-next">▶</button>
+                            </div>
+                            <div id="ce-ai-preview-cards"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 설정 뷰 (기본 숨김) -->
+                    <div id="ce-ai-settings-view" style="display:none; flex-direction:column; height:100%;">
+                        <div style="text-align:right; margin-bottom:8px;">
+                            <button id="ce-ai-toggle-back" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">돌아가기</button>
+                        </div>
+                        <div class="crack-flex-ai-row">
+                            <div class="fg" style="flex: 1.2;">
+                                <label>API</label>
+                                <select id="ce-ai-provider" class="ce-ai-select">
+                                    <option value="google" ${savedProvider==='google'?'selected':''}>Google</option>
+                                    <option value="firebase" ${savedProvider==='firebase'?'selected':''}>Firebase</option>
+                                </select>
+                            </div>
+                            <div class="fg" id="ce-ai-key-container" style="${savedProvider==='google'?'':'display:none;'}">
+                                <label>API Key</label>
+                                <input type="password" id="ce-ai-key" class="ce-ai-input" value="${escapeHtml(savedApiKey)}">
+                            </div>
+                            <div class="fg" style="flex: 1.5;">
+                                <label>모델</label>
+                                <select id="ce-ai-model" class="ce-ai-select">
+                                    <option value="gemini-3.1-pro-preview" ${savedModel==='gemini-3.1-pro-preview'?'selected':''}>3.1 Pro Preview</option>
+                                    <option value="gemini-3-flash-preview" ${savedModel==='gemini-3-flash-preview'?'selected':''}>3 Flash Preview</option>
+                                    <option value="gemini-2.5-pro" ${savedModel==='gemini-2.5-pro'?'selected':''}>2.5 Pro</option>
+                                    <option value="gemini-2.5-flash" ${savedModel==='gemini-2.5-flash'?'selected':''}>2.5 Flash</option>
+                                    <option value="gemini-2.0-pro-exp-0205" ${savedModel==='gemini-2.0-pro-exp-0205'?'selected':''}>2.0 Pro Exp</option>
+                                    <option value="gemini-2.0-flash" ${savedModel==='gemini-2.0-flash'?'selected':''}>2.0 Flash</option>
+                                    <option value="gemini-2.0-flash-lite-preview-02-05" ${savedModel==='gemini-2.0-flash-lite-preview-02-05'?'selected':''}>2.0 Flash Lite</option>
+                                    <option value="gemini-1.5-pro" ${savedModel==='gemini-1.5-pro'?'selected':''}>1.5 Pro</option>
+                                    <option value="gemini-1.5-flash" ${savedModel==='gemini-1.5-flash'?'selected':''}>1.5 Flash</option>
+                                </select>
+                            </div>
+                            <div class="fg" style="flex: 0.8;">
+                                <label>턴 수</label>
+                                <input type="number" id="ce-ai-turns" class="ce-ai-input" value="${escapeHtml(savedTurnCount)}" min="0">
+                            </div>
+                        </div>
+                        
+                        <div class="crack-flex-ai-row" id="ce-ai-firebase-container" style="${savedProvider==='firebase'?'':'display:none;'}">
+                            <div class="fg">
+                                <label>Firebase 스크립트</label>
+                                <textarea id="ce-ai-firebase-script" class="ce-ai-ta" style="flex: 0 0 60px; height:60px;">${escapeHtml(savedFirebaseScript)}</textarea>
+                            </div>
+                        </div>
+                        
+                        <div style="flex:1; display:flex; flex-direction:column; margin-top:4px;">
+                            <label>프롬프트</label>
+                            <textarea id="ce-ai-prompt" class="ce-ai-ta"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ce-ai-footer">
+                    <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
+                    <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
+                </div>
+            </div>`;
 
             overlay.innerHTML = html;
             document.body.appendChild(overlay);
 
             overlay.querySelector('#ce-ai-close-btn').onclick = e => { e.stopPropagation(); overlay.remove(); };
+            overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
 
+            const mainView = overlay.querySelector('#ce-ai-main-view');
+            const settingsView = overlay.querySelector('#ce-ai-settings-view');
             const txtResult = overlay.querySelector('#ce-ai-result');
-            const previewCards = overlay.querySelector('#ce-ai-preview-cards'), cardNav = overlay.querySelector('#ce-ai-card-nav'), spanCardPage = overlay.querySelector('#ce-ai-card-page');
-            const selProvider = overlay.querySelector('#ce-ai-provider'), contKey = overlay.querySelector('#ce-ai-key-container'), contFirebase = overlay.querySelector('#ce-ai-firebase-container');
+            const txtPrompt = overlay.querySelector('#ce-ai-prompt');
+            
+            const previewCards = overlay.querySelector('#ce-ai-preview-cards');
+            const cardNav = overlay.querySelector('#ce-ai-card-nav');
+            const spanCardPage = overlay.querySelector('#ce-ai-card-page');
+            
+            const selProvider = overlay.querySelector('#ce-ai-provider');
+            const contKey = overlay.querySelector('#ce-ai-key-container');
+            const contFirebase = overlay.querySelector('#ce-ai-firebase-container');
 
             selProvider.onchange = () => {
                 if(selProvider.value === 'google') { contKey.style.display = 'block'; contFirebase.style.display = 'none'; } 
                 else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
             };
 
+            // 설정 전환 토글
+            overlay.querySelector('#ce-ai-toggle-settings').onclick = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                mainView.style.display = 'none';
+                settingsView.style.display = 'flex';
+                txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
+            };
+
+            overlay.querySelector('#ce-ai-toggle-back').onclick = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
+                settingsView.style.display = 'none';
+                mainView.style.display = 'flex';
+            };
+
             function updatePreviewCards() {
-                if(isPromptMode) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; return; }
                 const content = txtResult.value.trim();
                 if(!content) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; parsedCards = []; return; }
 
@@ -1712,27 +1812,18 @@
             overlay.querySelector('#ce-ai-card-prev').onclick = (e) => { e.preventDefault(); if (currentCardIndex > 0) { currentCardIndex--; updatePreviewCards(); } };
             overlay.querySelector('#ce-ai-card-next').onclick = (e) => { e.preventDefault(); if (currentCardIndex < parsedCards.length - 1) { currentCardIndex++; updatePreviewCards(); } };
 
-            const btnTogglePrompt = overlay.querySelector('#ce-ai-toggle-prompt'), btnSave = overlay.querySelector('#ce-ai-save'), btnGen = overlay.querySelector('#ce-ai-generate');
-            btnTogglePrompt.onclick = (e) => {
-                e.stopPropagation(); e.preventDefault();
-                isPromptMode = !isPromptMode;
-                if (isPromptMode) {
-                    tempResultContent = txtResult.value; txtResult.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-                    btnTogglePrompt.textContent = '돌아가기'; btnSave.style.display = 'none'; btnGen.style.display = 'none';
-                    overlay.querySelector('#ce-ai-top-settings').style.display = 'none'; if(contFirebase) contFirebase.style.display = 'none';
-                    updatePreviewCards();
-                } else {
-                    localStorage.setItem('crack_ext_custom_prompt', txtResult.value.trim()); txtResult.value = tempResultContent;
-                    btnTogglePrompt.textContent = '⚙️ 프롬프트 설정'; btnSave.style.display = 'block'; btnGen.style.display = 'block';
-                    overlay.querySelector('#ce-ai-top-settings').style.display = 'flex'; if(selProvider.value === 'firebase') contFirebase.style.display = 'flex';
-                    updatePreviewCards();
-                }
-            };
-
-            ['click', 'mousedown', 'mouseup'].forEach(evt => overlay.addEventListener(evt, e => e.stopPropagation()));
+            const btnGen = overlay.querySelector('#ce-ai-generate');
+            const btnSave = overlay.querySelector('#ce-ai-save');
 
             btnGen.onclick = async (e) => {
                 e.stopPropagation();
+                // 생성 시 만약 설정 뷰에 있다면 설정 뷰 내용을 저장
+                if (settingsView.style.display === 'flex') {
+                    localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
+                    settingsView.style.display = 'none';
+                    mainView.style.display = 'flex';
+                }
+
                 const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
                 const firebaseScript = overlay.querySelector('#ce-ai-firebase-script').value.trim();
                 if (selProvider.value === 'google' && !apiKey) return alert("API Key를 입력해주세요.");
