@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 로어북 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      2.1.0
+// @version      2.2.0
 // @description  묶음 상자 없이 마이너스 마진으로 버튼 간격을 줄인 완벽 독립 모듈형 통합팩
-// @author       User
+// @author       User (Modified by Assistant)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -22,6 +22,7 @@
     function initBookmarkSystem() {
         const FIX_COLORS = ['#F6E19A', '#F2C0C3', '#BCD0D8', '#D5C2DE'];
         const ACCENT_COLOR = '#FBA707';
+        const DELETE_COLOR = '#FF4433';
         const ICON_EDIT = '✎';
 
         let currentPath = window.location.pathname;
@@ -37,6 +38,8 @@
         
         let isDeleteMode = false;
         let selectedForDelete = new Set();
+        let isMoveMode = false;
+        let selectedForMove = new Set();
 
         document.addEventListener('selectionchange', () => {
             const text = window.getSelection().toString().trim();
@@ -83,7 +86,7 @@
                 mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
                 @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(251,167,7,0.5); } }
                 .crack-bm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100000; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
-                .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: 66vh; max-height: 66vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
+                .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
                 .cbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
                 .cbm-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: #222 !important; display: flex; align-items: center; gap: 6px; }
                 .cbm-header-btns { display: flex; gap: 8px; }
@@ -106,24 +109,34 @@
                 .cbm-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: stretch; }
                 .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
                 .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
-                #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
-                #cbm-toggle-del.active { background: #e74c3c; color: white; border-color: #e74c3c; }
-                #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(231,76,60,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(231,76,60,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-del-count { color: #e74c3c; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #e74c3c; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
-                .cbm-del-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+                #cbm-toggle-move, #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
+                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
+                
+                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(251,167,7,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(251,167,7,0.3); min-height: 36px; box-sizing: border-box; }
+                #cbm-move-count { color: ${ACCENT_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${ACCENT_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                #cbm-move-folder-select { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; padding: 3px 6px; background: #fff; color: #333; height: 24px; }
+                
+                #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box; }
+                #cbm-del-count { color: ${DELETE_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-del-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${DELETE_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                
+                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
                 .cbm-list { flex: 1; overflow-y: auto; padding-right: 4px; }
                 .cbm-item { background: #f9f9f9 !important; border: 1px solid #eee !important; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; position: relative; }
                 .cbm-item:hover { border-color: ${ACCENT_COLOR} !important; }
-                .cbm-item.selected { border-color: #e74c3c !important; background: rgba(231,76,60,0.05) !important; }
+                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: rgba(251,167,7,0.05) !important; }
+                .cbm-item.selected-delete { border-color: ${DELETE_COLOR} !important; background: rgba(255,68,51,0.05) !important; }
                 .cbm-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
                 .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
                 .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
                 .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
                 .cbm-item-edit:hover { color: ${ACCENT_COLOR}; }
-                .cbm-fsel { border: 1px solid #ddd; border-radius: 4px; font-size: 11px; padding: 2px 4px; background: #fff; color: #333; max-width: 90px;}
+                .cbm-item-folder-tag { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
                 .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
                 .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
+                
                 body[data-theme="dark"] .crack-bm-modal { background: #242321 !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] .cbm-header h3 { color: #F0EFEB !important; }
                 body[data-theme="dark"] .cbm-icon-btn { color: #aaa; }
@@ -133,13 +146,16 @@
                 body[data-theme="dark"] .cbm-ftab { background: #141413; border-color: #42413D; color: #ccc; }
                 body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
                 body[data-theme="dark"] .cbm-search { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
-                body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] #cbm-toggle-del.active { background: #e74c3c; color: white; border-color: #e74c3c; }
+                body[data-theme="dark"] #cbm-toggle-move, body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
+                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 body[data-theme="dark"] .cbm-item { background: #1a1918 !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .cbm-item.selected { background: rgba(231,76,60,0.15) !important; border-color: #e74c3c !important; }
+                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(251,167,7,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
+                body[data-theme="dark"] .cbm-item.selected-delete { background: rgba(255,68,51,0.15) !important; border-color: ${DELETE_COLOR} !important; }
                 body[data-theme="dark"] .cbm-item-title { color: #F0EFEB !important; }
                 body[data-theme="dark"] .cbm-item-text { color: #aaa !important; }
-                body[data-theme="dark"] .cbm-fsel { background: #141413; border-color: #42413D; color: #ccc;}
+                body[data-theme="dark"] .cbm-item-folder-tag { background: #333; color: #ccc; }
+                body[data-theme="dark"] #cbm-move-folder-select { background: #141413; border-color: #42413D; color: #ccc;}
             `;
             document.head.appendChild(s);
         }
@@ -164,9 +180,6 @@
             const btn = document.createElement('button');
             btn.className = 'crack-ext-header-bm-btn';
             btn.innerHTML = `💡 북마크`;
-            
-            // 핵심: 묶음상자 대신 마이너스 마진 꼼수로 AI요약 버튼과의 거리를 6px로 줄임
-            // 원래 부모 컨테이너가 12px(gap-3) 간격을 주는데, 거기서 6px을 뺌
             btn.style.marginRight = '-6px'; 
             
             btn.onclick = (e) => { 
@@ -196,8 +209,8 @@
         function openModal() {
             if (document.getElementById('cbm-overlay')) return;
             isModalOpen = true;
-            isDeleteMode = false;
-            selectedForDelete.clear();
+            isDeleteMode = false; selectedForDelete.clear();
+            isMoveMode = false; selectedForMove.clear();
             
             const overlay = document.createElement('div');
             overlay.id = 'cbm-overlay';
@@ -224,17 +237,30 @@
                     
                     <div class="cbm-search-row">
                         <input type="text" class="cbm-search" id="cbm-search-input" placeholder="북마크 이름/내용 검색...">
-                        <button id="cbm-toggle-del" title="다중 삭제 모드">✄</button>
+                        <button id="cbm-toggle-move" title="다중 이동 모드">☞</button>
+                        <button id="cbm-toggle-del" title="다중 삭제 모드">☜</button>
+                    </div>
+
+                    <div id="cbm-move-actions">
+                        <div style="display:flex; align-items:center;">
+                            <button id="cbm-move-select-all" title="현재 목록 전체 선택">□</button>
+                            <span id="cbm-move-count">0개 선택됨</span>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <select id="cbm-move-folder-select"></select>
+                            <button id="cbm-move-confirm" class="cbm-action-btn-sm" style="background:${ACCENT_COLOR};" title="이동">✔</button>
+                            <button id="cbm-move-cancel" class="cbm-action-btn-sm" style="background:#888;" title="취소">✘</button>
+                        </div>
                     </div>
                     
                     <div id="cbm-delete-actions">
                         <div style="display:flex; align-items:center;">
-                            <button id="cbm-select-all" title="현재 목록 전체 선택">□</button>
+                            <button id="cbm-del-select-all" title="현재 목록 전체 선택">□</button>
                             <span id="cbm-del-count">0개 선택됨</span>
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button id="cbm-del-confirm" class="cbm-del-btn-sm" style="background:#e74c3c;" title="삭제">✔</button>
-                            <button id="cbm-del-cancel" class="cbm-del-btn-sm" style="background:#888;" title="취소">✘</button>
+                            <button id="cbm-del-confirm" class="cbm-action-btn-sm" style="background:${DELETE_COLOR};" title="삭제">✔</button>
+                            <button id="cbm-del-cancel" class="cbm-action-btn-sm" style="background:#888;" title="취소">✘</button>
                         </div>
                     </div>
                     
@@ -254,6 +280,7 @@
                     currentTab = tab.dataset.tab;
                     searchQuery = ''; document.getElementById('cbm-search-input').value = '';
                     if(isDeleteMode) selectedForDelete.clear();
+                    if(isMoveMode) selectedForMove.clear();
                     renderBookmarkList();
                 };
             });
@@ -261,32 +288,66 @@
             document.getElementById('cbm-search-input').oninput = (e) => {
                 searchQuery = e.target.value.trim().toLowerCase(); 
                 if(isDeleteMode) selectedForDelete.clear();
+                if(isMoveMode) selectedForMove.clear();
                 renderBookmarkList();
             };
 
+            // --- 다중 모드 토글 버튼들 ---
+            document.getElementById('cbm-toggle-move').onclick = () => {
+                isMoveMode = !isMoveMode;
+                isDeleteMode = false;
+                selectedForMove.clear(); selectedForDelete.clear();
+                document.getElementById('cbm-toggle-move').classList.toggle('active', isMoveMode);
+                document.getElementById('cbm-toggle-del').classList.remove('active');
+                renderBookmarkList();
+            };
             document.getElementById('cbm-toggle-del').onclick = () => {
                 isDeleteMode = !isDeleteMode;
-                selectedForDelete.clear();
+                isMoveMode = false;
+                selectedForDelete.clear(); selectedForMove.clear();
                 document.getElementById('cbm-toggle-del').classList.toggle('active', isDeleteMode);
+                document.getElementById('cbm-toggle-move').classList.remove('active');
                 renderBookmarkList();
             };
 
-            document.getElementById('cbm-select-all').onclick = () => {
+            // --- 이동 모드 액션 ---
+            document.getElementById('cbm-move-select-all').onclick = () => {
                 if (currentFilteredBms.length === 0) return;
-                if (selectedForDelete.size === currentFilteredBms.length) {
-                    selectedForDelete.clear();
-                } else {
-                    currentFilteredBms.forEach(b => selectedForDelete.add(b.id)); 
-                }
+                if (selectedForMove.size === currentFilteredBms.length) selectedForMove.clear();
+                else currentFilteredBms.forEach(b => selectedForMove.add(b.id)); 
+                renderBookmarkList();
+            };
+            document.getElementById('cbm-move-cancel').onclick = () => {
+                isMoveMode = false; selectedForMove.clear();
+                document.getElementById('cbm-toggle-move').classList.remove('active');
+                renderBookmarkList();
+            };
+            document.getElementById('cbm-move-confirm').onclick = () => {
+                const destFolderId = document.getElementById('cbm-move-folder-select').value;
+                if (!destFolderId) return alert("이동할 폴더를 선택해주세요.");
+                if (selectedForMove.size === 0) return alert("이동할 항목을 선택해주세요.");
+                
+                let bms = getBookmarks();
+                bms.forEach(b => { if (selectedForMove.has(b.id)) b.folderId = destFolderId; });
+                saveBookmarks(bms);
+                
+                isMoveMode = false; selectedForMove.clear();
+                document.getElementById('cbm-toggle-move').classList.remove('active');
                 renderBookmarkList();
             };
 
+            // --- 삭제 모드 액션 ---
+            document.getElementById('cbm-del-select-all').onclick = () => {
+                if (currentFilteredBms.length === 0) return;
+                if (selectedForDelete.size === currentFilteredBms.length) selectedForDelete.clear();
+                else currentFilteredBms.forEach(b => selectedForDelete.add(b.id)); 
+                renderBookmarkList();
+            };
             document.getElementById('cbm-del-cancel').onclick = () => {
                 isDeleteMode = false; selectedForDelete.clear();
                 document.getElementById('cbm-toggle-del').classList.remove('active');
                 renderBookmarkList();
             };
-
             document.getElementById('cbm-del-confirm').onclick = () => {
                 if (selectedForDelete.size === 0) return alert("삭제할 항목을 선택해주세요.");
                 if (!confirm(`선택한 ${selectedForDelete.size}개의 북마크를 삭제하시겠습니까?`)) return;
@@ -322,12 +383,16 @@
                         else activeColorFilter = color;
                         updatePaletteUI();
                         if(isDeleteMode) selectedForDelete.clear();
+                        if(isMoveMode) selectedForMove.clear();
                         renderBookmarkList();
                     }
                 };
                 paletteContainer.appendChild(btn);
             });
             updatePaletteUI();
+            
+            const folderSelect = document.getElementById('cbm-move-folder-select');
+            folderSelect.innerHTML = getFolders().map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
 
             document.getElementById('cbm-export').onclick = () => {
                 const data = JSON.stringify({ bookmarks: getBookmarks(), folders: getFolders() }, null, 2);
@@ -382,7 +447,7 @@
             `).join('') + `<button class="cbm-fadd" id="cbm-fadd" title="폴더 추가">+</button>`;
 
             container.querySelectorAll('.cbm-ftab').forEach(btn => {
-                btn.onclick = () => { currentFolderId = btn.dataset.fid; if(isDeleteMode) selectedForDelete.clear(); renderFolderTabs(); renderBookmarkList(); };
+                btn.onclick = () => { currentFolderId = btn.dataset.fid; if(isDeleteMode) selectedForDelete.clear(); if(isMoveMode) selectedForMove.clear(); renderFolderTabs(); renderBookmarkList(); };
                 btn.oncontextmenu = (e) => {
                     e.preventDefault();
                     if(btn.dataset.fid === 'default') return alert("기본 폴더는 수정할 수 없습니다.");
@@ -409,10 +474,11 @@
 
         function renderBookmarkList() {
             const container = document.getElementById('cbm-list-container');
-            const actionsDiv = document.getElementById('cbm-delete-actions');
             if (!container) return;
-
-            actionsDiv.style.display = isDeleteMode ? 'flex' : 'none';
+            
+            document.getElementById('cbm-move-actions').style.display = isMoveMode ? 'flex' : 'none';
+            document.getElementById('cbm-delete-actions').style.display = isDeleteMode ? 'flex' : 'none';
+            document.getElementById('cbm-move-count').textContent = `${selectedForMove.size}개 선택됨`;
             document.getElementById('cbm-del-count').textContent = `${selectedForDelete.size}개 선택됨`;
 
             let bms = getBookmarks();
@@ -426,14 +492,10 @@
             bms.sort((a, b) => b.timestamp - a.timestamp);
             currentFilteredBms = bms;
 
-            const selectAllBtn = document.getElementById('cbm-select-all');
-            if (selectAllBtn) {
-                if (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) {
-                    selectAllBtn.textContent = '■';
-                } else {
-                    selectAllBtn.textContent = '□';
-                }
-            }
+            const moveSelectAllBtn = document.getElementById('cbm-move-select-all');
+            if (moveSelectAllBtn) moveSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForMove.size === currentFilteredBms.length) ? '■' : '□';
+            const delSelectAllBtn = document.getElementById('cbm-del-select-all');
+            if (delSelectAllBtn) delSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) ? '■' : '□';
 
             if (bms.length === 0) {
                 container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>💡 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [북마크] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
@@ -441,21 +503,26 @@
             }
 
             const folders = getFolders();
+            const showCheckboxes = isDeleteMode || isMoveMode;
 
             container.innerHTML = bms.map(b => {
-                const folderOpts = folders.map(f => `<option value="${f.id}" ${(b.folderId||'default') === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('');
-                const isSel = selectedForDelete.has(b.id);
-                
+                const isSelDelete = isDeleteMode && selectedForDelete.has(b.id);
+                const isSelMove = isMoveMode && selectedForMove.has(b.id);
+                let selClass = isSelDelete ? 'selected-delete' : (isSelMove ? 'selected-move' : '');
+                const isChecked = isSelDelete || isSelMove;
+                const folder = folders.find(f => f.id === (b.folderId || 'default'));
+                const folderName = folder ? escapeHtml(folder.name) : '기본';
+
                 return `
-                <div class="cbm-item ${isSel ? 'selected' : ''}" data-id="${b.id}" data-cid="${b.chatId}" data-sid="${b.storyId||''}">
+                <div class="cbm-item ${selClass}" data-id="${b.id}" data-cid="${b.chatId}" data-sid="${b.storyId||''}">
                     <div class="cbm-item-top">
                         <div class="cbm-item-title">
-                            ${isDeleteMode ? `<input type="checkbox" ${isSel ? 'checked' : ''} style="margin-right:6px; pointer-events:none;">` : ''}
+                            ${showCheckboxes ? `<input type="checkbox" ${isChecked ? 'checked' : ''} style="margin-right:6px; pointer-events:none;">` : ''}
                             <div class="cbm-item-color" style="background:${b.color}"></div>
                             <span class="bm-label-txt">${escapeHtml(b.label)}</span>
-                            ${!isDeleteMode ? `<button class="cbm-item-edit" data-id="${b.id}" title="이름 수정">${ICON_EDIT}</button>` : ''}
+                            ${!showCheckboxes ? `<button class="cbm-item-edit" data-id="${b.id}" title="이름 수정">${ICON_EDIT}</button>` : ''}
                         </div>
-                        ${!isDeleteMode ? `<select class="cbm-fsel" data-id="${b.id}">${folderOpts}</select>` : ''}
+                        ${!showCheckboxes ? `<span class="cbm-item-folder-tag">${folderName}</span>` : ''}
                     </div>
                     <div class="cbm-item-text">${escapeHtml(b.text)}</div>
                 </div>`;
@@ -463,19 +530,22 @@
 
             container.querySelectorAll('.cbm-item').forEach(item => {
                 item.onclick = (e) => {
-                    if (e.target.closest('button') || e.target.closest('select')) return;
+                    if (e.target.closest('button')) return;
                     const id = item.dataset.id;
+
                     if (isDeleteMode) {
-                        if (selectedForDelete.has(id)) selectedForDelete.delete(id);
-                        else selectedForDelete.add(id);
-                        renderBookmarkList(); 
+                        if (selectedForDelete.has(id)) selectedForDelete.delete(id); else selectedForDelete.add(id);
+                    } else if (isMoveMode) {
+                        if (selectedForMove.has(id)) selectedForMove.delete(id); else selectedForMove.add(id);
+                    } else {
+                        jumpToHighlight(id, item.dataset.cid, item.dataset.sid);
                         return;
                     }
-                    jumpToHighlight(id, item.dataset.cid, item.dataset.sid);
+                    renderBookmarkList(); 
                 };
             });
 
-            if (!isDeleteMode) {
+            if (!showCheckboxes) {
                 container.querySelectorAll('.cbm-item-edit').forEach(btn => {
                     btn.onclick = () => {
                         const target = getBookmarks().find(x => x.id === btn.dataset.id);
@@ -483,13 +553,6 @@
                             const nn = prompt("북마크 이름 수정", target.label);
                             if(nn !== null) { target.label = nn.trim() || '새 북마크'; saveBookmarks(getBookmarks().map(x => x.id === target.id ? target : x)); }
                         }
-                    };
-                });
-                container.querySelectorAll('.cbm-fsel').forEach(sel => {
-                    sel.onchange = () => {
-                        let b = getBookmarks();
-                        const t = b.find(x => x.id === sel.dataset.id);
-                        if(t) { t.folderId = sel.value; saveBookmarks(b); }
                     };
                 });
             }
@@ -823,6 +886,8 @@
                 .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; max-height: 90vh; overflow-y: auto; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; }
                 .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
                 .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; }
+                .ce-ai-close-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; line-height: 1; }
+                .ce-ai-close-btn:hover { background: #eee; color: #222; }
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
                 .crack-ext-ai-modal input, .crack-ext-ai-modal textarea, .crack-ext-ai-modal select { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; pointer-events:auto !important; background-color:#fff !important; color:#222 !important; }
                 .crack-ext-ai-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
@@ -842,6 +907,8 @@
                 .crack-ext-header-ai-btn { display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; height: 36px; border-radius: 6px; background: linear-gradient(135deg, #6e8efb, #a777e3) !important; color: white !important; font-weight: 600; font-size: 13px; border: none !important; cursor: pointer; transition: transform 0.1s; white-space: nowrap !important;}
                 body[data-theme="dark"] .crack-ext-ai-modal { background: #242321 !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
+                body[data-theme="dark"] .ce-ai-close-btn { color: #aaa; }
+                body[data-theme="dark"] .ce-ai-close-btn:hover { background: #333; color: #fff; }
                 body[data-theme="dark"] .crack-ext-ai-modal input, body[data-theme="dark"] .crack-ext-ai-modal textarea, body[data-theme="dark"] .crack-ext-ai-modal select { background: #141413 !important; color: #F0EFEB !important; border: 1px solid #42413D !important; }
                 body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border: 1px solid #42413D !important; }
                 body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
@@ -892,7 +959,7 @@
 
             let isPromptMode = false, tempResultContent = "", parsedCards = [], currentCardIndex = 0;
 
-            var html = '<div class="crack-ext-ai-modal"><div class="crack-ext-ai-modal-header"><h3>✨ AI 요약 / 장기 기억 추가</h3></div>';
+            var html = '<div class="crack-ext-ai-modal"><div class="crack-ext-ai-modal-header"><h3>✨ AI 요약 / 장기 기억 추가</h3><button id="ce-ai-close-btn" class="ce-ai-close-btn">✕</button></div>';
             html += '<div class="crack-flex-ai-row" id="ce-ai-top-settings">';
             html += '<div class="fg" style="flex: 1.2;"><label>API</label><select id="ce-ai-provider"><option value="google" ' + (savedProvider==='google'?'selected':'') + '>Google</option><option value="firebase" ' + (savedProvider==='firebase'?'selected':'') + '>Firebase</option></select></div>';
             html += '<div class="fg" id="ce-ai-key-container" style="flex: 2;' + (savedProvider==='google'?'':'display:none;') + '"><label>API Key</label><input type="password" id="ce-ai-key" value="' + escapeHtml(savedApiKey) + '"></div>';
@@ -905,10 +972,12 @@
             html += '<textarea id="ce-ai-result" rows="7" placeholder="결과가 여기에 표시됩니다."></textarea>';
 
             html += '<div id="ce-ai-preview-container"><div id="ce-ai-card-nav" style="display:none;"><button id="ce-ai-card-prev">◀</button><span id="ce-ai-card-page">1 / 1</span><button id="ce-ai-card-next">▶</button></div><div id="ce-ai-preview-cards"></div></div></div>';
-            html += '<div class="crack-ext-ai-modal-btns" style="justify-content: space-between; align-items: flex-end;"><div><button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button></div><div style="display:flex; gap:8px;"><button class="crack-ext-ai-mbtn" id="ce-ai-cancel">취소</button><button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button></div></div></div>';
+            html += '<div class="crack-ext-ai-modal-btns" style="justify-content: space-between; align-items: flex-end;"><div><button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button></div><div style="display:flex; gap:8px;"><button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button></div></div></div>';
 
             overlay.innerHTML = html;
             document.body.appendChild(overlay);
+
+            overlay.querySelector('#ce-ai-close-btn').onclick = e => { e.stopPropagation(); overlay.remove(); };
 
             const txtResult = overlay.querySelector('#ce-ai-result');
             const previewCards = overlay.querySelector('#ce-ai-preview-cards'), cardNav = overlay.querySelector('#ce-ai-card-nav'), spanCardPage = overlay.querySelector('#ce-ai-card-page');
@@ -965,7 +1034,6 @@
                 }
             };
 
-            overlay.querySelector('#ce-ai-cancel').onclick = e => { e.stopPropagation(); overlay.remove(); };
             ['click', 'mousedown', 'mouseup'].forEach(evt => overlay.addEventListener(evt, e => e.stopPropagation()));
 
             btnGen.onclick = async (e) => {
@@ -995,7 +1063,7 @@
                 let errorIndex = parsedCards.findIndex(c => c.title.length > 20 || c.summary.length > 300);
                 if (errorIndex !== -1) { currentCardIndex = errorIndex; updatePreviewCards(); return alert("글자 수 제한 초과 항목이 있습니다."); }
 
-                btnSave.disabled = true; overlay.querySelector('#ce-ai-cancel').disabled = true;
+                btnSave.disabled = true;
                 let successCount = 0;
                 for (let i = 0; i < parsedCards.length; i++) {
                     btnSave.textContent = `추가 중... (${i + 1}/${parsedCards.length})`;
@@ -1007,7 +1075,7 @@
                     overlay.remove();
                     var dialogEl = document.querySelector('[role="dialog"]');
                     if (dialogEl) refreshCurrentTab(dialogEl);
-                } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; overlay.querySelector('#ce-ai-cancel').disabled = false; }
+                } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; }
             };
         }
 
@@ -1020,7 +1088,6 @@
             aiBtn.innerHTML = '✨ AI 요약';
             aiBtn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
             
-            // 묶음상자를 없애고, 돔 탐색을 통해 북마크 버튼 뒤에 놓거나 없으면 맨 앞에 둠
             const bmBtn = headerContainer.querySelector('.crack-ext-header-bm-btn');
             if (bmBtn) {
                 bmBtn.after(aiBtn); 
