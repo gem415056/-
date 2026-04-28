@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         크랙 편의성 7 in 1 통합팩 (V5.6 UI 색상 및 아이콘 수정)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.6
+// @version      5.6.1
 // @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선
-// @author       User & Gemini
+// @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
@@ -497,7 +497,7 @@
             let cumText = '...';
             let anim = '';
             if (isCalculatingCumulative) { anim = 'pulse-anim'; }
-            else { cumText = `${lastConsumed}`; }
+            else { cumText = `${lastConsumed}개`; } // [수정] '개' 추가
             html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumText}</span></div>`;
 
             if (html !== lastRenderedText) {
@@ -692,7 +692,8 @@
         GM_addStyle(`
             #igx-rs-inline-host {
                 position: absolute; display: flex; align-items: center; gap: 4px;
-                z-index: 998; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+                z-index: 9999; /* [수정] z-index를 매우 높게 설정하여 항상 위에 표시되도록 함 */
+                pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
                 font-size: 11px; font-weight: 500;
             }
             #igx-rs-inline-host * { pointer-events: auto; }
