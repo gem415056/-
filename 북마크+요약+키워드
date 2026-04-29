@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.1.0
-// @description  키워드노트 스캔 범위 축소 (유지턴수 폐지에 맞춰 직전 대화 2개로 스캔 범위 최적화)
+// @version      4.1.1
+// @description  키워드 입력창 렌더링 시 뒤에 공백 2개가 강제로 붙던 오타 수정
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -692,7 +692,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (스캔 범위 2개로 최적화)
+    // 모듈 2: 크랙 키워드 노트 
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
@@ -971,10 +971,11 @@
                     
                     const body = document.createElement('div');
                     body.className = 'ckw-kw-body';
+                    // 💡 여기서 kw.triggers.join(', ') 끝에 있던 공백 오타 제거 완료 💡
                     body.innerHTML = `
                         <div style="display: flex; gap: 8px; margin-bottom: 6px;">
                             <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}" style="flex: 1; margin: 0;">
-                            <input type="text" class="ckw-input ckw-kw-trig-inp" placeholder="키워드 (쉼표 OR, && AND)" value="${escapeHtml(kw.triggers.join(', '))}  " style="flex: 1; margin: 0;">
+                            <input type="text" class="ckw-input ckw-kw-trig-inp" placeholder="키워드 (쉼표 OR, && AND)" value="${escapeHtml(kw.triggers.join(', '))}" style="flex: 1; margin: 0;">
                         </div>
                         <textarea class="ckw-ta ckw-kw-cont-ta" placeholder="삽입될 내용">${escapeHtml(kw.content)}</textarea>
                         <div class="ckw-char-count ckw-kw-count">( 0자 / 500자 )</div>
@@ -1105,7 +1106,6 @@
             return false;
         }
 
-        // 💡 중요 포인트: maxCount를 2로 축소하여 (이전 AI 응답 + 이전 유저 입력 등 2개)만 스캔하도록 설정
         async function fetchLastMessagesForScan(chatId) {
             try {
                 if (typeof _w.CrackUtil !== 'undefined') {
@@ -1273,7 +1273,7 @@
 
 ## 🚫 기록 원칙 (Strict)
 - **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.
-- **❌ 소설 금지**: AI의 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
+- **❌ 소설 금지**: AI 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
 - **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.
 - **❌ 순서 변경 금지**: 시간 흐름 엄수.
 - **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
