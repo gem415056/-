@@ -1,1791 +1,905 @@
 // ==UserScript==
-// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
+// @name         크랙 7 in 1 통합팩 (V5.6.3 UI 및 팝업 수정 / 대사입력기 기본버튼 숨김)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.9.5
-// @description  키워드노트 UI 표시 불가 오류 수정 (ID 추출 및 모달 감지 로직 초강화) + 디테일 완벽 적용
-// @author       Assistant
+// @version      5.6.3
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 기본버튼 숨김
+// @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @require      https://cdn.jsdelivr.net/npm/dexie@4.2.1/dist/dexie.min.js
-// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.0.0/crack/libraries/crack-shared-core.js
+// @grant        GM_xmlhttpRequest
+// @connect      rs.igx.kr
 // @run-at       document-idle
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    const GLOBAL_ACCENT_COLOR = '#FBA707'; 
-    const BORDER_COLOR = '#D6D6D0';
-
-    // 공통 버튼 CSS
-    const UNI_BTN_CSS = `
-        .crack-uni-btn { 
-            display: inline-flex; align-items: center; justify-content: center; 
-            width: 36px; height: 36px; border-radius: 6px; 
-            background: transparent !important; 
-            color: #555 !important; 
-            font-size: 16px; 
-            border: 1px solid #E6E6E6 !important; 
-            cursor: pointer; transition: 0.2s; 
-            margin-right: -8px; z-index: 10; 
-        }
-        .crack-uni-btn:last-of-type { margin-right: -4px; }
-        .crack-uni-btn:hover { background: #f5f5f5 !important; }
-        
-        /* 다크모드 대응 */
-        body[data-theme="dark"] .crack-uni-btn {
-            border-color: #42413D !important;
-            color: #F0EFEB !important;
-        }
-        body[data-theme="dark"] .crack-uni-btn:hover {
-            background: #333 !important;
-        }
-    `;
-
     // ==========================================
-    // 모듈 1: 크랙 드래그 북마크 & 형광펜
+    // 모듈 1: 더블클릭 수정 기능
     // ==========================================
-    function initBookmarkSystem() {
-        const FIX_COLORS = ['#F6E19A', '#F2C0C3', '#BCD0D8', '#D5C2DE'];
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
-        const DELETE_COLOR = '#FF4433';
-        const ICON_EDIT = '✎';
-
-        let currentPath = window.location.pathname;
-        let realtimeSelectionText = "";
-        let savedSelectionText = "";
-        
-        let isModalOpen = false;
-        let currentTab = 'current';
-        let currentFolderId = 'default';
-        let searchQuery = '';
-        let activeColorFilter = null;
-        let currentFilteredBms = [];
-        
-        let isDeleteMode = false;
-        let selectedForDelete = new Set();
-        let isMoveMode = false;
-        let selectedForMove = new Set();
-
-        document.addEventListener('selectionchange', () => {
-            const text = window.getSelection().toString().trim();
-            realtimeSelectionText = text ? (text.includes('\n') ? text.split('\n')[0].trim() : text) : "";
-        });
-
-        const getBookmarks = () => { try { return JSON.parse(localStorage.getItem('Crack_BM_Data')) || []; } catch { return []; } };
-        const saveBookmarks = (bms) => {
-            localStorage.setItem('Crack_BM_Data', JSON.stringify(bms));
-            applyHighlightsToDOM();
-            if (isModalOpen) renderBookmarkList();
-        };
-        const getFolders = () => {
-            try { 
-                let f = JSON.parse(localStorage.getItem('Crack_BM_Folders')); 
-                if (!f || !Array.isArray(f) || f.length === 0) return [{ id: 'default', name: '기본' }];
-                return f;
-            } catch { return [{ id: 'default', name: '기본' }]; }
-        };
-        const saveFolders = (folders) => {
-            localStorage.setItem('Crack_BM_Folders', JSON.stringify(folders));
-            if (isModalOpen) { renderFolderTabs(); renderBookmarkList(); }
-        };
-
-        function getChatId() {
-            let m = location.pathname.match(/\/(?:chats|chat|episodes)\/[a-f0-9]+\/([a-f0-9]+)/);
-            if (m) return m[1]; 
-            let m2 = location.pathname.match(/\/(?:chats|chat|episodes)\/([a-f0-9]+)/);
-            if (m2) return m2[1]; 
+    function initDoubleClick() {
+        function findMessageContainer(target) {
+            let el = target;
+            while (el && el !== document.body) {
+                if (el.hasAttribute('data-message-group-id')) return el;
+                el = el.parentElement;
+            }
             return null;
         }
-        function getStoryId() {
-            let m = location.pathname.match(/\/stories\/([a-f0-9]+)/); return m ? m[1] : null;
-        }
-        function toUrl(sid, cid) {
-            return (sid && cid) ? `/stories/${sid}/episodes/${cid}` : (cid ? `/chat/${cid}` : null);
+
+        function getReactProps(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactProps'));
+            return key ? el[key] : null;
         }
 
-        function injectStyles() {
-            if (document.getElementById('crack-bm-css')) return;
-            const s = document.createElement('style');
-            s.id = 'crack-bm-css';
-            s.textContent = UNI_BTN_CSS + `
-                mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
-                mark.crack-bm-hl:hover { filter: brightness(0.9); }
-                mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
-                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(251,167,7,0.5); } }
-                .crack-bm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2147483647; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
-                .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
-                .cbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-                .cbm-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: #222 !important; display: flex; align-items: center; gap: 6px; }
-                .cbm-header-btns { display: flex; gap: 8px; }
-                .cbm-icon-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
-                .cbm-icon-btn:hover { background: #eee; color: #222; }
-                .cbm-tabs-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px; }
-                .cbm-tabs { display: flex; gap: 12px; margin-bottom: -13px; }
-                .cbm-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
-                .cbm-tab.active { color: #333; border-bottom-color: ${ACCENT_COLOR}; }
-                .cbm-color-palette { display: flex; gap: 8px; align-items: center; }
-                .cbm-pal-btn { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-                .cbm-pal-btn:hover { transform: scale(1.1); }
-                .cbm-pal-btn.active { border-color: #333; transform: scale(1.15); }
-                .cbm-folders { display: flex; gap: 6px; align-items: center; overflow-x: auto; margin-bottom: 12px; padding-bottom: 4px; }
-                .cbm-folders::-webkit-scrollbar { height: 4px; }
-                .cbm-folders::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
-                .cbm-ftab { height: 28px; background: #f0f0f0; border: 1px solid #ddd; padding: 0 12px; border-radius: 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; box-sizing: border-box; }
-                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
-                .cbm-fadd { background: none; border: 1px dashed #aaa; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #666; font-weight: bold; box-sizing: border-box; margin: 0; padding: 0; }
-                .cbm-search-row { display: flex; gap: 5px; margin-bottom: 12px; align-items: stretch; }
-                .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
-                .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
-                #cbm-toggle-move, #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
-                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
-                #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
-                
-                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(251,167,7,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(251,167,7,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-move-count { color: #333; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #333; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
-                #cbm-move-folder-select { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; padding: 3px 6px; background: #fff; color: #333; height: 24px; }
-                
-                #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-del-count { color: ${DELETE_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-del-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${DELETE_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
-                
-                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
-                .cbm-list { flex: 1; overflow-y: auto; padding-right: 4px; }
-                .cbm-item { background: #f9f9f9 !important; border: 1px solid #eee !important; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; position: relative; }
-                .cbm-item:hover { border-color: ${ACCENT_COLOR} !important; }
-                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: rgba(251,167,7,0.05) !important; }
-                .cbm-item.selected-delete { border-color: ${DELETE_COLOR} !important; background: rgba(255,68,51,0.05) !important; }
-                .cbm-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-                .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
-                .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-                .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
-                .cbm-item-edit:hover { color: #333; }
-                .cbm-item-folder-tag { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-                .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
-                .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
-                
-                body[data-theme="dark"] .crack-bm-modal { background: #242321 !important; color: #F0EFEB !important; }
-                body[data-theme="dark"] .cbm-header h3 { color: #F0EFEB !important; }
-                body[data-theme="dark"] .cbm-icon-btn { color: #aaa; }
-                body[data-theme="dark"] .cbm-icon-btn:hover { background: #333; color: #fff; }
-                body[data-theme="dark"] .cbm-tabs-container { border-bottom-color: #444; }
-                body[data-theme="dark"] .cbm-pal-btn.active { border-color: #fff; }
-                body[data-theme="dark"] .cbm-ftab { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
-                body[data-theme="dark"] .cbm-search { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
-                body[data-theme="dark"] #cbm-toggle-move, body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
-                body[data-theme="dark"] #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
-                body[data-theme="dark"] .cbm-item { background: #1a1918 !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(251,167,7,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
-                body[data-theme="dark"] .cbm-item.selected-delete { background: rgba(255,68,51,0.15) !important; border-color: ${DELETE_COLOR} !important; }
-                body[data-theme="dark"] .cbm-item-title { color: #F0EFEB !important; }
-                body[data-theme="dark"] .cbm-item-text { color: #aaa !important; }
-                body[data-theme="dark"] .cbm-item-folder-tag { background: #333; color: #ccc; }
-                body[data-theme="dark"] #cbm-move-folder-select { background: #141413; border-color: #42413D; color: #ccc;}
+        function firePointerClick(el) {
+            const opts = { bubbles: true, cancelable: true };
+            el.dispatchEvent(new PointerEvent('pointerover', opts));
+            el.dispatchEvent(new PointerEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+            el.dispatchEvent(new PointerEvent('pointerdown', opts));
+            el.dispatchEvent(new PointerEvent('pointerup', opts));
+            el.click();
+        }
+
+        function tryReactEditClick(container) {
+            const trigger = container.querySelector('div[aria-haspopup="menu"]');
+            if (!trigger) return false;
+
+            const style = document.createElement('style');
+            style.id = 'igx-hide-dropdown';
+            style.textContent = `[data-radix-popper-content-wrapper], [role="menu"] { opacity: 0 !important; pointer-events: none !important; }`;
+            document.head.appendChild(style);
+
+            firePointerClick(trigger);
+
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const item = Array.from(document.querySelectorAll('div[role="menuitem"]')).find(el => el.textContent.includes('수정'));
+                if (item) {
+                    clearInterval(timer);
+                    const props = getReactProps(item);
+                    if (props?.onSelect) props.onSelect();
+                    else firePointerClick(item);
+                    setTimeout(() => style.remove(), 100);
+                } else if (Date.now() - start > 1500) {
+                    clearInterval(timer);
+                    style.remove();
+                }
+            }, 30);
+            return true;
+        }
+
+        document.addEventListener('dblclick', (e) => {
+            const container = findMessageContainer(e.target);
+            if (!container) return;
+            window.getSelection().removeAllRanges();
+            tryReactEditClick(container);
+        });
+    }
+
+    // ==========================================
+    // 모듈 2: 리롤 길게 누르기 기능
+    // ==========================================
+    function initRerollHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #rr-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #rr-progress-ring.active { display: block; }
+            #rr-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #rr-progress-ring circle.fill { fill: none; stroke: #e8302a; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'rr-progress-ring';
+        ring.innerHTML = `<svg id="rr-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isRerollBtn(el) {
+            if (!el) return false;
+            if (el.id === 'exp-reroll-btn') return true;
+            return el.querySelector?.('svg path')?.getAttribute('d')?.startsWith('M3.8 12a8.2') ?? false;
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left}px`; ring.style.top  = `${rect.top}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        });
+
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            e.preventDefault(); showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능
+    // ==========================================
+    function initSendHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #sh-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #sh-progress-ring.active { display: block; }
+            #sh-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #sh-progress-ring circle.fill { fill: none; stroke: #f97316; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'sh-progress-ring';
+        ring.innerHTML = `<svg id="sh-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isStopButton(btn) {
+            const path = btn.querySelector('svg path');
+            const d = path?.getAttribute('d') || '';
+            return d.includes('M6 6h12v12H6Z');
+        }
+
+        function isGeneralSendButton(btn) {
+            if (!btn) return false;
+            const cls = btn.className || '';
+            return (
+                cls.includes('bg-primary') &&
+                cls.includes('rounded-full') &&
+                cls.includes('text-primary-foreground')
+            );
+        }
+
+        function isHoldableSendBtn(el) {
+            return isGeneralSendButton(el) && !isStopButton(el);
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height) + 4;
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left - 2}px`; ring.style.top  = `${rect.top - 2}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        function handlePressStart(e) {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (e.type === 'touchstart') e.preventDefault();
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }
+
+        document.addEventListener('mousedown', handlePressStart);
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', handlePressStart, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기
+    // ==========================================
+    function initTurnCracker() {
+        const SELECTOR = {
+            textarea: 'textarea[placeholder*="메시지"]',
+            messageGroup: 'div[data-message-group-id]'
+        };
+
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.10.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+
+        const ICON = {
+            clock: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; opacity:0.8;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:1;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
+            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="currentColor" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
+        };
+
+        let counterBadge, textSpan, currentTextarea;
+        let updateTimer, observer, lastRenderedText = '';
+        let cachedTurns, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
+        let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
+
+        function start() {
+            injectBaseStyle();
+            startObserver();
+            scheduleUpdate();
+        }
+
+        function injectBaseStyle() {
+            if (document.getElementById('info-display-base-style')) return;
+            const style = document.createElement('style');
+            style.id = 'info-display-base-style';
+            style.textContent = `
+            #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
+            #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
+            .my-counter-part { all: unset; display: inline-flex; align-items: center; border-radius: 4px; padding: 1px 4px; user-select: none; }
+            .my-counter-separator { opacity: 0.3; margin: 0 2px; user-select: none; }
+            @keyframes info-pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+            .pulse-anim { animation: info-pulse 1s infinite ease-in-out; }
             `;
-            document.head.appendChild(s);
+            document.head.appendChild(style);
         }
 
-        function hexToRgba(hex, alpha = 0.4) {
-            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        }
-        function hexToRgb(hex) {
-            let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-            return `rgb(${r}, ${g}, ${b})`;
-        }
-        function escapeHtml(s) {
-            if (!s) return "";
-            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        function startObserver() {
+            if (observer) return;
+            observer = new MutationObserver((mutations) => {
+                if (mutations.every(m => m.target.closest?.('#my-custom-info-display'))) return;
+                scheduleUpdate();
+            });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow'] });
         }
 
-        function injectHeaderButton() {
-            const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
-            if (!headerContainer || headerContainer.querySelector('.crack-ext-bm-btn')) return;
+        function scheduleUpdate() { clearTimeout(updateTimer); updateTimer = setTimeout(updateTurnCount, 80); }
+
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { bg, text: isDark ? '#888' : '#777' };
+        }
+
+        function getCrackerCount() {
+            const label = Array.from(document.querySelectorAll('span')).find(span => span.textContent.trim() === '나의 크래커');
+            if (label?.nextElementSibling?.textContent.match(/[\d,]+/)) return parseInt(label.nextElementSibling.textContent.match(/[\d,]+/)[0].replace(/,/g, ''), 10);
+            const topBar = document.getElementById('chasm-cracker-text');
+            if (topBar) {
+                const text = topBar.getAttribute('chasm-tmi-current') || topBar.textContent;
+                const parsed = parseInt(String(text).replace(/,/g, ''), 10);
+                if (!Number.isNaN(parsed)) return parsed;
+            }
+            return null;
+        }
+
+        function initUI(textarea) {
+            document.getElementById('my-custom-info-display')?.remove();
+            lastRenderedText = ''; currentTextarea = textarea;
             
+            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display';
+            textSpan = document.createElement('span'); textSpan.id = 'my-counter-text';
+            counterBadge.appendChild(textSpan); 
+            
+            const colors = getThemeColors(textarea);
+            counterBadge.style.color = colors.text;
+            updateLayout(textarea);
+        }
+
+        function updateLayout(textarea) {
+            if (!counterBadge) return;
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
+            if (!container) return;
+
+            if (counterBadge.parentElement !== container) {
+                container.appendChild(counterBadge);
+                container.style.position = 'relative';
+            }
+
+            counterBadge.style.top = '-26px';
+            counterBadge.style.left = '4px';
+
+            textarea.style.removeProperty('padding-top');
+            textarea.style.removeProperty('min-height');
+        }
+
+        function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
+        function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
+
+        async function fetchRoomData() {
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, timestamps: [] };
+            try {
+                const pathInfo = CrackUtil.path();
+                if (!pathInfo.isChattingPath()) return { chatCounts: -1, timestamps: [] };
+                const chatId = pathInfo.chatRoom();
+                if (!chatId) return { chatCounts: -1, timestamps: [] };
+                let chatCounts = 0; const timestamps = [];
+                for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
+                    if (log.isUser()) continue;
+                    chatCounts++; timestamps.push(getTimeFromObjectId(log.id));
+                }
+                return { chatCounts, timestamps: timestamps.filter(t => t > 0) };
+            } catch { return { chatCounts: -1, timestamps: [] }; }
+        }
+
+        async function fetchCumulativeCrackers(timestamps) {
+            const token = extractAccessToken();
+            if (!token || timestamps.length === 0) return 0;
+            let total = 0, page = 1, lastSafePage = 1, warping = true;
+            const oldest = Math.min(...timestamps), latest = Math.max(...timestamps);
+            for(let i=0; i < 500; i++) {
+                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) break;
+                const json = await res.json();
+                if (!json?.data?.length) break;
+                const pageLatestTime = new Date(json.data[0].date).getTime();
+                if (warping && pageLatestTime < latest) { page = lastSafePage + 1; warping = false; continue; }
+                if (warping && pageLatestTime > latest + 600000) { lastSafePage = page; page += 15; continue; }
+                warping = false;
+                let pageDone = false;
+                for (let item of json.data) {
+                    const itemTime = new Date(item.date).getTime();
+                    if (itemTime < oldest - 120000) { pageDone = true; break; }
+                    if (item.isConsumed && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) total += item.balance.total * (item.product === 'superchat' ? 35 : 1);
+                }
+                if (pageDone) break;
+                page++; await new Promise(r => setTimeout(r, 40));
+            }
+            return total;
+        }
+
+        function updateTurnCount() {
+            const now = Date.now();
+            const textarea = document.querySelector(SELECTOR.textarea);
+            if (!textarea) { counterBadge?.remove(); counterBadge = null; currentTextarea = null; return; }
+            if (!counterBadge || currentTextarea !== textarea || !counterBadge.parentElement) initUI(textarea);
+            if (!counterBadge || !textSpan) return;
+            const currentChatId = typeof CrackUtil !== 'undefined' ? CrackUtil.path().chatRoom() : null;
+            let forceCalculate = false;
+            
+            if (currentChatId && currentChatId !== lastChatId) { 
+                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; lastConsumed = 0; lastProcessedTurns = -1; 
+            }
+
+            if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
+                isCalculatingTurns = true;
+                fetchRoomData().then(data => {
+                    const domTotal = document.querySelectorAll(SELECTOR.messageGroup).length;
+                    if (data.chatCounts !== -1) {
+                        cachedTurns = data.chatCounts === 0 && domTotal > 0 ? Math.ceil(domTotal / 2) : data.chatCounts;
+                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea);
+                            
+                            fetchCumulativeCrackers(data.timestamps).then(cum => {
+                                if (currentChatId) {
+                                    const prevCumKey = 'crack_cum_' + currentChatId;
+                                    const prevCum = parseInt(localStorage.getItem(prevCumKey), 10);
+                                    if (!isNaN(prevCum) && cum > prevCum) {
+                                        lastConsumed = cum - prevCum;
+                                    } else if (isNaN(prevCum) || cum < prevCum) {
+                                        lastConsumed = 0;
+                                    }
+                                    localStorage.setItem(prevCumKey, cum);
+                                }
+                                isCalculatingCumulative = false; renderUpdate(textarea);
+                            }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea); });
+                        }
+                    } else { cachedTurns = Math.ceil(domTotal / 2); }
+                    lastCalculatedTime = Date.now(); isCalculatingTurns = false; renderUpdate(textarea);
+                }).catch(() => { isCalculatingTurns = false; renderUpdate(textarea); });
+            } else { renderUpdate(textarea); }
+        }
+
+        function renderUpdate(textarea) {
+            if (!textSpan) return;
+            let displayTurns = cachedTurns ?? Math.ceil(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
+            let html = '';
+
+            // 1. 턴수 표시
+            html += `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
+
+            // 2. 총 크래커 표시
+            const crackerCount = getCrackerCount();
+            if (crackerCount !== null) {
+                html += `<span class="my-counter-separator">|</span>`;
+                html += `<div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
+            }
+
+            // 3. 소모 크래커 표시 (숫자만 볼드, '개'는 일반 폰트)
+            html += `<span class="my-counter-separator">|</span>`;
+            let cumNum = '...';
+            let anim = '';
+            let suffix = '';
+            if (isCalculatingCumulative) { 
+                anim = 'pulse-anim'; 
+            } else { 
+                cumNum = `${lastConsumed}`; 
+                suffix = '개'; 
+            }
+            html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumNum}</span>${suffix}</div>`;
+
+            if (html !== lastRenderedText) {
+                textSpan.innerHTML = html;
+                lastRenderedText = html;
+            }
+            updateLayout(textarea);
+        }
+        start();
+    }
+
+    // ==========================================
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (수정됨: 사이트 기본 버튼 숨김)
+    // ==========================================
+    function initRPToolbar() {
+        const fixedTools = [
+            { icon: '★', pre: '*', suf: '*' },
+            { icon: '♠', pre: '"', suf: '"' },
+            { icon: '♤', pre: "'", suf: "'" },
+            { icon: '◆', pre: '`', suf: '`' },
+            { icon: '■', pre: '[', suf: ']' },
+            { icon: '♣', pre: '(!', suf: ')' },
+            { icon: '♧', pre: '(OOC：', suf: ')' }
+        ];
+
+        function wrapText(prefix, suffix) {
+            const textarea = document.querySelector('textarea');
+            if (!textarea) return;
+
+            const start = textarea.selectionStart || 0;
+            const end = textarea.selectionEnd || 0;
+            const text = textarea.value || '';
+            const selected = text.substring(start, end);
+            const before = text.substring(0, start);
+            const after = text.substring(end, text.length);
+
+            const newValue = before + prefix + selected + suffix + after;
+
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+            nativeInputValueSetter.call(textarea, newValue);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+            textarea.focus();
+            textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+        }
+
+        function createToolButton(iconText, onClick) {
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-bm-btn crack-uni-btn';
-            btn.innerHTML = `♡`; // 북마크 버튼은 빈 하트
-            btn.title = '북마크';
-            
-            btn.onclick = (e) => { 
-                e.preventDefault(); e.stopPropagation(); 
-                savedSelectionText = realtimeSelectionText;
-                openModal(); 
+            btn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            btn.type = "button";
+            btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
+
+            btn.onmousedown = (e) => e.preventDefault();
+            btn.onclick = (e) => {
+                e.preventDefault();
+                onClick();
             };
-            
-            headerContainer.prepend(btn);
+            return btn;
         }
 
-        function addBookmarkDirect(text, colorHex) {
-            if (!text) return;
-            const cid = getChatId();
-            const sid = getStoryId();
-            if (!cid) return alert("대화방 ID를 찾을 수 없습니다.");
+        document.addEventListener('keydown', (e) => {
+            if (!e.altKey) return;
+            let idx = -1;
+            const code = e.code;
+            const key = e.key;
 
-            let bms = getBookmarks();
-            bms.push({
-                id: 'bm_' + Date.now(),
-                chatId: cid, storyId: sid, text: text, color: colorHex,
-                label: '새 북마크', folderId: 'default', timestamp: Date.now()
-            });
-            saveBookmarks(bms);
-        }
+            if (code === 'Backquote' || key === '`' || key === '~') idx = 0;
+            else if (code === 'Digit1' || key === '1') idx = 1;
+            else if (code === 'Digit2' || key === '2') idx = 2;
+            else if (code === 'Digit3' || key === '3') idx = 3;
+            else if (code === 'Digit4' || key === '4') idx = 4;
+            else if (code === 'Digit5' || key === '5') idx = 5;
+            else if (code === 'Digit6' || key === '6') idx = 6;
 
-        function openModal() {
-            if (document.getElementById('cbm-overlay')) return;
-            isModalOpen = true;
-            isDeleteMode = false; selectedForDelete.clear();
-            isMoveMode = false; selectedForMove.clear();
-            
-            const overlay = document.createElement('div');
-            overlay.id = 'cbm-overlay';
-            overlay.className = 'crack-bm-overlay';
-            
-            overlay.innerHTML = `
-                <div class="crack-bm-modal">
-                    <div class="cbm-header">
-                        <h3>🌼 기억해야할 순간들</h3>
-                        <div class="cbm-header-btns">
-                            <button class="cbm-icon-btn" id="cbm-export" title="백업 내보내기">▼</button>
-                            <button class="cbm-icon-btn" id="cbm-import" title="백업 가져오기">▲</button>
-                            <button class="cbm-icon-btn" id="cbm-close">✕</button>
-                        </div>
-                    </div>
-                    <div class="cbm-tabs-container">
-                        <div class="cbm-tabs">
-                            <button class="cbm-tab active" data-tab="current">현재 대화</button>
-                            <button class="cbm-tab" data-tab="all">전체 보기</button>
-                        </div>
-                        <div class="cbm-color-palette" id="cbm-color-palette"></div>
-                    </div>
-                    <div class="cbm-folders" id="cbm-folders-container"></div>
-                    
-                    <div class="cbm-search-row">
-                        <input type="text" class="cbm-search" id="cbm-search-input" placeholder="북마크 이름/내용 검색...">
-                        <button id="cbm-toggle-move" title="다중 이동 모드">☞</button>
-                        <button id="cbm-toggle-del" title="다중 삭제 모드">☜</button>
-                    </div>
-
-                    <div id="cbm-move-actions">
-                        <div style="display:flex; align-items:center;">
-                            <button id="cbm-move-select-all" title="현재 목록 전체 선택">□</button>
-                            <span id="cbm-move-count">0개 선택됨</span>
-                        </div>
-                        <div style="display:flex; gap:8px; align-items:center;">
-                            <select id="cbm-move-folder-select"></select>
-                            <button id="cbm-move-confirm" class="cbm-action-btn-sm" style="background:${ACCENT_COLOR};" title="이동">✔</button>
-                            <button id="cbm-move-cancel" class="cbm-action-btn-sm" style="background:#888; color:#fff;" title="취소">✘</button>
-                        </div>
-                    </div>
-                    
-                    <div id="cbm-delete-actions">
-                        <div style="display:flex; align-items:center;">
-                            <button id="cbm-del-select-all" title="현재 목록 전체 선택">□</button>
-                            <span id="cbm-del-count">0개 선택됨</span>
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <button id="cbm-del-confirm" class="cbm-action-btn-sm" style="background:${DELETE_COLOR}; color:#fff;" title="삭제">✔</button>
-                            <button id="cbm-del-cancel" class="cbm-action-btn-sm" style="background:#888; color:#fff;" title="취소">✘</button>
-                        </div>
-                    </div>
-                    
-                    <div class="cbm-list" id="cbm-list-container"></div>
-                </div>
-            `;
-            document.body.appendChild(overlay);
-
-            document.getElementById('cbm-close').onclick = closeModal;
-            overlay.onclick = (e) => { if(e.target === overlay) closeModal(); };
-            
-            const tabs = overlay.querySelectorAll('.cbm-tab');
-            tabs.forEach(tab => {
-                tab.onclick = () => {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    currentTab = tab.dataset.tab;
-                    searchQuery = ''; document.getElementById('cbm-search-input').value = '';
-                    if(isDeleteMode) selectedForDelete.clear();
-                    if(isMoveMode) selectedForMove.clear();
-                    renderBookmarkList();
-                };
-            });
-
-            document.getElementById('cbm-search-input').oninput = (e) => {
-                searchQuery = e.target.value.trim().toLowerCase(); 
-                if(isDeleteMode) selectedForDelete.clear();
-                if(isMoveMode) selectedForMove.clear();
-                renderBookmarkList();
-            };
-
-            document.getElementById('cbm-toggle-move').onclick = () => {
-                isMoveMode = !isMoveMode;
-                isDeleteMode = false;
-                selectedForMove.clear(); selectedForDelete.clear();
-                document.getElementById('cbm-toggle-move').classList.toggle('active', isMoveMode);
-                document.getElementById('cbm-toggle-del').classList.remove('active');
-                renderBookmarkList();
-            };
-            document.getElementById('cbm-toggle-del').onclick = () => {
-                isDeleteMode = !isDeleteMode;
-                isMoveMode = false;
-                selectedForDelete.clear(); selectedForMove.clear();
-                document.getElementById('cbm-toggle-del').classList.toggle('active', isDeleteMode);
-                document.getElementById('cbm-toggle-move').classList.remove('active');
-                renderBookmarkList();
-            };
-
-            document.getElementById('cbm-move-select-all').onclick = () => {
-                if (currentFilteredBms.length === 0) return;
-                if (selectedForMove.size === currentFilteredBms.length) selectedForMove.clear();
-                else currentFilteredBms.forEach(b => selectedForMove.add(b.id)); 
-                renderBookmarkList();
-            };
-            document.getElementById('cbm-move-cancel').onclick = () => {
-                isMoveMode = false; selectedForMove.clear();
-                document.getElementById('cbm-toggle-move').classList.remove('active');
-                renderBookmarkList();
-            };
-            document.getElementById('cbm-move-confirm').onclick = () => {
-                const destFolderId = document.getElementById('cbm-move-folder-select').value;
-                if (!destFolderId) return alert("이동할 폴더를 선택해주세요.");
-                if (selectedForMove.size === 0) return alert("이동할 항목을 선택해주세요.");
-                
-                let bms = getBookmarks();
-                bms.forEach(b => { if (selectedForMove.has(b.id)) b.folderId = destFolderId; });
-                saveBookmarks(bms);
-                
-                isMoveMode = false; selectedForMove.clear();
-                document.getElementById('cbm-toggle-move').classList.remove('active');
-                renderBookmarkList();
-            };
-
-            document.getElementById('cbm-del-select-all').onclick = () => {
-                if (currentFilteredBms.length === 0) return;
-                if (selectedForDelete.size === currentFilteredBms.length) selectedForDelete.clear();
-                else currentFilteredBms.forEach(b => selectedForDelete.add(b.id)); 
-                renderBookmarkList();
-            };
-            document.getElementById('cbm-del-cancel').onclick = () => {
-                isDeleteMode = false; selectedForDelete.clear();
-                document.getElementById('cbm-toggle-del').classList.remove('active');
-                renderBookmarkList();
-            };
-            document.getElementById('cbm-del-confirm').onclick = () => {
-                if (selectedForDelete.size === 0) return alert("삭제할 항목을 선택해주세요.");
-                if (!confirm(`선택한 ${selectedForDelete.size}개의 북마크를 삭제하시겠습니까?`)) return;
-                
-                let bms = getBookmarks().filter(b => !selectedForDelete.has(b.id));
-                saveBookmarks(bms);
-                
-                selectedForDelete.forEach(id => {
-                    document.querySelectorAll(`mark[data-bm-id="${id}"]`).forEach(m => {
-                        m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
-                    });
-                });
-                
-                isDeleteMode = false; selectedForDelete.clear();
-                document.getElementById('cbm-toggle-del').classList.remove('active');
-                renderBookmarkList();
-            };
-
-            const paletteContainer = document.getElementById('cbm-color-palette');
-            FIX_COLORS.forEach(color => {
-                const btn = document.createElement('div');
-                btn.className = 'cbm-pal-btn';
-                btn.style.backgroundColor = color;
-                
-                btn.onclick = () => {
-                    if (savedSelectionText) {
-                        addBookmarkDirect(savedSelectionText, color);
-                        savedSelectionText = ""; 
-                        window.getSelection().removeAllRanges();
-                        renderBookmarkList();
-                    } else {
-                        if (activeColorFilter === color) activeColorFilter = null;
-                        else activeColorFilter = color;
-                        updatePaletteUI();
-                        if(isDeleteMode) selectedForDelete.clear();
-                        if(isMoveMode) selectedForMove.clear();
-                        renderBookmarkList();
+            if (idx !== -1) {
+                const textarea = document.querySelector('textarea');
+                if (document.activeElement === textarea) {
+                    if (fixedTools[idx]) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        wrapText(fixedTools[idx].pre, fixedTools[idx].suf);
                     }
-                };
-                paletteContainer.appendChild(btn);
-            });
-            updatePaletteUI();
-            
-            const folderSelect = document.getElementById('cbm-move-folder-select');
-            folderSelect.innerHTML = getFolders().map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-
-            document.getElementById('cbm-export').onclick = () => {
-                const data = JSON.stringify({ bookmarks: getBookmarks(), folders: getFolders() }, null, 2);
-                const blob = new Blob([data], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = 'crack-bookmarks-backup.json'; a.click();
-                URL.revokeObjectURL(url);
-            };
-            document.getElementById('cbm-import').onclick = () => {
-                const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
-                input.onchange = (e) => {
-                    const file = e.target.files[0]; if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        try {
-                            const data = JSON.parse(ev.target.result);
-                            if(data.bookmarks) localStorage.setItem('Crack_BM_Data', JSON.stringify(data.bookmarks));
-                            if(data.folders) localStorage.setItem('Crack_BM_Folders', JSON.stringify(data.folders));
-                            alert('백업 데이터를 가져왔습니다.');
-                            renderFolderTabs(); renderBookmarkList(); applyHighlightsToDOM();
-                        } catch { alert('올바른 파일이 아닙니다.'); }
-                    };
-                    reader.readAsText(file);
-                };
-                input.click();
-            };
-
-            renderFolderTabs();
-            renderBookmarkList();
-        }
-
-        function updatePaletteUI() {
-            document.querySelectorAll('.cbm-pal-btn').forEach(btn => {
-                if (activeColorFilter && btn.style.backgroundColor === hexToRgb(activeColorFilter)) btn.classList.add('active');
-                else btn.classList.remove('active');
-            });
-        }
-
-        function closeModal() {
-            isModalOpen = false; savedSelectionText = "";
-            const o = document.getElementById('cbm-overlay');
-            if (o) o.remove();
-        }
-
-        function renderFolderTabs() {
-            const container = document.getElementById('cbm-folders-container');
-            if (!container) return;
-            const folders = getFolders();
-            
-            container.innerHTML = folders.map(f => `
-                <button class="cbm-ftab ${currentFolderId === f.id ? 'active' : ''}" data-fid="${f.id}">${escapeHtml(f.name)}</button>
-            `).join('') + `<button class="cbm-fadd" id="cbm-fadd" title="폴더 추가">+</button>`;
-
-            container.querySelectorAll('.cbm-ftab').forEach(btn => {
-                btn.onclick = () => { currentFolderId = btn.dataset.fid; if(isDeleteMode) selectedForDelete.clear(); if(isMoveMode) selectedForMove.clear(); renderFolderTabs(); renderBookmarkList(); };
-                btn.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    if(btn.dataset.fid === 'default') return alert("기본 폴더는 수정할 수 없습니다.");
-                    const action = prompt("폴더 옵션:\n1: 이름 변경\n2: 폴더 삭제(북마크는 기본폴더로 이동)", "1");
-                    if (action === "1") {
-                        const nn = prompt("새 폴더 이름", btn.textContent);
-                        if(nn && nn.trim()) { const f = getFolders(); f.find(x => x.id === btn.dataset.fid).name = nn.trim(); saveFolders(f); }
-                    } else if (action === "2") {
-                        if(!confirm("폴더를 삭제하시겠습니까?")) return;
-                        saveFolders(getFolders().filter(x => x.id !== btn.dataset.fid));
-                        let bms = getBookmarks();
-                        bms.forEach(b => { if(b.folderId === btn.dataset.fid) b.folderId = 'default'; });
-                        saveBookmarks(bms);
-                        currentFolderId = 'default'; renderFolderTabs(); renderBookmarkList();
-                    }
-                };
-            });
-
-            document.getElementById('cbm-fadd').onclick = () => {
-                const name = prompt("새 폴더 이름 입력");
-                if(name && name.trim()) { const f = getFolders(); f.push({ id: 'f' + Date.now(), name: name.trim() }); saveFolders(f); }
-            };
-        }
-
-        function renderBookmarkList() {
-            const container = document.getElementById('cbm-list-container');
-            if (!container) return;
-            
-            document.getElementById('cbm-move-actions').style.display = isMoveMode ? 'flex' : 'none';
-            document.getElementById('cbm-delete-actions').style.display = isDeleteMode ? 'flex' : 'none';
-            document.getElementById('cbm-move-count').textContent = `${selectedForMove.size}개 선택됨`;
-            document.getElementById('cbm-del-count').textContent = `${selectedForDelete.size}개 선택됨`;
-
-            let bms = getBookmarks();
-            const cid = getChatId();
-
-            if (currentTab === 'current') bms = bms.filter(b => b.chatId === cid);
-            if (searchQuery) bms = bms.filter(b => (b.label && b.label.toLowerCase().includes(searchQuery)) || b.text.toLowerCase().includes(searchQuery));
-            else bms = bms.filter(b => (b.folderId || 'default') === currentFolderId);
-            if (activeColorFilter) bms = bms.filter(b => b.color === activeColorFilter);
-
-            bms.sort((a, b) => b.timestamp - a.timestamp);
-            currentFilteredBms = bms;
-
-            const moveSelectAllBtn = document.getElementById('cbm-move-select-all');
-            if (moveSelectAllBtn) moveSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForMove.size === currentFilteredBms.length) ? '■' : '□';
-            const delSelectAllBtn = document.getElementById('cbm-del-select-all');
-            if (delSelectAllBtn) delSelectAllBtn.textContent = (currentFilteredBms.length > 0 && selectedForDelete.size === currentFilteredBms.length) ? '■' : '□';
-
-            if (bms.length === 0) {
-                container.innerHTML = `<div class="cbm-empty">${searchQuery || activeColorFilter ? '결과가 없습니다.' : '이 폴더에 북마크가 없습니다.<br><br><b>🌼 추가 방법:</b><br>텍스트를 선택한 후, 헤더의 [♥] 버튼을 누르고<br>상단의 색상 동그라미를 누르면 저장됩니다.'}</div>`;
-                return;
-            }
-
-            const folders = getFolders();
-            const showCheckboxes = isDeleteMode || isMoveMode;
-
-            container.innerHTML = bms.map(b => {
-                const isSelDelete = isDeleteMode && selectedForDelete.has(b.id);
-                const isSelMove = isMoveMode && selectedForMove.has(b.id);
-                let selClass = isSelDelete ? 'selected-delete' : (isSelMove ? 'selected-move' : '');
-                const isChecked = isSelDelete || isSelMove;
-                const folder = folders.find(f => f.id === (b.folderId || 'default'));
-                const folderName = folder ? escapeHtml(folder.name) : '기본';
-
-                return `
-                <div class="cbm-item ${selClass}" data-id="${b.id}" data-cid="${b.chatId}" data-sid="${b.storyId||''}">
-                    <div class="cbm-item-top">
-                        <div class="cbm-item-title">
-                            ${showCheckboxes ? `<input type="checkbox" ${isChecked ? 'checked' : ''} style="margin-right:6px; pointer-events:none;">` : ''}
-                            <div class="cbm-item-color" style="background:${b.color}"></div>
-                            <span class="bm-label-txt">${escapeHtml(b.label)}</span>
-                            ${!showCheckboxes ? `<button class="cbm-item-edit" data-id="${b.id}" title="이름 수정">${ICON_EDIT}</button>` : ''}
-                        </div>
-                        ${!showCheckboxes ? `<span class="cbm-item-folder-tag">${folderName}</span>` : ''}
-                    </div>
-                    <div class="cbm-item-text">${escapeHtml(b.text)}</div>
-                </div>`;
-            }).join('');
-
-            container.querySelectorAll('.cbm-item').forEach(item => {
-                item.onclick = (e) => {
-                    if (e.target.closest('button')) return;
-                    const id = item.dataset.id;
-
-                    if (isDeleteMode) {
-                        if (selectedForDelete.has(id)) selectedForDelete.delete(id); else selectedForDelete.add(id);
-                    } else if (isMoveMode) {
-                        if (selectedForMove.has(id)) selectedForMove.delete(id); else selectedForMove.add(id);
-                    } else {
-                        jumpToHighlight(id, item.dataset.cid, item.dataset.sid);
-                        return;
-                    }
-                    renderBookmarkList(); 
-                };
-            });
-
-            if (!showCheckboxes) {
-                container.querySelectorAll('.cbm-item-edit').forEach(btn => {
-                    btn.onclick = () => {
-                        const target = getBookmarks().find(x => x.id === btn.dataset.id);
-                        if(target) {
-                            const nn = prompt("북마크 이름 수정", target.label);
-                            if(nn !== null) { target.label = nn.trim() || '새 북마크'; saveBookmarks(getBookmarks().map(x => x.id === target.id ? target : x)); }
-                        }
-                    };
-                });
-            }
-        }
-
-        function applyHighlightsToDOM() {
-            const bms = getBookmarks().filter(b => b.chatId === getChatId());
-            if (bms.length === 0) return;
-
-            bms.forEach(hl => {
-                if (document.querySelector(`mark[data-bm-id="${hl.id}"]`)) return;
-
-                const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                const textNodes = []; let node;
-                while (node = walker.nextNode()) {
-                    const parent = node.parentNode;
-                    if (!parent || ['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'NOSCRIPT'].includes(parent.nodeName)) continue;
-                    if (parent.closest('.crack-bm-overlay')) continue;
-                    if (node.nodeValue.trim().length > 0) textNodes.push(node);
                 }
-
-                const targetText = hl.text.replace(/\s+/g, '');
-                if (!targetText) return;
-
-                let globalText = ""; const map = [];
-                textNodes.forEach(n => {
-                    const clean = n.nodeValue.replace(/\s+/g, '');
-                    if (clean.length > 0) { map.push({ node: n, start: globalText.length, end: globalText.length + clean.length, originalText: n.nodeValue }); globalText += clean; }
-                });
-
-                let matches = []; let idx = globalText.indexOf(targetText);
-                while (idx !== -1) { matches.push(idx); idx = globalText.indexOf(targetText, idx + 1); }
-
-                matches.reverse().forEach(matchIdx => {
-                    let matchEnd = matchIdx + targetText.length;
-                    const overlappingNodes = map.filter(m => m.end > matchIdx && m.start < matchEnd);
-                    
-                    overlappingNodes.reverse().forEach(m => {
-                        const nodeStartInMatch = Math.max(0, matchIdx - m.start), nodeEndInMatch = Math.min(m.end - m.start, matchEnd - m.start);
-                        const getOrigIndex = (cleanIdx, origStr) => {
-                            let cCount = 0;
-                            for (let i = 0; i < origStr.length; i++) {
-                                if (!/\s/.test(origStr[i])) { if (cCount === cleanIdx) return i; cCount++; }
-                            }
-                            return origStr.length;
-                        };
-                        const origStart = getOrigIndex(nodeStartInMatch, m.originalText), origEnd = getOrigIndex(nodeEndInMatch, m.originalText);
-
-                        if (origStart < origEnd) {
-                            const mark = document.createElement('mark');
-                            mark.className = 'crack-bm-hl'; mark.style.backgroundColor = hexToRgba(hl.color, 0.45); 
-                            mark.dataset.bmId = hl.id; mark.textContent = m.originalText.substring(origStart, origEnd);
-                            const split1 = m.node.splitText(origStart);
-                            split1.nodeValue = split1.nodeValue.substring(origEnd - origStart);
-                            split1.parentNode.insertBefore(mark, split1);
-                        }
-                    });
-                });
-            });
-        }
-
-        function jumpToHighlight(id, targetChatId, targetStoryId) {
-            closeModal(); const cid = getChatId();
-            if (cid !== targetChatId) {
-                let url = toUrl(targetStoryId, targetChatId);
-                if(url) { localStorage.setItem('cbm_jump_target', id); location.href = url; } 
-                else { alert("해당 대화방 경로를 찾을 수 없습니다."); }
-                return;
             }
-
-            let maxTries = 15, currentTry = 0;
-            const loadingToast = document.createElement('div');
-            loadingToast.innerHTML = '🔄 북마크 위치 탐색 중...';
-            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#fff; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
-            document.body.appendChild(loadingToast);
-
-            const searchLoop = setInterval(() => {
-                applyHighlightsToDOM(); 
-                const target = document.querySelector(`mark[data-bm-id="${id}"]`);
-                if (target) {
-                    clearInterval(searchLoop); loadingToast.remove();
-                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'), 1500);
-                } else {
-                    currentTry++;
-                    if (currentTry > maxTries) { clearInterval(searchLoop); loadingToast.remove(); alert('탐색 실패. 너무 오래된 대화일 수 있습니다.'); return; }
-                    window.scrollTo(0, 0); document.querySelectorAll('div').forEach(div => { if (div.scrollHeight > div.clientHeight) div.scrollTop = 0; });
-                }
-            }, 800);
-        }
-
-        injectStyles();
-        setTimeout(applyHighlightsToDOM, 1000);
-        
-        const targetId = localStorage.getItem('cbm_jump_target');
-        if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
+        }, true);
 
         setInterval(() => {
-            injectHeaderButton();
-            if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
-        }, 500);
-
-        const observer = new MutationObserver((mutations) => {
-            let shouldApply = false;
-            mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
-            if (shouldApply) { clearTimeout(window.bmDebounce); window.bmDebounce = setTimeout(applyHighlightsToDOM, 500); }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-
-    // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (에러 무시, ID 추출 초강화, 피드백 디테일 적용)
-    // ==========================================
-    function initKeywordNoteSystem() {
-        let _capturedToken = '';
-        let syncTimer = null;
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
-        const BORDER_COLOR = '#D6D6D0';
-
-        // 💡 중요: ID 추출 방식을 3중으로 보강 (사이트 URL이 chat으로 바뀌어도 정상 작동)
-        function getChatId() {
-            try { if (typeof window.__LoreCore !== 'undefined' && window.__LoreCore.getCurrentChatId) { const o = window.__LoreCore.getCurrentChatId(); if (o) return o; } } catch(e) {}
-            try { if (typeof window.CrackUtil !== 'undefined') { const c = window.CrackUtil.path().chatRoom(); if (c) return c; } } catch(e) {}
-
-            let m = location.pathname.match(/\/(?:chats|chat|episodes)\/[a-f0-9]+\/([a-f0-9]+)/);
-            if (m) return m[1];
-            let m2 = location.pathname.match(/\/(?:chats|chat|episodes)\/([a-f0-9]+)/);
-            if (m2) return m2[1];
-            return null;
-        }
-
-        function getToken() {
-            return _capturedToken;
-        }
-
-        const _origFetch = window.fetch;
-        window.fetch = async function(...a) {
-            try {
-                const u = typeof a[0] === 'string' ? a[0] : a[0]?.url || '';
-                if (u.includes('crack-api.wrtn.ai') || u.includes('contents-api.wrtn.ai')) {
-                    const h = a[1]?.headers || {};
-                    let t = '';
-                    if (h instanceof Headers) t = h.get('Authorization') || h.get('authorization') || '';
-                    else t = h['Authorization'] || h['authorization'] || '';
-                    if (t) _capturedToken = t.replace('Bearer ', '');
-                }
-            } catch(e) {}
-            return _origFetch.apply(this, a);
-        };
-
-        function getNoteData(chatId) {
-            try {
-                const data = localStorage.getItem(`Crack_KW_Note_${chatId}`);
-                if (data) return JSON.parse(data);
-            } catch (e) {}
-            return { alwaysNote: "", keywords: [] };
-        }
-
-        function saveNoteData(chatId, data) {
-            localStorage.setItem(`Crack_KW_Note_${chatId}`, JSON.stringify(data));
-        }
-
-        function escapeHtml(str) {
-            if (!str) return "";
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        function getPlatformTextarea() {
-            const tas = document.querySelectorAll('textarea');
-            for (const ta of tas) {
-                if (!ta.offsetParent) continue;
-                if (ta.maxLength === 500 || ta.maxLength === 2000) {
-                    const dialog = ta.closest('[role="dialog"], [aria-modal="true"], .modal, .dialog');
-                    if (dialog) return ta;
-                }
-            }
-            return null;
-        }
-
-        function writeTextarea(text) {
-            const ta = getPlatformTextarea();
-            if (!ta) return;
-            if (ta.value === text) return;
-            
-            ta.value = text;
-            for (const key of Object.keys(ta)) {
-                if (key.startsWith('__reactProps')) {
-                    try { ta[key].onChange({ target: { value: text } }); } catch(e){}
-                    break;
-                }
-            }
-        }
-
-        async function patchUserNoteAPI(chatId, content) {
-            const token = getToken();
-            if (!token || !chatId) return false;
-            try {
-                const isExtend = Array.from(content).length > 500; 
-                const url = `https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}`;
-                const res = await _origFetch(url, {
-                    method: 'PATCH',
-                    credentials: 'include',
-                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userNote: { content: content, isExtend: isExtend } })
-                });
-                return res.ok;
-            } catch(e) {
-                return false;
-            }
-        }
-
-        async function forceSyncUserNote(chatId) {
-            if (!chatId) return;
-            const data = getNoteData(chatId);
-            const finalNoteText = data.alwaysNote || ""; 
-            const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
-            if (isSuccess) writeTextarea(finalNoteText);
-        }
-
-        function debouncedForceSync(chatId) {
-            clearTimeout(syncTimer);
-            syncTimer = setTimeout(() => forceSyncUserNote(chatId), 500);
-        }
-
-        function injectStyles() {
-            if (document.getElementById('crack-kw-inline-css')) return;
-            const s = document.createElement('style');
-            s.id = 'crack-kw-inline-css';
-            s.textContent = `
-                .ckw-root {
-                    margin-top: 12px; font-size: 13px; color: inherit;
-                }
-                .ckw-root * { box-sizing: border-box; }
-                
-                .ckw-ta {
-                    width: 100%; padding: 10px; border: 1px solid ${BORDER_COLOR}; border-radius: 5px;
-                    background: #fff; color: inherit; font-size: 13px; font-family: inherit; 
-                    resize: none !important; height: 192px; line-height: 1.5;
-                }
-                .ckw-ta:focus { outline: none; border-color: ${ACCENT_COLOR}; }
-
-                .ckw-input {
-                    width: 100%; padding: 8px 10px; border: 1px solid ${BORDER_COLOR}; border-radius: 5px;
-                    background: #fff; color: inherit; font-size: 13px; font-family: inherit; margin-bottom: 6px;
-                }
-                .ckw-input:focus { outline: none; border-color: ${ACCENT_COLOR}; }
-
-                .ckw-char-count { text-align: right; font-size: 12px; opacity: 0.8; margin-top: 4px; font-weight: bold; }
-
-                .ckw-add-btn {
-                    background: transparent; border: 1px dashed ${BORDER_COLOR}; border-radius: 6px;
-                    width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
-                    color: ${ACCENT_COLOR}; cursor: pointer; font-size: 20px; font-weight: normal; transition: 0.2s;
-                    line-height: 1; padding: 0;
-                }
-                .ckw-add-btn:hover { background: rgba(0,0,0,0.03); border-color: ${ACCENT_COLOR}; }
-
-                .ckw-kw-item { 
-                    margin-bottom: 6px; 
-                    background: #fff; border: 1px solid ${BORDER_COLOR}; 
-                    border-radius: 6px; overflow: hidden; transition: 0.2s; 
-                }
-                .ckw-kw-item.open {
-                    background: #F9F9F9;
-                }
-                
-                .ckw-kw-head { 
-                    padding: 0 12px; min-height: 40px; 
-                    display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; transition: 0.2s; 
-                }
-                .ckw-kw-head:hover { background: rgba(0,0,0,0.03); }
-                .ckw-caret { width: 14px; text-align: center; font-size: 12px; opacity: 0.7; font-weight: bold; }
-                .ckw-kw-name { flex: 1; font-weight: bold; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
-                
-                .ckw-kw-actions { display: flex; gap: 4px; align-items: center; }
-                .ckw-icon-btn { 
-                    background: transparent; border: none; color: #888; 
-                    border-radius: 4px; padding: 4px; font-size: 12px; cursor: pointer; font-weight: bold; transition: 0.2s;
-                    height: 24px; min-width: 24px; display: inline-flex; align-items: center; justify-content: center;
-                }
-                .ckw-icon-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
-                .ckw-icon-btn.btn-del { color: #888; font-size: 14px; }
-                .ckw-icon-btn.btn-del:hover { color: #666; }
-                .ckw-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-                
-                .ckw-kw-body { display: none; padding: 0 12px 12px; border-top: 1px dashed ${BORDER_COLOR}; padding-top: 12px; }
-                .ckw-kw-item.open .ckw-kw-body { display: block; }
-
-                /* 다크모드 대응 */
-                body[data-theme="dark"] .ckw-ta, body[data-theme="dark"] .ckw-input {
-                    background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important;
-                }
-                body[data-theme="dark"] .ckw-kw-item { background: transparent !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .ckw-kw-item.open { background: rgba(255,255,255,0.03) !important; }
-                body[data-theme="dark"] .ckw-kw-head:hover { background: rgba(255,255,255,0.05) !important; }
-                body[data-theme="dark"] .ckw-kw-body { border-top-color: #42413D !important; }
-                body[data-theme="dark"] .ckw-add-btn { border-color: #42413D !important; }
-                body[data-theme="dark"] .ckw-add-btn:hover { background: rgba(255,255,255,0.05) !important; border-color: ${ACCENT_COLOR} !important; }
-                body[data-theme="dark"] .ckw-icon-btn:hover { background: rgba(255,255,255,0.1) !important; color: #eee !important; }
-            `;
-            document.head.appendChild(s);
-        }
-
-        // 현재 글자수 부분만 빨간색으로 표기하는 헬퍼 함수
-        function renderCountHTML(len, countDiv) {
-            if(len > 500) {
-                countDiv.innerHTML = `( <span style="color:#FF4433;">${len}자</span> / 500자 )`;
-            } else {
-                countDiv.innerHTML = `( ${len}자 / 500자 )`;
-            }
-        }
-
-        function renderPanel(root, chatId) {
-            const data = getNoteData(chatId);
-            
-            root.innerHTML = `
-                <!-- 상시 노트 아코디언 -->
-                <div class="ckw-kw-item" id="ckw-always-item">
-                    <div class="ckw-kw-head">
-                        <span class="ckw-caret">></span>
-                        <span class="ckw-kw-name" style="color: inherit; opacity: 0.7;">상시 노트</span>
-                    </div>
-                    <div class="ckw-kw-body">
-                        <textarea id="ckw-always-ta" class="ckw-ta" placeholder="키워드가 없을 때 상시로 들어갈 내용"></textarea>
-                        <div class="ckw-char-count" id="ckw-always-count">( 0자 / 500자 )</div>
-                    </div>
-                </div>
-
-                <!-- 키워드 노트 리스트 컨테이너 -->
-                <div id="ckw-kw-list"></div>
-                
-                <div style="text-align:center; margin-top:10px;">
-                    <button class="ckw-add-btn" title="키워드 추가">+</button>
-                </div>
-            `;
-            
-            // 1. 상시 노트 이벤트
-            const alwaysItem = root.querySelector('#ckw-always-item');
-            const alwaysHead = alwaysItem.querySelector('.ckw-kw-head');
-            const alwaysCaret = alwaysItem.querySelector('.ckw-caret');
-            const alwaysTa = alwaysItem.querySelector('#ckw-always-ta');
-            const alwaysCount = alwaysItem.querySelector('#ckw-always-count');
-
-            alwaysHead.onclick = () => {
-                const isOpen = alwaysItem.classList.contains('open');
-                if (isOpen) {
-                    alwaysItem.classList.remove('open');
-                    alwaysCaret.textContent = '>';
-                } else {
-                    alwaysItem.classList.add('open');
-                    alwaysCaret.textContent = '⌵';
-                }
-            };
-
-            alwaysTa.value = data.alwaysNote || '';
-            const updateAlwaysCount = () => {
-                const len = [...alwaysTa.value].length;
-                renderCountHTML(len, alwaysCount);
-            };
-            updateAlwaysCount();
-            
-            alwaysTa.oninput = () => {
-                updateAlwaysCount();
-                data.alwaysNote = alwaysTa.value;
-                saveNoteData(chatId, data);
-                debouncedForceSync(chatId);
-            };
-
-            // 2. 키워드 노트 리스트 렌더링
-            const listDiv = root.querySelector('#ckw-kw-list');
-            const renderList = () => {
-                listDiv.innerHTML = '';
-                if(!data.keywords) data.keywords = [];
-                data.keywords.forEach((kw, idx) => {
-                    const item = document.createElement('div');
-                    item.className = 'ckw-kw-item';
-                    
-                    const head = document.createElement('div');
-                    head.className = 'ckw-kw-head';
-                    head.innerHTML = `
-                        <span class="ckw-caret">></span>
-                        <span class="ckw-kw-name">${escapeHtml(kw.name) || '이름 없음'}</span>
-                        <div class="ckw-kw-actions">
-                            <button class="ckw-icon-btn btn-up" title="위로" ${idx===0?'disabled':''}>▲</button>
-                            <button class="ckw-icon-btn btn-down" title="아래로" ${idx===data.keywords.length-1?'disabled':''}>▼</button>
-                            <button class="ckw-icon-btn btn-del" title="삭제">✘</button>
-                        </div>
-                    `;
-                    
-                    const body = document.createElement('div');
-                    body.className = 'ckw-kw-body';
-                    // 이름과 키워드 너비를 1:1로 정확히 분할 (flex: 1 적용)
-                    body.innerHTML = `
-                        <div style="display: flex; gap: 8px; margin-bottom: 6px;">
-                            <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}" style="flex: 1; margin: 0;">
-                            <input type="text" class="ckw-input ckw-kw-trig-inp" placeholder="키워드 (쉼표 OR, && AND)" value="${escapeHtml(kw.triggers.join(', '))}  " style="flex: 1; margin: 0;">
-                        </div>
-                        <textarea class="ckw-ta ckw-kw-cont-ta" placeholder="삽입될 내용">${escapeHtml(kw.content)}</textarea>
-                        <div class="ckw-char-count ckw-kw-count">( 0자 / 500자 )</div>
-                    `;
-
-                    const caret = head.querySelector('.ckw-caret');
-                    head.onclick = (e) => {
-                        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
-                        const isOpen = item.classList.contains('open');
-                        if (isOpen) {
-                            item.classList.remove('open');
-                            caret.textContent = '>';
-                        } else {
-                            item.classList.add('open');
-                            caret.textContent = '⌵';
-                        }
-                    };
-                    
-                    head.querySelector('.btn-up').onclick = (e) => {
-                        e.stopPropagation();
-                        if (idx > 0) {
-                            const temp = data.keywords[idx-1];
-                            data.keywords[idx-1] = data.keywords[idx];
-                            data.keywords[idx] = temp;
-                            saveNoteData(chatId, data);
-                            renderList(); debouncedForceSync(chatId);
-                        }
-                    };
-                    head.querySelector('.btn-down').onclick = (e) => {
-                        e.stopPropagation();
-                        if (idx < data.keywords.length - 1) {
-                            const temp = data.keywords[idx+1];
-                            data.keywords[idx+1] = data.keywords[idx];
-                            data.keywords[idx] = temp;
-                            saveNoteData(chatId, data);
-                            renderList(); debouncedForceSync(chatId);
-                        }
-                    };
-                    head.querySelector('.btn-del').onclick = (e) => {
-                        e.stopPropagation();
-                        if(confirm("삭제하시겠습니까?")) {
-                            data.keywords.splice(idx, 1);
-                            saveNoteData(chatId, data);
-                            renderList(); debouncedForceSync(chatId);
-                        }
-                    };
-
-                    const nameInp = body.querySelector('.ckw-kw-name-inp');
-                    const trigInp = body.querySelector('.ckw-kw-trig-inp');
-                    const contTa = body.querySelector('.ckw-kw-cont-ta');
-                    const countDiv = body.querySelector('.ckw-kw-count');
-                    const nameSpan = head.querySelector('.ckw-kw-name');
-
-                    const updateCnt = () => {
-                        const len = [...contTa.value].length;
-                        renderCountHTML(len, countDiv);
-                    };
-                    updateCnt();
-
-                    const saveKw = () => {
-                        kw.name = nameInp.value.trim();
-                        kw.triggers = trigInp.value.split(',').map(s=>s.trim()).filter(Boolean);
-                        kw.content = contTa.value;
-                        nameSpan.textContent = kw.name || '이름 없음';
-                        saveNoteData(chatId, data);
-                        debouncedForceSync(chatId);
-                    };
-
-                    nameInp.oninput = saveKw;
-                    trigInp.oninput = saveKw;
-                    contTa.oninput = () => { updateCnt(); saveKw(); };
-
-                    item.appendChild(head);
-                    item.appendChild(body);
-                    listDiv.appendChild(item);
-                });
-            };
-            renderList();
-
-            // 추가 버튼 이벤트
-            root.querySelector('.ckw-add-btn').onclick = () => {
-                if(!data.keywords) data.keywords = [];
-                data.keywords.push({ id: 'kw_'+Date.now(), name: '새 키워드', triggers: [], content: '' });
-                saveNoteData(chatId, data);
-                renderList();
-            };
-        }
-
-        function findModal() {
-            const tas = document.querySelectorAll('textarea');
-            for (const ta of tas) {
-                if (!ta.offsetParent) continue;
-                if (ta.maxLength === 500 || ta.maxLength === 2000) {
-                    const dialog = ta.closest('[role="dialog"], [aria-modal="true"], .modal, .dialog');
-                    if (dialog) return dialog;
-                }
-            }
-            return null;
-        }
-
-        function injectIntoModal(modal) {
-            if (modal.querySelector('.ckw-root')) return;
-            const chatId = getChatId(); if (!chatId) return;
-            const ta = modal.getElementsByTagName('textarea')[0]; if (!ta) return;
-
-            // 원본 텍스트에리어 비활성화(읽기 전용 모드)
-            ta.readOnly = true;
-            ta.style.minHeight = '160px'; 
-            ta.style.maxHeight = '30vh'; 
-            ta.style.opacity = '0.85';
-            ta.placeholder = '현재 유저노트입니다. 아래 패널에서 자동 반영되며 직접 수정할 수 없습니다.';
-
-            const root = document.createElement('div');
-            root.className = 'ckw-root';
-            if (ta.nextSibling) ta.parentElement.insertBefore(root, ta.nextSibling);
-            else ta.parentElement.appendChild(root);
-            
-            renderPanel(root, chatId);
-        }
-
-        function norm(s) { return (s || '').normalize('NFC').toLowerCase(); }
-        
-        function matchTriggers(text, triggers) {
-            if (!triggers || !triggers.length) return false;
-            const lowText = norm(text);
-            for (const t of triggers) {
-                const parts = t.split('&&').map(p => norm(p.trim())).filter(Boolean);
-                if (parts.length && parts.every(p => lowText.includes(p))) return true;
-            }
-            return false;
-        }
-
-        async function fetchLastMessagesForScan(chatId) {
-            const token = getToken();
-            if (!token || !chatId) return "";
-            try {
-                const res = await _origFetch(`https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}/messages?limit=2`, {
-                    method: 'GET',
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.data && data.data.messages) {
-                        return data.data.messages.map(m => m.content).join(' \n ');
-                    }
-                }
-            } catch(e) {
-                console.error("[ 통합팩 | 키워드노트 ] 최근 메시지 스캔 중 에러:", e);
-            }
-            return "";
-        }
-
-        async function processNoteSwap(chatId, userMessage) {
-            try {
-                const data = getNoteData(chatId);
-                let finalNoteText = "";
-                let activeKeyword = null;
-
-                const pastMessages = await fetchLastMessagesForScan(chatId);
-                const scanText = pastMessages + " \n " + userMessage;
-
-                if (data.keywords && data.keywords.length > 0) {
-                    for (const kw of data.keywords) {
-                        if (matchTriggers(scanText, kw.triggers)) {
-                            activeKeyword = kw;
-                            break; 
-                        }
-                    }
-                }
-                
-                if (activeKeyword) {
-                    finalNoteText = activeKeyword.content;
-                } else {
-                    finalNoteText = data.alwaysNote || "";
-                }
-
-                const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
-                if (isSuccess) {
-                    writeTextarea(finalNoteText);
-                } else {
-                    console.error("[ 통합팩 | 키워드노트 ] 유저노트 API 강제 주입 실패");
-                }
-
-            } catch (e) {
-                console.error("[ 통합팩 | 키워드노트 ] 로직 처리 중 심각한 에러 발생:", e);
-            }
-        }
-
-        const _origSend = window.WebSocket.prototype.send;
-        window.WebSocket.prototype.send = function(wsData) {
-            const ws = this;
-            if (typeof wsData === 'string' && wsData.length > 10) {
-                if (!_capturedToken && wsData.startsWith('40')) {
-                    const ji = wsData.indexOf('{');
-                    if (ji > 0) {
-                        try {
-                            const obj = JSON.parse(wsData.slice(ji));
-                            if (obj && typeof obj.token === 'string') _capturedToken = obj.token.replace('Bearer ', '');
-                        } catch(e) {}
-                    }
-                }
-
-                const bi = wsData.indexOf('[');
-                if (bi > 0) {
-                    try {
-                        const arr = JSON.parse(wsData.slice(bi));
-                        if (Array.isArray(arr) && arr[0] === 'send' && arr[1] && typeof arr[1].message === 'string') {
-                            const msg = arr[1].message;
-                            const chatId = getChatId();
-                            if (chatId) {
-                                (async () => { 
-                                    await processNoteSwap(chatId, msg); 
-                                    _origSend.call(ws, wsData); 
-                                })();
-                                return; 
-                            }
-                        }
-                    } catch(e) {}
-                }
-            }
-            return _origSend.call(this, wsData);
-        };
-
-        function setupKW() {
-            try {
-                const modal = findModal();
-                if (modal) injectIntoModal(modal);
-            } catch(e) {
-                console.error("[ 통합팩 | 키워드노트 UI 주입 에러 ]", e);
-            }
-        }
-
-        injectStyles();
-        // 💡 중요: 간헐적으로 옵저버가 놓치는 현상 방지를 위해 1초마다 자동 체크 (안정성 보장)
-        setInterval(setupKW, 1000); 
-        
-        const obs = new MutationObserver(() => setupKW());
-        obs.observe(document.body, { childList: true, subtree: true });
-    }
-
-    // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 
-    // ==========================================
-    function initAiSummarySystem() {
-        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
-        
-        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
-
-## 🎯 목적
-채팅 로그를 분석하여 이후 서사가 어긋나지 않도록 **'사건 단위의 독립적 앵커'**를 생성하되, **인물 간의 감정선과 미묘한 상호작용의 질감(Texture)**을 보존한다.
-생성된 요약문은 향후 AI가 인물 간의 관계 역학부터 소소한 추억까지 생생하고 섬세하게 기억하여, 이후의 롤플레잉을 보다 입체적으로 이끌어가는 참고 자료로 쓰일 예정이다.
-
----
-
-## 🧩 출력 단위 및 분리 기준
-- **단위**: 출력의 최소 단위는 ‘사건’이다.
-- **분리 필수 조건**: 아래 중 하나라도 해당하면 반드시 **새로운 사건 슬롯**으로 분리하여 출력한다.
-1. **장소 이동** (예: 복도 → 교실 / 교정 → 중앙 정원)
-2. **시간대 변화** (예: 오전 → 오후 / 수업 시간 → 쉬는 시간)
-3. **주요 인물 구성 변화** (예: 1:1 대화 중 제3자 난입)
-- **병합 금지**: 주제가 이어지더라도 장소가 바뀌면 정보를 절대 합치지 않는다.
-- **소급 금지**: 나중에 발생한 일(대사, 결정, 물건 등장 등)을 앞선 사건 요약에 미리 포함하지 않는다.
-
----
-
-## 📋 출력 형식 (강제)
-
-[제목]
-- 내용
-
-### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)
-- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사(~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
-- **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)
-- 제목은 항상 []로 가둘 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.
-
-### 2. 내용 규칙
-- **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.
-- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.
-- **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)
-- **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.
-- **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.
-- **핵심 기록 요소**:
-- **상호작용의 연쇄(Flow)**: 단순 '자극-반응'을 넘어, **[누군가의 행동/발화] → [상대의 리액션] → [그로 인한 재반응/변화]**의 인과 사슬을 명확히 기록할 것. **대사는 " " 인용**
-- **사건의 배경 및 정보(Context & Lore)**: 단순 결과만 적지 말 것. 떡밥이 되는 맥락 정보를 구체적으로 포함할 것.
-- **구체적 양상(How)**: '애교', '화냄' 등 추상적 표현 대신 **"옷자락을 당김", "미간을 찌푸림", "시선을 피함"** 등 로그에 명시된 행동과 표정을 적을 것.
-- **미묘한 기류(Mood)**: 두 인물 간의 **사소한 장난, 묘한 긴장감, 말투의 변화** 등 질감을 살리는 디테일을 포함할 것.
-- **전환점 (Turning Point)**: **관계 변화** 및 **결정적 약속/은폐** 사실.
-- **구체적 명사(Keywords)**: 상징적인 **선물, 물건, 공간**을 정확한 명칭으로 기록할 것.
-
----
-
-## 🚫 기록 원칙 (Strict)
-- **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.
-- **❌ 소설 금지**: AI의 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
-- **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.
-- **❌ 순서 변경 금지**: 시간 흐름 엄수.
-- **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
-- **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.
-- **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.
-- **⭕ 주체 보존**: 발단이 누구인지 구분하여 명확히 할 것.`;
-
-        function getChatId() {
-            const m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
-            return m ? m[1] : null;
-        }
-
-        function getToken() {
-            const m = document.cookie.match(/(^| )access_token=([^;]+)/);
-            return m ? m[2] : null;
-        }
-
-        function escapeHtml(s) {
-            if (!s) return "";
-            const d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
-        }
-
-        function apiCall(method, path, body) {
-            const token = getToken(), chatId = getChatId();
-            if (!token || !chatId) {
-                alert('인증 정보 또는 채팅 ID를 찾을 수 없습니다.');
-                return Promise.resolve(null);
-            }
-            const opts = {
-                method,
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                    'Content-Type': 'application/json'
-                }
-            };
-            if (body) opts.body = JSON.stringify(body);
-            return fetch(API_BASE + '/' + chatId + path, opts)
-                .then(function (r) {
-                    if (!r.ok) {
-                        return r.text().then(function (t) {
-                            console.error('API Error:', r.status, t);
-                            return null;
-                        });
-                    }
-                    return r.text().then(function (t) {
-                        return t ? JSON.parse(t) : { result: 'SUCCESS' };
-                    });
-                })
-                .catch(function (e) {
-                    alert('네트워크 오류: ' + e.message);
-                    return null;
-                });
-        }
-
-        async function fetchRecentMessages(limit) {
-            let allMessages = [];
-            let currentCursor = null;
-            let requestedLimit = parseInt(limit, 10);
-
-            if (isNaN(requestedLimit)) requestedLimit = 15;
-            const isUnlimited = requestedLimit === 0;
-
-            while (true) {
-                let fetchLimit = isUnlimited ? 50 : Math.min(requestedLimit - allMessages.length, 50);
-                let path = '/messages?limit=' + fetchLimit;
-
-                if (currentCursor) {
-                    path += '&cursor=' + encodeURIComponent(currentCursor);
-                }
-
-                let res = await apiCall('GET', path);
-
-                if (!res || !res.data || !res.data.messages || res.data.messages.length === 0) break;
-
-                allMessages = allMessages.concat(res.data.messages);
-
-                if (!isUnlimited && allMessages.length >= requestedLimit) break;
-                if (res.data.hasNext && res.data.nextCursor) {
-                    currentCursor = res.data.nextCursor;
-                } else {
-                    break;
-                }
-            }
-
-            if (!isUnlimited) allMessages = allMessages.slice(0, requestedLimit);
-            if (allMessages.length === 0) return null;
-
-            let msgs = allMessages.reverse();
-            return msgs.map(m => {
-                let role = m.role === 'user' ? 'User' : 'Character';
-                return `${role}: ${m.content}`;
-            }).join('\n\n');
-        }
-
-        async function callGeminiApi(apiKey, model, chatLog) {
-            const currentPrompt = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-            const payload = {
-                system_instruction: { parts: [{ text: currentPrompt }] },
-                contents: [{ role: "user", parts: [{ text: chatLog }] }]
-            };
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+            const btnContainer = document.querySelector('.flex.items-center.space-x-2');
+            if (!btnContainer) return;
+            if (document.getElementById('custom-rp-tools')) return;
+
+            const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
+
+            // ★ 추가된 부분: 버튼 컨테이너 안의 기존 사이트 버튼들을 모두 찾아 숨김 처리합니다.
+            const nativeButtons = btnContainer.querySelectorAll('button');
+            nativeButtons.forEach(btn => {
+                btn.style.display = 'none'; 
             });
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error?.message || 'Gemini API 에러');
+
+            const toolWrapper = document.createElement('div');
+            toolWrapper.id = 'custom-rp-tools';
+            toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
+
+            fixedTools.forEach((t) => {
+                const btn = createToolButton(t.icon, () => wrapText(t.pre, t.suf));
+                toolWrapper.appendChild(btn); // 커스텀 버튼은 보이도록 추가됩니다.
+            });
+
+            if (recommendBtn) {
+                btnContainer.insertBefore(toolWrapper, recommendBtn);
+            } else {
+                btnContainer.appendChild(toolWrapper);
             }
-            const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
-        }
-
-        function parseVertexContent(scriptStr) {
-            try {
-                const match = scriptStr.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\});/);
-                if (match && match[1]) return new Function("return " + match[1])();
-                if (scriptStr.includes("apiKey")) {
-                    const startText = "firebaseConfig = {";
-                    const startIndex = scriptStr.indexOf(startText);
-                    if (startIndex !== -1) {
-                        const endIndex = scriptStr.indexOf("}", startIndex);
-                        if (endIndex !== -1) {
-                            const objStr = scriptStr.substring(startIndex + startText.length - 1, endIndex + 1);
-                            return new Function("return " + objStr)();
-                        }
-                    }
-                }
-            } catch(e) {}
-            return null;
-        }
-
-        async function callFirebaseApi(scriptStr, modelId, chatLog) {
-            const config = parseVertexContent(scriptStr);
-            if (!config) throw new Error("Firebase 스크립트 형식이 올바르지 않습니다.");
-            
-            const currentPrompt = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-            const { initializeApp } = await import("https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js");
-            const { getAI, getGenerativeModel, VertexAIBackend, HarmBlockThreshold, HarmCategory } = await import("https://www.gstatic.com/firebasejs/12.8.0/firebase-ai.js");
-
-            let app;
-            try { app = initializeApp(config, "crack-ext-" + Date.now()); } 
-            catch(e) { throw new Error("Firebase 초기화 실패: " + e.message); }
-
-            const ai = getAI(app, { backend: new VertexAIBackend('global') });
-            const safetySettings = [
-                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.OFF },
-                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.OFF },
-                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.OFF },
-                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.OFF }
-            ];
-
-            const modelWithSys = getGenerativeModel(ai, { model: modelId, systemInstruction: currentPrompt, safetySettings });
-            const result = await modelWithSys.generateContent(chatLog);
-            const response = await result.response;
-            return response.text();
-        }
-
-        function injectAiStyles() {
-            if (document.getElementById('crack-ext-ai-css')) return;
-            const s = document.createElement('style');
-            s.id = 'crack-ext-ai-css';
-            s.textContent = UNI_BTN_CSS + `
-                .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:2147483647; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; pointer-events:auto !important; }
-                .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; box-sizing: border-box; }
-                .crack-ext-ai-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-shrink:0; }
-                .crack-ext-ai-modal-header h3 { margin: 0; color:#222 !important; font-size: 17px; font-weight: 700; display:flex; align-items:center; gap:6px;}
-                .ce-ai-close-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; line-height: 1; }
-                .ce-ai-close-btn:hover { background: #eee; color: #222; }
-                
-                .ce-ai-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
-                .ce-ai-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; flex-shrink: 0; }
-                
-                .ce-ai-footer-right { display: flex; gap: 8px; }
-
-                .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
-                
-                .ce-ai-ta { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fafafa !important; color:#222 !important; resize: none; flex: 1; }
-                .ce-ai-ta:focus { outline: 1px solid ${ACCENT_COLOR}; background: #fff !important; }
-                
-                .ce-ai-input { width:100%; height: 36px; padding:0 10px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; }
-                .ce-ai-select { width:100%; height: 36px; padding-left: 10px; padding-right: 28px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; cursor:pointer;}
-                .ce-ai-input:focus, .ce-ai-select:focus { outline: 1px solid ${ACCENT_COLOR}; background: #fff !important; }
-
-                .crack-ext-ai-mbtn { padding:10px 20px; border-radius:8px; border:1px solid #ddd !important; background:#eee !important; color:#333 !important; cursor:pointer; font-size:13px; font-weight:600; transition: background 0.2s;}
-                .crack-ext-ai-mbtn:hover { background: #ddd !important; }
-                .crack-ext-ai-mbtn-p { background:${ACCENT_COLOR} !important; color:#fff !important; border-color:${ACCENT_COLOR} !important; }
-                .crack-ext-ai-mbtn-p:hover { filter: brightness(0.9); background: ${ACCENT_COLOR} !important;}
-
-                .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 12px; }
-                .crack-flex-ai-row .fg { flex:1; display:flex; flex-direction:column; }
-                
-                #ce-ai-preview-container { display:flex; flex-direction:column; flex:1; min-height:0; }
-                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 8px; font-size: 13px; font-weight: bold; flex-shrink:0; }
-                #ce-ai-card-nav button { cursor:pointer; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; padding:4px 10px; font-size:12px; transition: background 0.2s; color:#333; }
-                #ce-ai-preview-cards { overflow-y: auto; flex:1; padding-right:4px; }
-                
-                .crack-ext-session-card { background:#f9f9f9 !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; margin-bottom: 10px;}
-                .crack-ext-session-title { font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
-                .crack-ext-session-content { color:#555 !important; line-height:1.4; white-space: pre-wrap; word-break: break-all; }
-                .crack-ext-char-count { font-size:11px; color: #777; }
-                .crack-ext-count-error { color: #e74c3c !important; font-weight:bold; }
-                
-                body[data-theme="dark"] .crack-ext-ai-modal { background: #242321 !important; color: #F0EFEB !important; }
-                body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
-                body[data-theme="dark"] .ce-ai-close-btn { color: #aaa; }
-                body[data-theme="dark"] .ce-ai-close-btn:hover { background: #333; color: #fff; }
-                body[data-theme="dark"] .ce-ai-ta, body[data-theme="dark"] .ce-ai-input, body[data-theme="dark"] .ce-ai-select { background: #141413 !important; color: #F0EFEB !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .ce-ai-ta:focus, body[data-theme="dark"] .ce-ai-input:focus, body[data-theme="dark"] .ce-ai-select:focus { background: #1a1918 !important; }
-                body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn { background: #333 !important; color: #eee !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn:hover { background: #444 !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: ${ACCENT_COLOR} !important; color: #fff !important; border-color: ${ACCENT_COLOR} !important; }
-            `;
-            document.head.appendChild(s);
-        }
-
-        function showToast(message) {
-            var old = document.getElementById('crack-ext-toast');
-            if (old) old.remove();
-            var toast = document.createElement('div');
-            toast.id = 'crack-ext-toast';
-            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-10px);z-index:999999999;background:#1a1a1a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,0.25);transition:opacity 0.3s,transform 0.3s;';
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(-50%) translateY(0)'; });
-            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(-50%) translateY(-10px)'; setTimeout(() => toast.remove(), 300); }, 3000);
-        }
-
-        function refreshCurrentTab(dialog) {
-            var btns = dialog.querySelectorAll('button'), activeBtn = null, otherBtn = null;
-            for (var i = 0; i < btns.length; i++) {
-                var txt = btns[i].textContent.trim();
-                if (txt === '단기 기억' || txt === '장기 기억') {
-                    var bg = getComputedStyle(btns[i]).backgroundColor;
-                    var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)\)/);
-                    if (m && (parseInt(m[1]) + parseInt(m[2]) + parseInt(m[3])) / 3 < 128) activeBtn = btns[i];
-                    else if (txt === '장기 기억') otherBtn = btns[i];
-                }
-            }
-            if (!activeBtn) return;
-            if (otherBtn) { otherBtn.click(); setTimeout(() => { activeBtn.click(); }, 150); }
-            else { activeBtn.click(); }
-        }
-
-        function showAiSummaryModal() {
-            var overlay = document.createElement('div');
-            overlay.className = 'crack-ext-ai-overlay';
-
-            const savedApiKey = localStorage.getItem('crack_ext_gemini_key') || '';
-            const savedModel = localStorage.getItem('crack_ext_gemini_model') || 'gemini-3.1-pro-preview';
-            const savedTurnCount = localStorage.getItem('crack_ext_turn_count') || '15';
-            const savedProvider = localStorage.getItem('crack_ext_api_provider') || 'google';
-            const savedFirebaseScript = localStorage.getItem('crack_ext_firebase_script') || '';
-
-            let parsedCards = [], currentCardIndex = 0;
-
-            var html = `
-            <div class="crack-ext-ai-modal">
-                <div class="crack-ext-ai-modal-header">
-                    <h3>✨ AI 요약 / 장기 기억 추가</h3>
-                    <button id="ce-ai-close-btn" class="ce-ai-close-btn">✕</button>
-                </div>
-                
-                <div class="ce-ai-body">
-                    <!-- 메인 뷰 -->
-                    <div id="ce-ai-main-view" style="display:flex; flex-direction:column; height:100%;">
-                        <label>생성 결과</label>
-                        <div id="ce-ai-preview-container">
-                            <div id="ce-ai-card-nav" style="display:none;">
-                                <button id="ce-ai-card-prev">◀</button>
-                                <span id="ce-ai-card-page">1 / 1</span>
-                                <button id="ce-ai-card-next">▶</button>
-                            </div>
-                            <div id="ce-ai-preview-cards"></div>
-                        </div>
-                        <textarea id="ce-ai-result" class="ce-ai-ta" style="flex:1; margin-top:12px;" placeholder="결과가 여기에 표시됩니다. (수동 편집 가능)"></textarea>
-                    </div>
-                    
-                    <!-- 설정 뷰 -->
-                    <div id="ce-ai-settings-view" style="display:none; flex-direction:column; height:100%;">
-                        <div style="text-align:right; margin-bottom:8px;">
-                            <button id="ce-ai-toggle-back" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">돌아가기</button>
-                        </div>
-                        <div class="crack-flex-ai-row">
-                            <div class="fg" style="flex: 1.2;">
-                                <label>API</label>
-                                <select id="ce-ai-provider" class="ce-ai-select">
-                                    <option value="google" ${savedProvider==='google'?'selected':''}>Google</option>
-                                    <option value="firebase" ${savedProvider==='firebase'?'selected':''}>Firebase</option>
-                                </select>
-                            </div>
-                            <div class="fg" id="ce-ai-key-container" style="${savedProvider==='google'?'':'display:none;'}">
-                                <label>API Key</label>
-                                <input type="password" id="ce-ai-key" class="ce-ai-input" value="${escapeHtml(savedApiKey)}">
-                            </div>
-                            <div class="fg" style="flex: 1.5;">
-                                <label>모델</label>
-                                <select id="ce-ai-model" class="ce-ai-select">
-                                    <option value="gemini-3.1-pro-preview" ${savedModel==='gemini-3.1-pro-preview'?'selected':''}>3.1 Pro Preview</option>
-                                    <option value="gemini-3-flash-preview" ${savedModel==='gemini-3-flash-preview'?'selected':''}>3 Flash Preview</option>
-                                    <option value="gemini-3.1-flash-lite-preview" ${savedModel==='gemini-3.1-flash-lite-preview'?'selected':''}>3.1 Flash-Lite</option>
-                                    <option value="gemini-2.5-pro" ${savedModel==='gemini-2.5-pro'?'selected':''}>2.5 Pro</option>
-                                    <option value="gemini-2.5-flash" ${savedModel==='gemini-2.5-flash'?'selected':''}>2.5 Flash</option>
-                                    <option value="gemini-2.5-flash-lite" ${savedModel==='gemini-2.5-flash-lite'?'selected':''}>2.5 Flash-Lite</option>
-                                </select>
-                            </div>
-                            <div class="fg" style="flex: 0.8;">
-                                <label>턴 수</label>
-                                <input type="number" id="ce-ai-turns" class="ce-ai-input" value="${escapeHtml(savedTurnCount)}" min="0">
-                            </div>
-                        </div>
-                        
-                        <div class="crack-flex-ai-row" id="ce-ai-firebase-container" style="${savedProvider==='firebase'?'':'display:none;'}">
-                            <div class="fg">
-                                <label>Firebase 스크립트</label>
-                                <textarea id="ce-ai-firebase-script" class="ce-ai-ta" style="flex: 0 0 60px; height:60px;">${escapeHtml(savedFirebaseScript)}</textarea>
-                            </div>
-                        </div>
-                        
-                        <div style="flex:1; display:flex; flex-direction:column; margin-top:4px;">
-                            <label>프롬프트</label>
-                            <textarea id="ce-ai-prompt" class="ce-ai-ta"></textarea>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="ce-ai-footer">
-                    <div>
-                         <button class="crack-ext-ai-mbtn" id="ce-ai-settings-btn">요약 설정</button>
-                    </div>
-                    <div class="ce-ai-footer-right">
-                        <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
-                        <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
-                    </div>
-                </div>
-            </div>`;
-
-            overlay.innerHTML = html;
-            document.body.appendChild(overlay);
-
-            overlay.querySelector('#ce-ai-close-btn').onclick = e => { e.stopPropagation(); overlay.remove(); };
-            overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
-
-            const mainView = overlay.querySelector('#ce-ai-main-view');
-            const settingsView = overlay.querySelector('#ce-ai-settings-view');
-            const txtResult = overlay.querySelector('#ce-ai-result');
-            const txtPrompt = overlay.querySelector('#ce-ai-prompt');
-            const footer = overlay.querySelector('.ce-ai-footer');
-            
-            const previewCards = overlay.querySelector('#ce-ai-preview-cards');
-            const cardNav = overlay.querySelector('#ce-ai-card-nav');
-            const spanCardPage = overlay.querySelector('#ce-ai-card-page');
-            
-            const selProvider = overlay.querySelector('#ce-ai-provider');
-            const contKey = overlay.querySelector('#ce-ai-key-container');
-            const contFirebase = overlay.querySelector('#ce-ai-firebase-container');
-
-            selProvider.onchange = () => {
-                if(selProvider.value === 'google') { contKey.style.display = 'block'; contFirebase.style.display = 'none'; } 
-                else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
-            };
-
-            overlay.querySelector('#ce-ai-settings-btn').onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                mainView.style.display = 'none';
-                settingsView.style.display = 'flex';
-                footer.style.display = 'none';
-                txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-            };
-
-            overlay.querySelector('#ce-ai-toggle-back').onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
-                settingsView.style.display = 'none';
-                mainView.style.display = 'flex';
-                footer.style.display = 'flex';
-            };
-
-            function updatePreviewCards() {
-                const content = txtResult.value.trim();
-                if(!content) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; parsedCards = []; return; }
-
-                const blocks = content.split(/\[(.*?)\]/);
-                parsedCards = [];
-                for (let i = 1; i < blocks.length; i += 2) {
-                    let title = blocks[i].trim(), summary = blocks[i+1] ? blocks[i+1].replace(/^[\s\n]*[-*]?\s*/, '').trim() : '';
-                    if (title || summary) parsedCards.push({ title, summary });
-                }
-                if (parsedCards.length === 0 && content) parsedCards.push({ title: "수동 요약", summary: content.replace(/^[\s\n]*[-*]?\s*/, '').trim() });
-                
-                if (parsedCards.length === 0) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; return; }
-                if (currentCardIndex >= parsedCards.length) currentCardIndex = parsedCards.length - 1;
-                if (currentCardIndex < 0) currentCardIndex = 0;
-
-                cardNav.style.display = parsedCards.length > 1 ? 'flex' : 'none';
-                spanCardPage.textContent = `${currentCardIndex + 1} / ${parsedCards.length}`;
-
-                let mem = parsedCards[currentCardIndex];
-                let tClass = mem.title.length > 20 ? 'crack-ext-count-error' : '', sClass = mem.summary.length > 300 ? 'crack-ext-count-error' : '';
-                previewCards.innerHTML = '<div class="crack-ext-session-card"><div class="crack-ext-session-title"><div><span style="color:#888;">[ </span>' + escapeHtml(mem.title) + '<span style="color:#888;"> ]</span></div><span class="crack-ext-char-count ' + tClass + '">(' + mem.title.length + '/20자)</span></div><div class="crack-ext-session-content">' + escapeHtml(mem.summary) + '<div style="text-align:right; margin-top:8px;"><span class="crack-ext-char-count ' + sClass + '">(' + mem.summary.length + '/300자)</span></div></div></div>';
-            }
-
-            txtResult.addEventListener('input', updatePreviewCards);
-            overlay.querySelector('#ce-ai-card-prev').onclick = (e) => { e.preventDefault(); if (currentCardIndex > 0) { currentCardIndex--; updatePreviewCards(); } };
-            overlay.querySelector('#ce-ai-card-next').onclick = (e) => { e.preventDefault(); if (currentCardIndex < parsedCards.length - 1) { currentCardIndex++; updatePreviewCards(); } };
-
-            const btnGen = overlay.querySelector('#ce-ai-generate');
-            const btnSave = overlay.querySelector('#ce-ai-save');
-
-            btnGen.onclick = async (e) => {
-                e.stopPropagation();
-                if (settingsView.style.display === 'flex') {
-                    localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
-                    settingsView.style.display = 'none';
-                    mainView.style.display = 'flex';
-                    footer.style.display = 'flex';
-                }
-
-                const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
-                const firebaseScript = overlay.querySelector('#ce-ai-firebase-script').value.trim();
-                if (selProvider.value === 'google' && !apiKey) return alert("API Key를 입력해주세요.");
-                
-                localStorage.setItem('crack_ext_api_provider', selProvider.value);
-                localStorage.setItem('crack_ext_gemini_key', apiKey);
-                localStorage.setItem('crack_ext_firebase_script', firebaseScript);
-                localStorage.setItem('crack_ext_gemini_model', model);
-                localStorage.setItem('crack_ext_turn_count', turns.toString());
-
-                btnGen.disabled = true; btnSave.disabled = true; txtResult.value = "요약 중..."; currentCardIndex = 0; updatePreviewCards();
-                try {
-                    const chatLog = await fetchRecentMessages(turns);
-                    if (!chatLog) throw new Error("내역을 불러올 수 없습니다.");
-                    txtResult.value = (selProvider.value === 'google') ? await callGeminiApi(apiKey, model, chatLog) : await callFirebaseApi(firebaseScript, model, chatLog);
-                } catch (err) { txtResult.value = "오류: " + err.message; } 
-                finally { btnGen.disabled = false; btnSave.disabled = false; btnGen.textContent = "재생성 (리롤)"; updatePreviewCards(); }
-            };
-
-            btnSave.onclick = async (e) => {
-                e.stopPropagation();
-                if (!txtResult.value.trim()) return alert("결과가 비어있습니다.");
-                let errorIndex = parsedCards.findIndex(c => c.title.length > 20 || c.summary.length > 300);
-                if (errorIndex !== -1) { currentCardIndex = errorIndex; updatePreviewCards(); return alert("글자 수 제한 초과 항목이 있습니다."); }
-
-                btnSave.disabled = true;
-                let successCount = 0;
-                for (let i = 0; i < parsedCards.length; i++) {
-                    btnSave.textContent = `추가 중... (${i + 1}/${parsedCards.length})`;
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    if (await apiCall('POST', '/summaries', { type: 'shortTerm', title: parsedCards[i].title, summary: parsedCards[i].summary })) successCount++;
-                }
-                if (successCount > 0) {
-                    showToast(`✅ ${successCount}개의 요약이 장기 기억에 추가되었습니다.`);
-                    overlay.remove();
-                    var dialogEl = document.querySelector('[role="dialog"]');
-                    if (dialogEl) refreshCurrentTab(dialogEl);
-                } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; }
-            };
-        }
-
-        function injectTopHeaderBtn() {
-            const headerContainer = document.querySelector('.absolute.z-\\[5\\] .flex.gap-3.items-center');
-            if (!headerContainer || headerContainer.querySelector('.crack-ext-ai-btn')) return;
-            
-            const btn = document.createElement('button');
-            btn.className = 'crack-ext-ai-btn crack-uni-btn'; 
-            btn.innerHTML = '♥'; // 요약 버튼은 꽉 찬 하트 유지
-            btn.title = 'AI 요약';
-            btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
-            
-            const bmBtn = headerContainer.querySelector('.crack-ext-bm-btn');
-            if (bmBtn) bmBtn.after(btn);
-            else headerContainer.prepend(btn);
-        }
-
-        function inject() { 
-            injectAiStyles(); 
-            injectTopHeaderBtn(); 
-        }
-
-        let timeout;
-        const obs = new MutationObserver(() => {
-            clearTimeout(timeout);
-            timeout = setTimeout(inject, 150);
-        });
-        obs.observe(document.body, { childList: true, subtree: true });
-        
-        setInterval(inject, 2000);
+        }, 500);
     }
 
     // ==========================================
-    // 통합팩 동시 실행 관리 & 에러 핸들링
+    // 모듈 6: 입력창 자동 임시저장
+    // ==========================================
+    function initAutoSaver() {
+        function getRoomId() {
+            const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
+            return match ? match[1] : 'global_room';
+        }
+
+        function getDraftKey() {
+            return 'crack_typing_draft_' + getRoomId();
+        }
+
+        let isRestoredForCurrentRoom = false;
+        let currentRoomId = '';
+
+        function setNativeValue(element, value) {
+            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+            const prototype = Object.getPrototypeOf(element);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+
+            if (valueSetter && valueSetter !== prototypeValueSetter) {
+                prototypeValueSetter.call(element, value);
+            } else {
+                valueSetter.call(element, value);
+            }
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function processAutoSave() {
+            const textarea = document.querySelector('textarea.__chat_input_textarea') || document.querySelector('textarea[placeholder*="메시지"]');
+            if (!textarea) return;
+
+            const newRoomId = getRoomId();
+            if (currentRoomId !== newRoomId) {
+                currentRoomId = newRoomId;
+                isRestoredForCurrentRoom = false;
+                textarea.dataset.draftHooked = 'false';
+            }
+
+            const DRAFT_KEY = getDraftKey();
+
+            if (!isRestoredForCurrentRoom) {
+                const savedDraft = localStorage.getItem(DRAFT_KEY);
+                if (savedDraft && textarea.value.trim() === '') {
+                    setNativeValue(textarea, savedDraft);
+                }
+                isRestoredForCurrentRoom = true;
+            }
+
+            if (textarea.dataset.draftHooked !== 'true') {
+                textarea.dataset.draftHooked = 'true';
+                textarea.addEventListener('input', (e) => {
+                    const text = e.target.value;
+                    if (text.trim() === '') {
+                        localStorage.removeItem(getDraftKey());
+                    } else {
+                        localStorage.setItem(getDraftKey(), text);
+                    }
+                });
+            }
+        }
+        setInterval(processAutoSave, 1000);
+    }
+
+    // ==========================================
+    // 모듈 7: 라디오존데 (외부 우측 배치, 팝업 상향 표시)
+    // ==========================================
+    function initRadiosonde() {
+        const MODELS = [
+            { slug: "claude-opus-4.7", label: "Claude 4.7 Opus", short: "O4.7" },
+            { slug: "claude-opus-4.6", label: "Claude 4.6 Opus", short: "O4.6" },
+            { slug: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet", short: "S4.6" },
+            { slug: "gemini-3-1-pro", label: "Gemini 3.1 Pro", short: "G3.1" },
+            { slug: "gemini-2.5-pro", label: "Gemini 2.5 Pro", short: "G2.5" },
+        ];
+
+        const API_BASE = "https://rs.igx.kr/api/simple/";
+        const POLL_MS = 60 * 1000;
+        const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
+
+        GM_addStyle(`
+            #igx-rs-inline-host {
+                position: absolute; display: flex; align-items: center; gap: 4px;
+                z-index: 998; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+                font-size: 11px; font-weight: 500;
+            }
+            #igx-rs-inline-host * { pointer-events: auto; }
+            
+            .igx-rs-btn { 
+                width: 18px; height: 18px; min-width: 18px; padding: 0; 
+                background: transparent; border: none; color: inherit; cursor: pointer; 
+                opacity: 0.65; border-radius: 4px; display: flex; justify-content: center; align-items: center; 
+            }
+            .igx-rs-btn:hover { background: rgba(128,128,128,0.15); opacity: 1; }
+
+            .igx-rs-barline { display: flex; gap: 4px; align-items: center; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .igx-rs-barline::-webkit-scrollbar { display: none; }
+            
+            .igx-rs-item { 
+                display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px; 
+                border-radius: 999px; background: transparent; border: none; cursor: default; 
+            }
+            .igx-rs-item:hover { background: rgba(128,128,128,0.1); }
+            
+            .igx-rs-dot { width: 6px; height: 6px; border-radius: 50%; }
+            .rs-active { background: #3ddc84; } .rs-degraded { background: #ffd54a; }
+            .rs-impacted { background: #ff5c5c; } .rs-unknown { background: #9aa0a6; }
+            
+            .rs-name { opacity: 1; font-weight: 700; line-height: 1; }
+            .rs-score { font-weight: 900; line-height: 1; }
+            .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
+
+            #igx-rs-settings {
+                display: none; 
+                position: fixed; 
+                z-index: 100001; 
+                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
+                background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
+            }
+            
+            .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+            .igx-rs-set-chk { margin: 0; accent-color: #3ddc84; cursor: pointer; }
+
+            @media (max-width: 600px) {
+                #igx-rs-inline-host { font-size: 11px; }
+            }
+        `);
+
+        let visibility = {};
+        try { visibility = JSON.parse(localStorage.getItem(STORE_KEY_VISIBILITY)) || {}; } catch {}
+        MODELS.forEach(m => { if (visibility[m.slug] === undefined) visibility[m.slug] = true; });
+
+        const host = document.createElement("div"); host.id = "igx-rs-inline-host";
+        
+        const btnSettings = document.createElement("button"); btnSettings.className = "igx-rs-btn"; 
+        btnSettings.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
+        
+        const barline = document.createElement("div"); barline.className = "igx-rs-barline"; barline.textContent = "불러오는 중…";
+
+        const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-rs-btn"; btnRefresh.textContent = "↻"; btnRefresh.style.fontSize = "13px";
+
+        const settings = document.createElement("div"); settings.id = "igx-rs-settings";
+        settings.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; font-size:12px; border-bottom:1px solid rgba(128,128,128,0.2); padding-bottom:4px;">모델 표시 설정</div>`;
+        
+        for (const m of MODELS) {
+            const label = document.createElement("label"); label.className = "igx-rs-set-row";
+            const chk = document.createElement("input"); chk.type = "checkbox"; chk.className = "igx-rs-set-chk"; chk.checked = visibility[m.slug];
+            chk.addEventListener("change", (e) => {
+                visibility[m.slug] = e.target.checked;
+                localStorage.setItem(STORE_KEY_VISIBILITY, JSON.stringify(visibility));
+                renderBarline();
+            });
+            label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
+        }
+
+        document.body.appendChild(settings);
+        host.append(btnSettings, barline, btnRefresh);
+
+        btnSettings.addEventListener("click", e => {
+            e.stopPropagation();
+            if (settings.style.display === 'flex') {
+                settings.style.display = 'none';
+            } else {
+                const rect = btnSettings.getBoundingClientRect();
+                settings.style.right = `${window.innerWidth - rect.right}px`;
+                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; 
+                settings.style.display = 'flex';
+            }
+        });
+        
+        btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
+
+        document.addEventListener("click", e => {
+            if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) {
+                 settings.style.display = 'none';
+            }
+        });
+
+
+        const last = new Map();
+        function renderBarline() {
+            const parts = MODELS.filter(m => visibility[m.slug]).map((m) => {
+                const d = last.get(m.slug) || { status: "unknown", score: "—", lat: "—" };
+                const c = "rs-" + d.status;
+                return `<div class="igx-rs-item" title="${m.label}">
+                    <div class="igx-rs-dot ${c}"></div>
+                    <span class="rs-name">${m.short}</span>
+                    <span class="rs-score">${d.score}</span>
+                    <span class="rs-lat">${d.lat}s</span>
+                </div>`;
+            }).join("");
+            barline.innerHTML = parts || "<span style='opacity:0.6; font-size:11px; padding-left:4px;'>선택 안됨</span>";
+        }
+
+        async function refreshAll() {
+            const results = await Promise.allSettled(MODELS.map(m => new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET", url: API_BASE + encodeURIComponent(m.slug), timeout: 6000, headers: { Accept: "application/json" },
+                    onload: res => { try { resolve(JSON.parse(res.responseText)); } catch(e){ reject(e); } },
+                    onerror: reject, ontimeout: () => reject(new Error("timeout"))
+                });
+            })));
+
+            results.forEach((res, i) => {
+                const m = MODELS[i];
+                if (res.status === "fulfilled" && res.value?.success) {
+                    const d = res.value.data;
+                    const status = d.status || "unknown";
+                    const lat = Number.isFinite(Number(d.latency)) ? (d.latency >= 50 ? d.latency/1000 : d.latency).toFixed(2) : "—";
+                    const score = Number.isFinite(Number(d.score)) ? Math.round(d.score).toString() : "—";
+                    last.set(m.slug, { status, score, lat });
+                } else {
+                    last.set(m.slug, { status: "unknown", score: "—", lat: "—" });
+                }
+            });
+            renderBarline();
+        }
+
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { 
+                text: isDark ? '#888' : '#777',
+                textName: isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.88)',
+                setBg: isDark ? '#282828' : '#fff',
+                setBorder: isDark ? '#444' : '#e5e5e5',
+                setText: isDark ? '#ccc' : '#444'
+            };
+        }
+
+        function ensureAttached() {
+            const textarea = document.querySelector('textarea[placeholder*="메시지"]');
+            if (!textarea) {
+                if (host.parentElement) host.remove();
+                return;
+            }
+            
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
+            if (!container) return;
+
+            if (host.parentElement !== container) {
+                container.appendChild(host);
+                container.style.position = 'relative'; 
+            }
+
+            host.style.position = 'absolute';
+            host.style.top = '-26px';
+            host.style.right = '4px';
+
+            const theme = getThemeColors(textarea);
+            host.style.color = theme.text;
+            host.style.setProperty('--rs-text-name', theme.textName);
+            settings.style.setProperty('--rs-bg', theme.setBg);
+            settings.style.setProperty('--rs-border', theme.setBorder);
+            settings.style.setProperty('--rs-text', theme.setText);
+        }
+
+        setInterval(ensureAttached, 1000);
+        setInterval(refreshAll, POLL_MS);
+        setTimeout(refreshAll, 500);
+    }
+
+    // ==========================================
+    // 통합팩 동시 실행 관리
     // ==========================================
     function startAll() {
-        try { 
-            initBookmarkSystem(); 
-        } catch (e) { 
-            console.error("[ 통합팩 | 북마크 ] ❌ 모듈 오류 발생:", e); 
-        }
-        
-        try { 
-            initKeywordNoteSystem(); 
-        } catch (e) { 
-            console.error("[ 통합팩 | 키워드노트 ] ❌ 모듈 오류 발생:", e); 
-        }
+        setTimeout(() => {
+            try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+        }, 100);
 
-        try { 
-            initAiSummarySystem(); 
-        } catch (e) { 
-            console.error("[ 통합팩 | AI요약 ] ❌ 모듈 오류 발생:", e); 
-        }
+        try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
+        try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+        try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
+        try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
+        try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
     }
 
     if (document.readyState === 'loading') {
