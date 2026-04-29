@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.9.5
-// @description  키워드노트 UI 표시 불가 오류 수정 (ID 추출 및 모달 감지 로직 초강화) + 디테일 완벽 적용
+// @version      4.1.0
+// @description  키워드노트 스캔 범위 축소 (유지턴수 폐지에 맞춰 직전 대화 2개로 스캔 범위 최적화)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -18,6 +18,7 @@
 
     const GLOBAL_ACCENT_COLOR = '#FBA707'; 
     const BORDER_COLOR = '#D6D6D0';
+    const _w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
     // 공통 버튼 CSS
     const UNI_BTN_CSS = `
@@ -144,8 +145,8 @@
                 #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 
                 #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(251,167,7,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(251,167,7,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-move-count { color: #333; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #333; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                #cbm-move-count { color: ${ACCENT_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${ACCENT_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
                 #cbm-move-folder-select { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; padding: 3px 6px; background: #fff; color: #333; height: 24px; }
                 
                 #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box; }
@@ -162,7 +163,7 @@
                 .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
                 .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
                 .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
-                .cbm-item-edit:hover { color: #333; }
+                .cbm-item-edit:hover { color: ${ACCENT_COLOR}; }
                 .cbm-item-folder-tag { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
                 .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
                 .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
@@ -209,7 +210,7 @@
             
             const btn = document.createElement('button');
             btn.className = 'crack-ext-bm-btn crack-uni-btn';
-            btn.innerHTML = `♡`; // 북마크 버튼은 빈 하트
+            btn.innerHTML = `♡`; 
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -691,7 +692,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (에러 무시, ID 추출 초강화, 피드백 디테일 적용)
+    // 모듈 2: 크랙 키워드 노트 (스캔 범위 2개로 최적화)
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
@@ -699,10 +700,9 @@
         const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
         const BORDER_COLOR = '#D6D6D0';
 
-        // 💡 중요: ID 추출 방식을 3중으로 보강 (사이트 URL이 chat으로 바뀌어도 정상 작동)
         function getChatId() {
-            try { if (typeof window.__LoreCore !== 'undefined' && window.__LoreCore.getCurrentChatId) { const o = window.__LoreCore.getCurrentChatId(); if (o) return o; } } catch(e) {}
-            try { if (typeof window.CrackUtil !== 'undefined') { const c = window.CrackUtil.path().chatRoom(); if (c) return c; } } catch(e) {}
+            try { if (typeof _w.CrackUtil !== 'undefined') { const c = _w.CrackUtil.path().chatRoom(); if (c) return c; } } catch(e){}
+            try { if (typeof _w.__LoreCore !== 'undefined' && _w.__LoreCore.getCurrentChatId){ const o = _w.__LoreCore.getCurrentChatId(); if (o) return o; } } catch(e){}
 
             let m = location.pathname.match(/\/(?:chats|chat|episodes)\/[a-f0-9]+\/([a-f0-9]+)/);
             if (m) return m[1];
@@ -712,11 +712,12 @@
         }
 
         function getToken() {
+            try { if (typeof _w.CrackUtil !== 'undefined') { const t = _w.CrackUtil.cookie().getAuthToken(); if (t) return t; } } catch(e){}
             return _capturedToken;
         }
 
-        const _origFetch = window.fetch;
-        window.fetch = async function(...a) {
+        const _origFetch = _w.fetch;
+        _w.fetch = async function(...a) {
             try {
                 const u = typeof a[0] === 'string' ? a[0] : a[0]?.url || '';
                 if (u.includes('crack-api.wrtn.ai') || u.includes('contents-api.wrtn.ai')) {
@@ -777,13 +778,17 @@
             const token = getToken();
             if (!token || !chatId) return false;
             try {
-                const isExtend = Array.from(content).length > 500; 
+                const ta = getPlatformTextarea();
+                let isExt = false;
+                if (ta) isExt = ta.maxLength > 500;
+                else isExt = Array.from(content).length > 500; 
+
                 const url = `https://crack-api.wrtn.ai/crack-gen/v3/chats/${chatId}`;
                 const res = await _origFetch(url, {
                     method: 'PATCH',
                     credentials: 'include',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userNote: { content: content, isExtend: isExtend } })
+                    body: JSON.stringify({ userNote: { content: content, isExtend: isExt } })
                 });
                 return res.ok;
             } catch(e) {
@@ -862,7 +867,7 @@
                 }
                 .ckw-icon-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
                 .ckw-icon-btn.btn-del { color: #888; font-size: 14px; }
-                .ckw-icon-btn.btn-del:hover { color: #666; }
+                .ckw-icon-btn.btn-del:hover { color: #555; }
                 .ckw-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
                 
                 .ckw-kw-body { display: none; padding: 0 12px 12px; border-top: 1px dashed ${BORDER_COLOR}; padding-top: 12px; }
@@ -883,7 +888,6 @@
             document.head.appendChild(s);
         }
 
-        // 현재 글자수 부분만 빨간색으로 표기하는 헬퍼 함수
         function renderCountHTML(len, countDiv) {
             if(len > 500) {
                 countDiv.innerHTML = `( <span style="color:#FF4433;">${len}자</span> / 500자 )`;
@@ -896,7 +900,6 @@
             const data = getNoteData(chatId);
             
             root.innerHTML = `
-                <!-- 상시 노트 아코디언 -->
                 <div class="ckw-kw-item" id="ckw-always-item">
                     <div class="ckw-kw-head">
                         <span class="ckw-caret">></span>
@@ -908,7 +911,6 @@
                     </div>
                 </div>
 
-                <!-- 키워드 노트 리스트 컨테이너 -->
                 <div id="ckw-kw-list"></div>
                 
                 <div style="text-align:center; margin-top:10px;">
@@ -916,7 +918,6 @@
                 </div>
             `;
             
-            // 1. 상시 노트 이벤트
             const alwaysItem = root.querySelector('#ckw-always-item');
             const alwaysHead = alwaysItem.querySelector('.ckw-kw-head');
             const alwaysCaret = alwaysItem.querySelector('.ckw-caret');
@@ -948,7 +949,6 @@
                 debouncedForceSync(chatId);
             };
 
-            // 2. 키워드 노트 리스트 렌더링
             const listDiv = root.querySelector('#ckw-kw-list');
             const renderList = () => {
                 listDiv.innerHTML = '';
@@ -971,7 +971,6 @@
                     
                     const body = document.createElement('div');
                     body.className = 'ckw-kw-body';
-                    // 이름과 키워드 너비를 1:1로 정확히 분할 (flex: 1 적용)
                     body.innerHTML = `
                         <div style="display: flex; gap: 8px; margin-bottom: 6px;">
                             <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}" style="flex: 1; margin: 0;">
@@ -1055,7 +1054,6 @@
             };
             renderList();
 
-            // 추가 버튼 이벤트
             root.querySelector('.ckw-add-btn').onclick = () => {
                 if(!data.keywords) data.keywords = [];
                 data.keywords.push({ id: 'kw_'+Date.now(), name: '새 키워드', triggers: [], content: '' });
@@ -1081,7 +1079,6 @@
             const chatId = getChatId(); if (!chatId) return;
             const ta = modal.getElementsByTagName('textarea')[0]; if (!ta) return;
 
-            // 원본 텍스트에리어 비활성화(읽기 전용 모드)
             ta.readOnly = true;
             ta.style.minHeight = '160px'; 
             ta.style.maxHeight = '30vh'; 
@@ -1108,7 +1105,15 @@
             return false;
         }
 
+        // 💡 중요 포인트: maxCount를 2로 축소하여 (이전 AI 응답 + 이전 유저 입력 등 2개)만 스캔하도록 설정
         async function fetchLastMessagesForScan(chatId) {
+            try {
+                if (typeof _w.CrackUtil !== 'undefined') {
+                    const items = await _w.CrackUtil.chatRoom().extractLogs(chatId, { maxCount: 2 });
+                    if (Array.isArray(items)) return items.map(m => m.content || '').join(' \n ');
+                }
+            } catch(e) {}
+            
             const token = getToken();
             if (!token || !chatId) return "";
             try {
@@ -1164,8 +1169,8 @@
             }
         }
 
-        const _origSend = window.WebSocket.prototype.send;
-        window.WebSocket.prototype.send = function(wsData) {
+        const _origSend = _w.WebSocket.prototype.send;
+        _w.WebSocket.prototype.send = function(wsData) {
             const ws = this;
             if (typeof wsData === 'string' && wsData.length > 10) {
                 if (!_capturedToken && wsData.startsWith('40')) {
@@ -1209,9 +1214,7 @@
         }
 
         injectStyles();
-        // 💡 중요: 간헐적으로 옵저버가 놓치는 현상 방지를 위해 1초마다 자동 체크 (안정성 보장)
         setInterval(setupKW, 1000); 
-        
         const obs = new MutationObserver(() => setupKW());
         obs.observe(document.body, { childList: true, subtree: true });
     }
