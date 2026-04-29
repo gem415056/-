@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         크랙 7 in 1 통합팩 (V5.6.1 UI 및 팝업 수정)
+// @name         크랙 7 in 1 통합팩 (V5.6.2 UI 및 팝업 수정)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.6.1
+// @version      5.6.2
 // @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
@@ -311,7 +311,6 @@
             if (document.getElementById('info-display-base-style')) return;
             const style = document.createElement('style');
             style.id = 'info-display-base-style';
-            // 외부 좌측 배치 CSS (top/left는 js에서 컨트롤)
             style.textContent = `
             #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
             #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
@@ -381,11 +380,9 @@
                 container.style.position = 'relative';
             }
 
-            // 외부 좌측 상단으로 완벽 배치
             counterBadge.style.top = '-26px';
             counterBadge.style.left = '4px';
 
-            // 과거 버전에서 입력창을 넓히던 강제 스타일 제거 (원래 크기로 복구)
             textarea.style.removeProperty('padding-top');
             textarea.style.removeProperty('min-height');
         }
@@ -485,20 +482,25 @@
             // 1. 턴수 표시
             html += `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
 
-            // 2. 총 크래커 표시 (색상 및 불투명도 변경됨)
+            // 2. 총 크래커 표시
             const crackerCount = getCrackerCount();
             if (crackerCount !== null) {
                 html += `<span class="my-counter-separator">|</span>`;
                 html += `<div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
             }
 
-            // 3. 소모 크래커 표시 (마이너스 기호 제거됨)
+            // 3. 소모 크래커 표시 (숫자만 볼드, '개'는 일반 폰트)
             html += `<span class="my-counter-separator">|</span>`;
-            let cumText = '...';
+            let cumNum = '...';
             let anim = '';
-            if (isCalculatingCumulative) { anim = 'pulse-anim'; }
-            else { cumText = `${lastConsumed}개`; } // [수정] '개' 추가
-            html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumText}</span></div>`;
+            let suffix = '';
+            if (isCalculatingCumulative) { 
+                anim = 'pulse-anim'; 
+            } else { 
+                cumNum = `${lastConsumed}`; 
+                suffix = '개'; 
+            }
+            html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumNum}</span>${suffix}</div>`;
 
             if (html !== lastRenderedText) {
                 textSpan.innerHTML = html;
@@ -721,11 +723,10 @@
             .rs-score { font-weight: 900; line-height: 1; }
             .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
 
-            /* [수정] 팝업창 스타일 변경 */
             #igx-rs-settings {
-                display: none; /* JS로 제어 */
-                position: fixed; /* 화면 전체 기준 위치, 항상 위에 표시 */
-                z-index: 100001; /* 다른 모든 요소 위에 오도록 높은 z-index 부여 */
+                display: none; 
+                position: fixed; 
+                z-index: 100001; 
                 border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
                 flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
                 background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
@@ -766,11 +767,9 @@
             label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
         }
 
-        // [수정] 팝업창을 body에 직접 추가하여 다른 요소에 가려지지 않게 함
         document.body.appendChild(settings);
         host.append(btnSettings, barline, btnRefresh);
 
-        // [수정] 팝업창 토글 및 위치 계산 로직 변경
         btnSettings.addEventListener("click", e => {
             e.stopPropagation();
             if (settings.style.display === 'flex') {
@@ -778,14 +777,13 @@
             } else {
                 const rect = btnSettings.getBoundingClientRect();
                 settings.style.right = `${window.innerWidth - rect.right}px`;
-                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; // 버튼 위 4px 간격
+                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; 
                 settings.style.display = 'flex';
             }
         });
         
         btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
 
-        // [수정] 팝업창 외부 클릭 시 닫기
         document.addEventListener("click", e => {
             if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) {
                  settings.style.display = 'none';
