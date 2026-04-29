@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.6.0
-// @description  AI 요약 UI 위치/높이 조정, 북마크 유지, 키워드노트 전면 개편(유저노트 창 삽입형)
+// @version      3.7.0
+// @description  키워드노트 UI 개편 (아코디언 구조, 테마색 변경, 크기/글자수 표기 등 피드백 반영)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -16,7 +16,10 @@
 (function () {
     'use strict';
 
-    // 공통 버튼 CSS (투명 배경, #E6E6E6 테두리, 하트 텍스트)
+    // 통합팩 공통 강조색 (요청에 따라 전체 강조색을 변경)
+    const GLOBAL_ACCENT_COLOR = '#BAD2CA'; 
+
+    // 공통 버튼 CSS
     const UNI_BTN_CSS = `
         .crack-uni-btn { 
             display: inline-flex; align-items: center; justify-content: center; 
@@ -42,11 +45,11 @@
     `;
 
     // ==========================================
-    // 모듈 1: 크랙 드래그 북마크 & 형광펜 (수정 안함)
+    // 모듈 1: 크랙 드래그 북마크 & 형광펜
     // ==========================================
     function initBookmarkSystem() {
         const FIX_COLORS = ['#F6E19A', '#F2C0C3', '#BCD0D8', '#D5C2DE'];
-        const ACCENT_COLOR = '#FBA707';
+        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
         const DELETE_COLOR = '#FF4433';
         const ICON_EDIT = '✎';
 
@@ -108,7 +111,7 @@
                 mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
                 mark.crack-bm-hl:hover { filter: brightness(0.9); }
                 mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
-                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(251,167,7,0.5); } }
+                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(186,210,202,0.5); } }
                 .crack-bm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2147483647; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
                 .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
                 .cbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -119,7 +122,7 @@
                 .cbm-tabs-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px; }
                 .cbm-tabs { display: flex; gap: 12px; margin-bottom: -13px; }
                 .cbm-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
-                .cbm-tab.active { color: ${ACCENT_COLOR}; border-bottom-color: ${ACCENT_COLOR}; }
+                .cbm-tab.active { color: #333; border-bottom-color: ${ACCENT_COLOR}; }
                 .cbm-color-palette { display: flex; gap: 8px; align-items: center; }
                 .cbm-pal-btn { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
                 .cbm-pal-btn:hover { transform: scale(1.1); }
@@ -128,35 +131,35 @@
                 .cbm-folders::-webkit-scrollbar { height: 4px; }
                 .cbm-folders::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
                 .cbm-ftab { height: 28px; background: #f0f0f0; border: 1px solid #ddd; padding: 0 12px; border-radius: 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; box-sizing: border-box; }
-                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 .cbm-fadd { background: none; border: 1px dashed #aaa; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #666; font-weight: bold; box-sizing: border-box; margin: 0; padding: 0; }
                 .cbm-search-row { display: flex; gap: 5px; margin-bottom: 12px; align-items: stretch; }
                 .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
                 .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
                 #cbm-toggle-move, #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
-                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 
-                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(251,167,7,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(251,167,7,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-move-count { color: ${ACCENT_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${ACCENT_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #eef3f1; padding: 0 12px; border-radius: 8px; border: 1px solid ${ACCENT_COLOR}; min-height: 36px; box-sizing: border-box; }
+                #cbm-move-count { color: #333; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #333; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
                 #cbm-move-folder-select { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; padding: 3px 6px; background: #fff; color: #333; height: 24px; }
                 
                 #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box; }
                 #cbm-del-count { color: ${DELETE_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
                 #cbm-del-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${DELETE_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
                 
-                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: #333; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
                 .cbm-list { flex: 1; overflow-y: auto; padding-right: 4px; }
                 .cbm-item { background: #f9f9f9 !important; border: 1px solid #eee !important; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; position: relative; }
                 .cbm-item:hover { border-color: ${ACCENT_COLOR} !important; }
-                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: rgba(251,167,7,0.05) !important; }
+                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: #f0f5f3 !important; }
                 .cbm-item.selected-delete { border-color: ${DELETE_COLOR} !important; background: rgba(255,68,51,0.05) !important; }
                 .cbm-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
                 .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
                 .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
                 .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
-                .cbm-item-edit:hover { color: ${ACCENT_COLOR}; }
+                .cbm-item-edit:hover { color: #333; }
                 .cbm-item-folder-tag { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
                 .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
                 .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
@@ -168,13 +171,13 @@
                 body[data-theme="dark"] .cbm-tabs-container { border-bottom-color: #444; }
                 body[data-theme="dark"] .cbm-pal-btn.active { border-color: #fff; }
                 body[data-theme="dark"] .cbm-ftab { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 body[data-theme="dark"] .cbm-search { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] #cbm-toggle-move, body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 body[data-theme="dark"] #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 body[data-theme="dark"] .cbm-item { background: #1a1918 !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(251,167,7,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
+                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(186,210,202,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
                 body[data-theme="dark"] .cbm-item.selected-delete { background: rgba(255,68,51,0.15) !important; border-color: ${DELETE_COLOR} !important; }
                 body[data-theme="dark"] .cbm-item-title { color: #F0EFEB !important; }
                 body[data-theme="dark"] .cbm-item-text { color: #aaa !important; }
@@ -273,7 +276,7 @@
                         <div style="display:flex; gap:8px; align-items:center;">
                             <select id="cbm-move-folder-select"></select>
                             <button id="cbm-move-confirm" class="cbm-action-btn-sm" style="background:${ACCENT_COLOR};" title="이동">✔</button>
-                            <button id="cbm-move-cancel" class="cbm-action-btn-sm" style="background:#888;" title="취소">✘</button>
+                            <button id="cbm-move-cancel" class="cbm-action-btn-sm" style="background:#888; color:#fff;" title="취소">✘</button>
                         </div>
                     </div>
                     
@@ -283,8 +286,8 @@
                             <span id="cbm-del-count">0개 선택됨</span>
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button id="cbm-del-confirm" class="cbm-action-btn-sm" style="background:${DELETE_COLOR};" title="삭제">✔</button>
-                            <button id="cbm-del-cancel" class="cbm-action-btn-sm" style="background:#888;" title="취소">✘</button>
+                            <button id="cbm-del-confirm" class="cbm-action-btn-sm" style="background:${DELETE_COLOR}; color:#fff;" title="삭제">✔</button>
+                            <button id="cbm-del-cancel" class="cbm-action-btn-sm" style="background:#888; color:#fff;" title="취소">✘</button>
                         </div>
                     </div>
                     
@@ -647,7 +650,7 @@
             let maxTries = 15, currentTry = 0;
             const loadingToast = document.createElement('div');
             loadingToast.innerHTML = '🔄 북마크 위치 탐색 중...';
-            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#fff; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#333; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
             document.body.appendChild(loadingToast);
 
             const searchLoop = setInterval(() => {
@@ -685,12 +688,13 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (유저노트 모달 삽입형 개편)
+    // 모듈 2: 크랙 키워드 노트 (유저노트 모달 삽입형 개편 - 피드백 적용)
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
-        let currentTab = 'always';
         let syncTimer = null;
+        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
+        const BG_COLOR = '#EAEDE1';
 
         function getChatId() {
             const m = location.pathname.match(/\/(?:chats|episodes)\/[a-f0-9]+\/([a-f0-9]+)/);
@@ -797,62 +801,58 @@
             if (document.getElementById('crack-kw-inline-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-kw-inline-css';
+            // 모달 내 삽입형 UI 스타일 (요청된 컬러테마, 높이 축소/고정, 삭제버튼 등)
             s.textContent = `
                 .ckw-root {
                     margin-top: 14px; padding: 12px;
-                    border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
-                    background: rgba(255,255,255,0.02); font-size: 13px; color: inherit;
+                    border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;
+                    background: ${BG_COLOR} !important; font-size: 13px; color: #333 !important;
                 }
                 .ckw-root * { box-sizing: border-box; }
-                .ckw-header-title { font-weight: bold; font-size: 14px; margin-bottom: 10px; opacity: 0.9; }
-                .ckw-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
-                .ckw-tab { background: none; border: none; color: inherit; opacity: 0.5; cursor: pointer; font-size: 13px; font-weight: bold; padding: 4px 8px; transition: 0.2s; }
-                .ckw-tab:hover { opacity: 0.8; }
-                .ckw-tab.active { opacity: 1; border-bottom: 2px solid #FBA707; color: #FBA707; }
+                
+                .ckw-header-title { 
+                    font-weight: bold; font-size: 15px; margin-bottom: 12px; 
+                    color: ${ACCENT_COLOR}; position: relative; padding-bottom: 6px;
+                    border-bottom: 1px solid #d0d0d0;
+                }
+                .ckw-header-title::after {
+                    content: ''; position: absolute; left: 0; bottom: -1px;
+                    width: 76px; height: 2px; background: ${ACCENT_COLOR};
+                }
 
                 .ckw-ta {
-                    width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
-                    background: rgba(0,0,0,0.25); color: inherit; font-size: 13px; font-family: inherit; resize: vertical;
+                    width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;
+                    background: #fff; color: #333; font-size: 13px; font-family: inherit; 
+                    resize: none !important; height: 192px; line-height: 1.5;
                 }
-                .ckw-ta:focus { outline: none; border-color: rgba(255,255,255,0.3); }
-                .ckw-ta.large { min-height: 240px; line-height: 1.5; }
+                .ckw-ta:focus { outline: none; border-color: ${ACCENT_COLOR}; }
 
                 .ckw-input {
-                    width: 100%; padding: 8px 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
-                    background: rgba(0,0,0,0.25); color: inherit; font-size: 13px; font-family: inherit; margin-bottom: 6px;
+                    width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px;
+                    background: #fff; color: #333; font-size: 13px; font-family: inherit; margin-bottom: 6px;
                 }
-                .ckw-input:focus { outline: none; border-color: rgba(255,255,255,0.3); }
+                .ckw-input:focus { outline: none; border-color: ${ACCENT_COLOR}; }
 
-                .ckw-char-count { text-align: right; font-size: 12px; opacity: 0.7; margin-top: 4px; font-weight: bold; }
+                .ckw-char-count { text-align: right; font-size: 12px; opacity: 0.8; margin-top: 4px; font-weight: bold; }
 
                 .ckw-add-btn {
-                    background: transparent; border: 1px dashed rgba(255,255,255,0.3); border-radius: 6px;
-                    padding: 8px 16px; color: inherit; cursor: pointer; font-size: 13px; font-weight: bold; transition: 0.2s;
+                    background: transparent; border: 1px dashed #aaa; border-radius: 6px;
+                    padding: 8px 16px; color: #333; cursor: pointer; font-size: 13px; font-weight: bold; transition: 0.2s;
                 }
-                .ckw-add-btn:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.5); }
+                .ckw-add-btn:hover { background: rgba(0,0,0,0.05); border-color: #777; }
 
-                .ckw-kw-item { margin-bottom: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 5px; overflow: hidden; transition: 0.2s; }
+                .ckw-kw-item { margin-bottom: 6px; background: #fff; border: 1px solid #ddd; border-radius: 5px; overflow: hidden; transition: 0.2s; }
                 .ckw-kw-head { padding: 10px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; transition: 0.2s; }
-                .ckw-kw-head:hover { background: rgba(255,255,255,0.05); }
+                .ckw-kw-head:hover { background: #f9f9f9; }
                 .ckw-caret { width: 14px; text-align: center; font-size: 12px; opacity: 0.7; font-weight: bold; }
                 .ckw-kw-name { flex: 1; font-weight: bold; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
+                
                 .ckw-kw-actions { display: flex; gap: 4px; }
-                .ckw-icon-btn { background: rgba(255,255,255,0.05); border: 1px solid transparent; color: inherit; border-radius: 4px; padding: 4px 6px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;}
-                .ckw-icon-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+                .ckw-icon-btn { background: #eee; border: 1px solid transparent; color: #333; border-radius: 4px; padding: 4px 6px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;}
+                .ckw-icon-btn:hover { background: #ddd; border-color: #ccc; }
                 .ckw-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-                .ckw-kw-body { display: none; padding: 0 10px 10px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 10px; }
-
-                body[data-theme="light"] .ckw-root { background: #fafafa; border-color: #ddd; color: #333; }
-                body[data-theme="light"] .ckw-ta, body[data-theme="light"] .ckw-input { background: #fff; border-color: #ccc; color: #333; }
-                body[data-theme="light"] .ckw-ta:focus, body[data-theme="light"] .ckw-input:focus { border-color: #FBA707; }
-                body[data-theme="light"] .ckw-add-btn { border-color: #ccc; color: #333; }
-                body[data-theme="light"] .ckw-add-btn:hover { background: #eee; border-color: #888; }
-                body[data-theme="light"] .ckw-kw-item { background: #fff; border-color: #eee; }
-                body[data-theme="light"] .ckw-kw-head:hover { background: #f5f5f5; }
-                body[data-theme="light"] .ckw-icon-btn { background: #eee; color: #333; }
-                body[data-theme="light"] .ckw-icon-btn:hover { background: #ddd; border-color: #ccc; }
-                body[data-theme="light"] .ckw-tabs { border-bottom-color: #ddd; }
+                
+                .ckw-kw-body { display: none; padding: 0 10px 10px; border-top: 1px dashed #eee; padding-top: 10px; }
             `;
             document.head.appendChild(s);
         }
@@ -862,160 +862,168 @@
             
             root.innerHTML = `
                 <div class="ckw-header-title">키워드 노트</div>
-                <div class="ckw-tabs">
-                    <button class="ckw-tab ${currentTab === 'always' ? 'active' : ''}" data-tab="always">상시노트</button>
-                    <button class="ckw-tab ${currentTab === 'keyword' ? 'active' : ''}" data-tab="keyword">키워드노트</button>
+                
+                <!-- 상시 노트 아코디언 -->
+                <div class="ckw-kw-item" id="ckw-always-item">
+                    <div class="ckw-kw-head">
+                        <span class="ckw-caret">></span>
+                        <span class="ckw-kw-name" style="color: #666;">상시 노트</span>
+                    </div>
+                    <div class="ckw-kw-body">
+                        <textarea id="ckw-always-ta" class="ckw-ta" placeholder="키워드가 없을 때 상시로 들어갈 내용"></textarea>
+                        <div class="ckw-char-count" id="ckw-always-count">( 0자 / 500자 )</div>
+                    </div>
                 </div>
-                <div id="ckw-tab-content"></div>
+
+                <!-- 키워드 노트 리스트 컨테이너 -->
+                <div id="ckw-kw-list"></div>
+                
+                <div style="text-align:center; margin-top:12px;">
+                    <button class="ckw-add-btn">➕ 키워드 추가</button>
+                </div>
             `;
             
-            const tabs = root.querySelectorAll('.ckw-tab');
-            tabs.forEach(t => t.onclick = () => {
-                currentTab = t.dataset.tab;
-                renderPanel(root, chatId);
-            });
+            // 1. 상시 노트 이벤트
+            const alwaysItem = root.querySelector('#ckw-always-item');
+            const alwaysHead = alwaysItem.querySelector('.ckw-kw-head');
+            const alwaysBody = alwaysItem.querySelector('.ckw-kw-body');
+            const alwaysCaret = alwaysItem.querySelector('.ckw-caret');
+            const alwaysTa = alwaysItem.querySelector('#ckw-always-ta');
+            const alwaysCount = alwaysItem.querySelector('#ckw-always-count');
 
-            const contentArea = root.querySelector('#ckw-tab-content');
+            alwaysHead.onclick = () => {
+                const isOpen = alwaysBody.style.display === 'block';
+                alwaysBody.style.display = isOpen ? 'none' : 'block';
+                alwaysCaret.textContent = isOpen ? '>' : '⌵';
+            };
+
+            alwaysTa.value = data.alwaysNote || '';
+            const updateAlwaysCount = () => {
+                const len = [...alwaysTa.value].length;
+                alwaysCount.textContent = `( ${len}자 / 500자 )`;
+                if(len > 500) alwaysCount.style.color = '#FF4433';
+                else alwaysCount.style.color = 'inherit';
+            };
+            updateAlwaysCount();
             
-            if (currentTab === 'always') {
-                contentArea.innerHTML = `
-                    <textarea id="ckw-always-ta" class="ckw-ta large" placeholder="키워드가 없을 때 상시로 들어갈 내용"></textarea>
-                    <div class="ckw-char-count" id="ckw-always-count">(0 / 500자)</div>
-                `;
-                const ta = contentArea.querySelector('#ckw-always-ta');
-                const count = contentArea.querySelector('#ckw-always-count');
-                ta.value = data.alwaysNote || '';
-                
-                const updateCount = () => {
-                    const len = [...ta.value].length;
-                    count.textContent = `(${len} / 500자)`;
-                    if(len > 500) count.style.color = '#FF4433';
-                    else count.style.color = 'inherit';
-                };
-                updateCount();
-                
-                ta.oninput = () => {
-                    updateCount();
-                    data.alwaysNote = ta.value;
-                    saveNoteData(chatId, data);
-                    debouncedForceSync(chatId);
-                };
-            } else {
-                const listDiv = document.createElement('div');
-                listDiv.className = 'ckw-kw-list';
-                contentArea.appendChild(listDiv);
+            alwaysTa.oninput = () => {
+                updateAlwaysCount();
+                data.alwaysNote = alwaysTa.value;
+                saveNoteData(chatId, data);
+                debouncedForceSync(chatId);
+            };
 
-                const renderList = () => {
-                    listDiv.innerHTML = '';
-                    if(!data.keywords) data.keywords = [];
-                    data.keywords.forEach((kw, idx) => {
-                        const item = document.createElement('div');
-                        item.className = 'ckw-kw-item';
-                        
-                        const head = document.createElement('div');
-                        head.className = 'ckw-kw-head';
-                        head.innerHTML = `
-                            <span class="ckw-caret">></span>
-                            <span class="ckw-kw-name">${escapeHtml(kw.name) || '이름 없음'}</span>
-                            <div class="ckw-kw-actions">
-                                <button class="ckw-icon-btn btn-up" title="위로" ${idx===0?'disabled':''}>▲</button>
-                                <button class="ckw-icon-btn btn-down" title="아래로" ${idx===data.keywords.length-1?'disabled':''}>▼</button>
-                                <button class="ckw-icon-btn btn-del" style="color:#FF4433;">삭제</button>
-                            </div>
-                        `;
-                        
-                        const body = document.createElement('div');
-                        body.className = 'ckw-kw-body';
-                        body.innerHTML = `
-                            <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}">
-                            <input type="text" class="ckw-input ckw-kw-trig-inp" placeholder="키워드 (쉼표 OR, && AND)" value="${escapeHtml(kw.triggers.join(', '))}  ">
-                            <textarea class="ckw-ta large ckw-kw-cont-ta" placeholder="삽입될 내용">${escapeHtml(kw.content)}</textarea>
-                            <div class="ckw-char-count ckw-kw-count">(0 / 500자)</div>
-                        `;
+            // 2. 키워드 노트 리스트 렌더링
+            const listDiv = root.querySelector('#ckw-kw-list');
+            const renderList = () => {
+                listDiv.innerHTML = '';
+                if(!data.keywords) data.keywords = [];
+                data.keywords.forEach((kw, idx) => {
+                    const item = document.createElement('div');
+                    item.className = 'ckw-kw-item';
+                    
+                    const head = document.createElement('div');
+                    head.className = 'ckw-kw-head';
+                    head.innerHTML = `
+                        <span class="ckw-caret">></span>
+                        <span class="ckw-kw-name">${escapeHtml(kw.name) || '이름 없음'}</span>
+                        <div class="ckw-kw-actions">
+                            <button class="ckw-icon-btn btn-up" title="위로" ${idx===0?'disabled':''}>▲</button>
+                            <button class="ckw-icon-btn btn-down" title="아래로" ${idx===data.keywords.length-1?'disabled':''}>▼</button>
+                            <button class="ckw-icon-btn btn-del" style="color:#FF4433; font-size:13px; font-weight:bold; padding:4px 7px;" title="삭제">✘</button>
+                        </div>
+                    `;
+                    
+                    const body = document.createElement('div');
+                    body.className = 'ckw-kw-body';
+                    // 이름과 키워드 한 줄에 배치 (flex)
+                    body.innerHTML = `
+                        <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                            <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}" style="flex: 1; margin: 0;">
+                            <input type="text" class="ckw-input ckw-kw-trig-inp" placeholder="키워드 (쉼표 OR, && AND)" value="${escapeHtml(kw.triggers.join(', '))}  " style="flex: 2; margin: 0;">
+                        </div>
+                        <textarea class="ckw-ta ckw-kw-cont-ta" placeholder="삽입될 내용">${escapeHtml(kw.content)}</textarea>
+                        <div class="ckw-char-count ckw-kw-count">( 0자 / 500자 )</div>
+                    `;
 
-                        const caret = head.querySelector('.ckw-caret');
-                        head.onclick = (e) => {
-                            if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
-                            const isOpen = body.style.display === 'block';
-                            body.style.display = isOpen ? 'none' : 'block';
-                            caret.textContent = isOpen ? '>' : '⌵';
-                        };
-                        
-                        head.querySelector('.btn-up').onclick = (e) => {
-                            e.stopPropagation();
-                            if (idx > 0) {
-                                const temp = data.keywords[idx-1];
-                                data.keywords[idx-1] = data.keywords[idx];
-                                data.keywords[idx] = temp;
-                                saveNoteData(chatId, data);
-                                renderList(); debouncedForceSync(chatId);
-                            }
-                        };
-                        head.querySelector('.btn-down').onclick = (e) => {
-                            e.stopPropagation();
-                            if (idx < data.keywords.length - 1) {
-                                const temp = data.keywords[idx+1];
-                                data.keywords[idx+1] = data.keywords[idx];
-                                data.keywords[idx] = temp;
-                                saveNoteData(chatId, data);
-                                renderList(); debouncedForceSync(chatId);
-                            }
-                        };
-                        head.querySelector('.btn-del').onclick = (e) => {
-                            e.stopPropagation();
-                            if(confirm("삭제하시겠습니까?")) {
-                                data.keywords.splice(idx, 1);
-                                saveNoteData(chatId, data);
-                                renderList(); debouncedForceSync(chatId);
-                            }
-                        };
-
-                        const nameInp = body.querySelector('.ckw-kw-name-inp');
-                        const trigInp = body.querySelector('.ckw-kw-trig-inp');
-                        const contTa = body.querySelector('.ckw-kw-cont-ta');
-                        const countDiv = body.querySelector('.ckw-kw-count');
-                        const nameSpan = head.querySelector('.ckw-kw-name');
-
-                        const updateCnt = () => {
-                            const len = [...contTa.value].length;
-                            countDiv.textContent = `(${len} / 500자)`;
-                            if(len > 500) countDiv.style.color = '#FF4433';
-                            else countDiv.style.color = 'inherit';
-                        };
-                        updateCnt();
-
-                        const saveKw = () => {
-                            kw.name = nameInp.value.trim();
-                            kw.triggers = trigInp.value.split(',').map(s=>s.trim()).filter(Boolean);
-                            kw.content = contTa.value;
-                            nameSpan.textContent = kw.name || '이름 없음';
+                    const caret = head.querySelector('.ckw-caret');
+                    head.onclick = (e) => {
+                        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
+                        const isOpen = body.style.display === 'block';
+                        body.style.display = isOpen ? 'none' : 'block';
+                        caret.textContent = isOpen ? '>' : '⌵';
+                    };
+                    
+                    head.querySelector('.btn-up').onclick = (e) => {
+                        e.stopPropagation();
+                        if (idx > 0) {
+                            const temp = data.keywords[idx-1];
+                            data.keywords[idx-1] = data.keywords[idx];
+                            data.keywords[idx] = temp;
                             saveNoteData(chatId, data);
-                            debouncedForceSync(chatId);
-                        };
+                            renderList(); debouncedForceSync(chatId);
+                        }
+                    };
+                    head.querySelector('.btn-down').onclick = (e) => {
+                        e.stopPropagation();
+                        if (idx < data.keywords.length - 1) {
+                            const temp = data.keywords[idx+1];
+                            data.keywords[idx+1] = data.keywords[idx];
+                            data.keywords[idx] = temp;
+                            saveNoteData(chatId, data);
+                            renderList(); debouncedForceSync(chatId);
+                        }
+                    };
+                    head.querySelector('.btn-del').onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm("삭제하시겠습니까?")) {
+                            data.keywords.splice(idx, 1);
+                            saveNoteData(chatId, data);
+                            renderList(); debouncedForceSync(chatId);
+                        }
+                    };
 
-                        nameInp.oninput = saveKw;
-                        trigInp.oninput = saveKw;
-                        contTa.oninput = () => { updateCnt(); saveKw(); };
+                    const nameInp = body.querySelector('.ckw-kw-name-inp');
+                    const trigInp = body.querySelector('.ckw-kw-trig-inp');
+                    const contTa = body.querySelector('.ckw-kw-cont-ta');
+                    const countDiv = body.querySelector('.ckw-kw-count');
+                    const nameSpan = head.querySelector('.ckw-kw-name');
 
-                        item.appendChild(head);
-                        item.appendChild(body);
-                        listDiv.appendChild(item);
-                    });
-                };
+                    const updateCnt = () => {
+                        const len = [...contTa.value].length;
+                        countDiv.textContent = `( ${len}자 / 500자 )`;
+                        if(len > 500) countDiv.style.color = '#FF4433';
+                        else countDiv.style.color = 'inherit';
+                    };
+                    updateCnt();
+
+                    const saveKw = () => {
+                        kw.name = nameInp.value.trim();
+                        kw.triggers = trigInp.value.split(',').map(s=>s.trim()).filter(Boolean);
+                        kw.content = contTa.value;
+                        nameSpan.textContent = kw.name || '이름 없음';
+                        saveNoteData(chatId, data);
+                        debouncedForceSync(chatId);
+                    };
+
+                    nameInp.oninput = saveKw;
+                    trigInp.oninput = saveKw;
+                    contTa.oninput = () => { updateCnt(); saveKw(); };
+
+                    item.appendChild(head);
+                    item.appendChild(body);
+                    listDiv.appendChild(item);
+                });
+            };
+            renderList();
+
+            // 추가 버튼 이벤트
+            root.querySelector('.ckw-add-btn').onclick = () => {
+                if(!data.keywords) data.keywords = [];
+                data.keywords.push({ id: 'kw_'+Date.now(), name: '새 키워드', triggers: [], content: '' });
+                saveNoteData(chatId, data);
                 renderList();
-
-                const addWrap = document.createElement('div');
-                addWrap.style.textAlign = 'center';
-                addWrap.style.marginTop = '12px';
-                addWrap.innerHTML = `<button class="ckw-add-btn">➕ 키워드 추가</button>`;
-                addWrap.querySelector('button').onclick = () => {
-                    if(!data.keywords) data.keywords = [];
-                    data.keywords.push({ id: 'kw_'+Date.now(), name: '새 키워드', triggers: [], content: '' });
-                    saveNoteData(chatId, data);
-                    renderList();
-                };
-                contentArea.appendChild(addWrap);
-            }
+            };
         }
 
         function findModal() {
@@ -1035,11 +1043,12 @@
             const chatId = getChatId(); if (!chatId) return;
             const ta = modal.getElementsByTagName('textarea')[0]; if (!ta) return;
 
+            // 원본 텍스트에리어 비활성화(읽기 전용 모드)
             ta.readOnly = true;
             ta.style.minHeight = '160px'; 
             ta.style.maxHeight = '30vh'; 
             ta.style.opacity = '0.85';
-            ta.placeholder = '현재 유저노트. 아래 패널에서 자동 반영되며 직접 수정할 수 없습니다.';
+            ta.placeholder = '현재 유저노트입니다. 아래 패널에서 자동 반영되며 직접 수정할 수 없습니다.';
 
             const root = document.createElement('div');
             root.className = 'ckw-root';
@@ -1163,10 +1172,12 @@
     }
 
     // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 (전면 개편) - (수정 안함)
+    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 
     // ==========================================
     function initAiSummarySystem() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
+        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
+        
         const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
 
 ## 🎯 목적
@@ -1396,16 +1407,16 @@
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
                 
                 .ce-ai-ta { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fafafa !important; color:#222 !important; resize: none; flex: 1; }
-                .ce-ai-ta:focus { outline: 1px solid #FBA707; background: #fff !important; }
+                .ce-ai-ta:focus { outline: 1px solid ${ACCENT_COLOR}; background: #fff !important; }
                 
                 .ce-ai-input { width:100%; height: 36px; padding:0 10px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; }
                 .ce-ai-select { width:100%; height: 36px; padding-left: 10px; padding-right: 28px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; cursor:pointer;}
-                .ce-ai-input:focus, .ce-ai-select:focus { outline: 1px solid #FBA707; background: #fff !important; }
+                .ce-ai-input:focus, .ce-ai-select:focus { outline: 1px solid ${ACCENT_COLOR}; background: #fff !important; }
 
                 .crack-ext-ai-mbtn { padding:10px 20px; border-radius:8px; border:1px solid #ddd !important; background:#eee !important; color:#333 !important; cursor:pointer; font-size:13px; font-weight:600; transition: background 0.2s;}
                 .crack-ext-ai-mbtn:hover { background: #ddd !important; }
-                .crack-ext-ai-mbtn-p { background:#FBA707 !important; color:#fff !important; border-color:#FBA707 !important; }
-                .crack-ext-ai-mbtn-p:hover { filter: brightness(0.9); background: #FBA707 !important;}
+                .crack-ext-ai-mbtn-p { background:${ACCENT_COLOR} !important; color:#333 !important; border-color:${ACCENT_COLOR} !important; }
+                .crack-ext-ai-mbtn-p:hover { filter: brightness(0.9); background: ${ACCENT_COLOR} !important;}
 
                 .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 12px; }
                 .crack-flex-ai-row .fg { flex:1; display:flex; flex-direction:column; }
@@ -1431,7 +1442,7 @@
                 body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn { background: #333 !important; color: #eee !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn:hover { background: #444 !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: #FBA707 !important; color: #fff !important; border-color: #FBA707 !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: ${ACCENT_COLOR} !important; color: #333 !important; border-color: ${ACCENT_COLOR} !important; }
             `;
             document.head.appendChild(s);
         }
