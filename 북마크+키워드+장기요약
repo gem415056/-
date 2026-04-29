@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      3.4.0
+// @version      3.4.1
 // @description  AI 요약 UI 위치/높이 조정, 헤더 버튼 간격 미세 조정
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
@@ -1577,7 +1577,9 @@
                 .ce-ai-close-btn:hover { background: #eee; color: #222; }
                 
                 .ce-ai-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
-                .ce-ai-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-shrink: 0; }
+                .ce-ai-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; flex-shrink: 0; }
+                
+                .ce-ai-footer-right { display: flex; gap: 8px; }
 
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
                 
@@ -1672,10 +1674,7 @@
                 <div class="ce-ai-body">
                     <!-- 메인 뷰 -->
                     <div id="ce-ai-main-view" style="display:flex; flex-direction:column; height:100%;">
-                        <label style="margin-bottom:6px;">
-                            <span>생성 결과</span>
-                            <button id="ce-ai-toggle-settings" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">⚙️ 설정</button>
-                        </label>
+                        <label>생성 결과</label>
                         <div id="ce-ai-preview-container">
                             <div id="ce-ai-card-nav" style="display:none;">
                                 <button id="ce-ai-card-prev">◀</button>
@@ -1736,8 +1735,13 @@
                 </div>
                 
                 <div class="ce-ai-footer">
-                    <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
-                    <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
+                    <div>
+                         <button class="crack-ext-ai-mbtn" id="ce-ai-settings-btn">요약 설정</button>
+                    </div>
+                    <div class="ce-ai-footer-right">
+                        <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
+                        <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
+                    </div>
                 </div>
             </div>`;
 
@@ -1751,6 +1755,7 @@
             const settingsView = overlay.querySelector('#ce-ai-settings-view');
             const txtResult = overlay.querySelector('#ce-ai-result');
             const txtPrompt = overlay.querySelector('#ce-ai-prompt');
+            const footer = overlay.querySelector('.ce-ai-footer');
             
             const previewCards = overlay.querySelector('#ce-ai-preview-cards');
             const cardNav = overlay.querySelector('#ce-ai-card-nav');
@@ -1765,10 +1770,11 @@
                 else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
             };
 
-            overlay.querySelector('#ce-ai-toggle-settings').onclick = (e) => {
+            overlay.querySelector('#ce-ai-settings-btn').onclick = (e) => {
                 e.preventDefault(); e.stopPropagation();
                 mainView.style.display = 'none';
                 settingsView.style.display = 'flex';
+                footer.style.display = 'none';
                 txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
             };
 
@@ -1777,6 +1783,7 @@
                 localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
                 settingsView.style.display = 'none';
                 mainView.style.display = 'flex';
+                footer.style.display = 'flex';
             };
 
             function updatePreviewCards() {
@@ -1816,6 +1823,7 @@
                     localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
                     settingsView.style.display = 'none';
                     mainView.style.display = 'flex';
+                    footer.style.display = 'flex';
                 }
 
                 const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
