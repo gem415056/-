@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.1.2
-// @description  AI 요약 UI/UX 대규모 개선
+// @version      4.1.3
+// @description  AI 요약 UI 개선 및 키워드노트 실시간 동기화/하이라이트 완벽 지원
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -799,7 +799,15 @@
         async function forceSyncUserNote(chatId) {
             if (!chatId) return;
             const data = getNoteData(chatId);
-            const finalNoteText = data.alwaysNote || ""; 
+            const activeId = localStorage.getItem(`Crack_Active_KW_${chatId}`) || 'always';
+            
+            let finalNoteText = data.alwaysNote || ""; 
+            if (activeId !== 'always') {
+                const kw = data.keywords.find(k => k.id === activeId);
+                if (kw) finalNoteText = kw.content;
+                else localStorage.setItem(`Crack_Active_KW_${chatId}`, 'always');
+            }
+            
             const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
             if (isSuccess) writeTextarea(finalNoteText);
         }
@@ -857,7 +865,9 @@
                 }
                 .ckw-kw-head:hover { background: rgba(0,0,0,0.03); }
                 .ckw-caret { width: 14px; text-align: center; font-size: 12px; opacity: 0.7; font-weight: bold; }
-                .ckw-kw-name { flex: 1; font-weight: bold; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
+                
+                .ckw-kw-name { flex: 1; font-weight: normal; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.7; transition: 0.2s; }
+                .ckw-kw-item.is-active .ckw-kw-name { font-weight: bold; opacity: 1; color: inherit; }
                 
                 .ckw-kw-actions { display: flex; gap: 4px; align-items: center; }
                 .ckw-icon-btn { 
@@ -866,8 +876,8 @@
                     height: 24px; min-width: 24px; display: inline-flex; align-items: center; justify-content: center;
                 }
                 .ckw-icon-btn:hover { background: rgba(0,0,0,0.08); color: #333; }
-                .ckw-icon-btn.btn-del { color: #888; font-size: 14px; }
-                .ckw-icon-btn.btn-del:hover { color: #555; }
+                .ckw-icon-btn.btn-del { color: #D6D6D0 !important; font-size: 14px; }
+                .ckw-icon-btn.btn-del:hover { color: #FF4433 !important; }
                 .ckw-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
                 
                 .ckw-kw-body { display: none; padding: 0 12px 12px; border-top: 1px dashed ${BORDER_COLOR}; padding-top: 12px; }
@@ -884,6 +894,8 @@
                 body[data-theme="dark"] .ckw-add-btn { border-color: #42413D !important; }
                 body[data-theme="dark"] .ckw-add-btn:hover { background: rgba(255,255,255,0.05) !important; border-color: ${ACCENT_COLOR} !important; }
                 body[data-theme="dark"] .ckw-icon-btn:hover { background: rgba(255,255,255,0.1) !important; color: #eee !important; }
+                body[data-theme="dark"] .ckw-icon-btn.btn-del { color: #888 !important; }
+                body[data-theme="dark"] .ckw-icon-btn.btn-del:hover { color: #FF4433 !important; }
             `;
             document.head.appendChild(s);
         }
@@ -896,14 +908,24 @@
             }
         }
 
+        function updateActiveUI() {
+            const chatId = getChatId();
+            if (!chatId) return;
+            const activeId = localStorage.getItem(`Crack_Active_KW_${chatId}`) || 'always';
+            document.querySelectorAll('.ckw-kw-item').forEach(item => {
+                if (item.dataset.id === activeId) item.classList.add('is-active');
+                else item.classList.remove('is-active');
+            });
+        }
+
         function renderPanel(root, chatId) {
             const data = getNoteData(chatId);
             
             root.innerHTML = `
-                <div class="ckw-kw-item" id="ckw-always-item">
+                <div class="ckw-kw-item" id="ckw-always-item" data-id="always">
                     <div class="ckw-kw-head">
                         <span class="ckw-caret">></span>
-                        <span class="ckw-kw-name" style="color: inherit; opacity: 0.7;">상시 노트</span>
+                        <span class="ckw-kw-name">상시 노트</span>
                     </div>
                     <div class="ckw-kw-body">
                         <textarea id="ckw-always-ta" class="ckw-ta" placeholder="키워드가 없을 때 상시로 들어갈 내용"></textarea>
@@ -956,6 +978,7 @@
                 data.keywords.forEach((kw, idx) => {
                     const item = document.createElement('div');
                     item.className = 'ckw-kw-item';
+                    item.dataset.id = kw.id;
                     
                     const head = document.createElement('div');
                     head.className = 'ckw-kw-head';
@@ -971,7 +994,6 @@
                     
                     const body = document.createElement('div');
                     body.className = 'ckw-kw-body';
-                    // 💡 여기서 kw.triggers.join(', ') 끝에 있던 공백 오타 제거 완료 💡
                     body.innerHTML = `
                         <div style="display: flex; gap: 8px; margin-bottom: 6px;">
                             <input type="text" class="ckw-input ckw-kw-name-inp" placeholder="이름" value="${escapeHtml(kw.name)}" style="flex: 1; margin: 0;">
@@ -1052,6 +1074,7 @@
                     item.appendChild(body);
                     listDiv.appendChild(item);
                 });
+                updateActiveUI();
             };
             renderList();
 
@@ -1153,8 +1176,10 @@
                 
                 if (activeKeyword) {
                     finalNoteText = activeKeyword.content;
+                    localStorage.setItem(`Crack_Active_KW_${chatId}`, activeKeyword.id);
                 } else {
                     finalNoteText = data.alwaysNote || "";
+                    localStorage.setItem(`Crack_Active_KW_${chatId}`, 'always');
                 }
 
                 const isSuccess = await patchUserNoteAPI(chatId, finalNoteText);
@@ -1208,6 +1233,7 @@
             try {
                 const modal = findModal();
                 if (modal) injectIntoModal(modal);
+                updateActiveUI();
             } catch(e) {
                 console.error("[ 통합팩 | 키워드노트 UI 주입 에러 ]", e);
             }
@@ -1662,9 +1688,9 @@
             function updatePreviewCards() {
                 const content = txtResult.value.trim();
                 
-                // 빈 결과 처리 (결과 표시 전)
-                if(!content) { 
-                    previewCards.innerHTML = '<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">이곳에 결과가 표시됩니다.</div></div>';
+                // 빈 결과 또는 요약/오류 중일 때 처리
+                if(!content || content === "요약 중..." || content.startsWith("오류:")) { 
+                    previewCards.innerHTML = `<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">${content === "요약 중..." ? "🔄 요약 중..." : (content.startsWith("오류:") ? escapeHtml(content) : "이곳에 결과가 표시됩니다.")}</div></div>`;
                     cardNav.style.display = 'none'; 
                     parsedCards = []; 
                     return; 
@@ -1676,7 +1702,6 @@
                     let title = blocks[i].trim(), summary = blocks[i+1] ? blocks[i+1].replace(/^[\s\n]*[-*]?\s*/, '').trim() : '';
                     if (title || summary) parsedCards.push({ title, summary });
                 }
-                if (parsedCards.length === 0 && content) parsedCards.push({ title: "수동 요약", summary: content.replace(/^[\s\n]*[-*]?\s*/, '').trim() });
                 
                 if (parsedCards.length === 0) {
                     previewCards.innerHTML = '<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">이곳에 결과가 표시됩니다.</div></div>';
@@ -1699,7 +1724,7 @@
                         <div class="crack-ext-session-title">
                             <div>
                                 <span style="color:#888;">[ </span>
-                                <span style="font-weight:normal;">${escapeHtml(mem.title)}</span>
+                                <span style="font-weight:bold; color:inherit;">${escapeHtml(mem.title)}</span>
                                 <span style="color:#888;"> ]</span>
                             </div>
                             <span class="crack-ext-char-count">
