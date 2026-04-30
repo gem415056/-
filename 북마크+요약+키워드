@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.1.1
-// @description  키워드 입력창 렌더링 시 뒤에 공백 2개가 강제로 붙던 오타 수정
+// @version      4.1.2
+// @description  AI 요약 UI/UX 대규모 개선
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -1454,8 +1454,8 @@
 
                 .crack-ext-ai-modal label { display:flex; font-size:13px; font-weight:600; margin-bottom:6px; color:#333 !important; align-items:center; justify-content:space-between;}
                 
-                .ce-ai-ta { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fafafa !important; color:#222 !important; resize: none; flex: 1; }
-                .ce-ai-ta:focus { outline: 1px solid ${ACCENT_COLOR}; background: #fff !important; }
+                .ce-ai-ta { width:100%; padding:10px 12px; border:1px solid #ddd !important; border-radius:8px; font-size:14px; box-sizing:border-box; font-family:inherit; background-color:#fff !important; color:#222 !important; resize: none; flex: 1; margin: 0; }
+                .ce-ai-ta:focus { outline: 1px solid ${ACCENT_COLOR}; }
                 
                 .ce-ai-input { width:100%; height: 36px; padding:0 10px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; }
                 .ce-ai-select { width:100%; height: 36px; padding-left: 10px; padding-right: 28px; border:1px solid #ddd !important; border-radius:8px; font-size:13px; box-sizing:border-box; background-color:#fafafa !important; color:#222 !important; cursor:pointer;}
@@ -1469,28 +1469,30 @@
                 .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 12px; }
                 .crack-flex-ai-row .fg { flex:1; display:flex; flex-direction:column; }
                 
-                #ce-ai-preview-container { display:flex; flex-direction:column; flex:1; min-height:0; }
-                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 8px; font-size: 13px; font-weight: bold; flex-shrink:0; }
+                #ce-ai-preview-container { display:flex; flex-direction:column; }
+                #ce-ai-preview-cards { margin-bottom: 8px; flex-shrink:0; }
+                #ce-ai-card-nav { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom: 16px; font-size: 13px; font-weight: bold; flex-shrink:0; }
                 #ce-ai-card-nav button { cursor:pointer; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; padding:4px 10px; font-size:12px; transition: background 0.2s; color:#333; }
-                #ce-ai-preview-cards { overflow-y: auto; flex:1; padding-right:4px; }
                 
-                .crack-ext-session-card { background:#f9f9f9 !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; margin-bottom: 10px;}
-                .crack-ext-session-title { font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
-                .crack-ext-session-content { color:#555 !important; line-height:1.4; white-space: pre-wrap; word-break: break-all; }
-                .crack-ext-char-count { font-size:11px; color: #777; }
-                .crack-ext-count-error { color: #e74c3c !important; font-weight:bold; }
+                .crack-ext-session-card { background:#fff !important; border:1px solid #eee !important; border-radius:8px; padding:12px; font-size:13px; height: 160px; display: flex; flex-direction: column; box-sizing: border-box; }
+                .crack-ext-session-title { font-weight:bold; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+                .crack-ext-session-content { color:#555 !important; line-height:1.5; white-space: pre-wrap; word-break: break-all; flex: 1; overflow-y: auto; margin-bottom: 4px; padding-right:4px; }
+                .crack-ext-char-count { font-size:11px; color: #777; font-weight: normal; }
                 
+                /* 다크모드 대응 */
                 body[data-theme="dark"] .crack-ext-ai-modal { background: #242321 !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] .crack-ext-ai-modal-header h3, body[data-theme="dark"] .crack-ext-ai-modal label { color: #F0EFEB !important; }
                 body[data-theme="dark"] .ce-ai-close-btn { color: #aaa; }
                 body[data-theme="dark"] .ce-ai-close-btn:hover { background: #333; color: #fff; }
-                body[data-theme="dark"] .ce-ai-ta, body[data-theme="dark"] .ce-ai-input, body[data-theme="dark"] .ce-ai-select { background: #141413 !important; color: #F0EFEB !important; border-color: #42413D !important; }
+                body[data-theme="dark"] .ce-ai-ta { background: #141413 !important; color: #F0EFEB !important; border-color: #42413D !important; }
+                body[data-theme="dark"] .ce-ai-input, body[data-theme="dark"] .ce-ai-select { background: #141413 !important; color: #F0EFEB !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .ce-ai-ta:focus, body[data-theme="dark"] .ce-ai-input:focus, body[data-theme="dark"] .ce-ai-select:focus { background: #1a1918 !important; }
                 body[data-theme="dark"] .crack-ext-session-card { background: #1a1918 !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn { background: #333 !important; color: #eee !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn:hover { background: #444 !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: ${ACCENT_COLOR} !important; color: #fff !important; border-color: ${ACCENT_COLOR} !important; }
+                body[data-theme="dark"] #ce-ai-card-nav button { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
             `;
             document.head.appendChild(s);
         }
@@ -1544,24 +1546,20 @@
                 
                 <div class="ce-ai-body">
                     <!-- 메인 뷰 -->
-                    <div id="ce-ai-main-view" style="display:flex; flex-direction:column; height:100%;">
-                        <label>생성 결과</label>
+                    <div id="ce-ai-main-view" style="display:flex; flex-direction:column; flex:1; min-height:0;">
                         <div id="ce-ai-preview-container">
+                            <div id="ce-ai-preview-cards"></div>
                             <div id="ce-ai-card-nav" style="display:none;">
                                 <button id="ce-ai-card-prev">◀</button>
                                 <span id="ce-ai-card-page">1 / 1</span>
                                 <button id="ce-ai-card-next">▶</button>
                             </div>
-                            <div id="ce-ai-preview-cards"></div>
                         </div>
-                        <textarea id="ce-ai-result" class="ce-ai-ta" style="flex:1; margin-top:12px;" placeholder="결과가 여기에 표시됩니다. (수동 편집 가능)"></textarea>
+                        <textarea id="ce-ai-result" class="ce-ai-ta" placeholder="이곳에서 결과를 편집할 수 있습니다. (수동 편집 가능)"></textarea>
                     </div>
                     
                     <!-- 설정 뷰 -->
-                    <div id="ce-ai-settings-view" style="display:none; flex-direction:column; height:100%;">
-                        <div style="text-align:right; margin-bottom:8px;">
-                            <button id="ce-ai-toggle-back" style="font-size:12px; background:none; border:1px solid #ddd; padding:4px 8px; border-radius:4px; cursor:pointer;">돌아가기</button>
-                        </div>
+                    <div id="ce-ai-settings-view" style="display:none; flex-direction:column; flex:1;">
                         <div class="crack-flex-ai-row">
                             <div class="fg" style="flex: 1.2;">
                                 <label>API</label>
@@ -1609,7 +1607,7 @@
                     <div>
                          <button class="crack-ext-ai-mbtn" id="ce-ai-settings-btn">요약 설정</button>
                     </div>
-                    <div class="ce-ai-footer-right">
+                    <div class="ce-ai-footer-right" id="ce-ai-footer-right">
                         <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
                         <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
                     </div>
@@ -1626,7 +1624,8 @@
             const settingsView = overlay.querySelector('#ce-ai-settings-view');
             const txtResult = overlay.querySelector('#ce-ai-result');
             const txtPrompt = overlay.querySelector('#ce-ai-prompt');
-            const footer = overlay.querySelector('.ce-ai-footer');
+            const btnSettings = overlay.querySelector('#ce-ai-settings-btn');
+            const footerRight = overlay.querySelector('#ce-ai-footer-right');
             
             const previewCards = overlay.querySelector('#ce-ai-preview-cards');
             const cardNav = overlay.querySelector('#ce-ai-card-nav');
@@ -1641,25 +1640,35 @@
                 else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
             };
 
-            overlay.querySelector('#ce-ai-settings-btn').onclick = (e) => {
+            btnSettings.onclick = (e) => {
                 e.preventDefault(); e.stopPropagation();
-                mainView.style.display = 'none';
-                settingsView.style.display = 'flex';
-                footer.style.display = 'none';
-                txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-            };
-
-            overlay.querySelector('#ce-ai-toggle-back').onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
-                settingsView.style.display = 'none';
-                mainView.style.display = 'flex';
-                footer.style.display = 'flex';
+                if (mainView.style.display === 'none') {
+                    // 메인 화면으로 돌아가기
+                    localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
+                    settingsView.style.display = 'none';
+                    mainView.style.display = 'flex';
+                    footerRight.style.display = 'flex';
+                    btnSettings.textContent = '요약 설정';
+                } else {
+                    // 설정 화면으로 진입
+                    mainView.style.display = 'none';
+                    settingsView.style.display = 'flex';
+                    footerRight.style.display = 'none';
+                    btnSettings.textContent = '돌아가기';
+                    txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
+                }
             };
 
             function updatePreviewCards() {
                 const content = txtResult.value.trim();
-                if(!content) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; parsedCards = []; return; }
+                
+                // 빈 결과 처리 (결과 표시 전)
+                if(!content) { 
+                    previewCards.innerHTML = '<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">이곳에 결과가 표시됩니다.</div></div>';
+                    cardNav.style.display = 'none'; 
+                    parsedCards = []; 
+                    return; 
+                }
 
                 const blocks = content.split(/\[(.*?)\]/);
                 parsedCards = [];
@@ -1669,7 +1678,12 @@
                 }
                 if (parsedCards.length === 0 && content) parsedCards.push({ title: "수동 요약", summary: content.replace(/^[\s\n]*[-*]?\s*/, '').trim() });
                 
-                if (parsedCards.length === 0) { previewCards.innerHTML = ''; cardNav.style.display = 'none'; return; }
+                if (parsedCards.length === 0) {
+                    previewCards.innerHTML = '<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">이곳에 결과가 표시됩니다.</div></div>';
+                    cardNav.style.display = 'none'; 
+                    return; 
+                }
+                
                 if (currentCardIndex >= parsedCards.length) currentCardIndex = parsedCards.length - 1;
                 if (currentCardIndex < 0) currentCardIndex = 0;
 
@@ -1677,8 +1691,28 @@
                 spanCardPage.textContent = `${currentCardIndex + 1} / ${parsedCards.length}`;
 
                 let mem = parsedCards[currentCardIndex];
-                let tClass = mem.title.length > 20 ? 'crack-ext-count-error' : '', sClass = mem.summary.length > 300 ? 'crack-ext-count-error' : '';
-                previewCards.innerHTML = '<div class="crack-ext-session-card"><div class="crack-ext-session-title"><div><span style="color:#888;">[ </span>' + escapeHtml(mem.title) + '<span style="color:#888;"> ]</span></div><span class="crack-ext-char-count ' + tClass + '">(' + mem.title.length + '/20자)</span></div><div class="crack-ext-session-content">' + escapeHtml(mem.summary) + '<div style="text-align:right; margin-top:8px;"><span class="crack-ext-char-count ' + sClass + '">(' + mem.summary.length + '/300자)</span></div></div></div>';
+                let tColor = mem.title.length > 20 ? 'color:#FF4433; font-weight:bold;' : 'color:inherit; font-weight:normal;';
+                let sColor = mem.summary.length > 300 ? 'color:#FF4433; font-weight:bold;' : 'color:inherit; font-weight:normal;';
+
+                previewCards.innerHTML = `
+                    <div class="crack-ext-session-card">
+                        <div class="crack-ext-session-title">
+                            <div>
+                                <span style="color:#888;">[ </span>
+                                <span style="font-weight:normal;">${escapeHtml(mem.title)}</span>
+                                <span style="color:#888;"> ]</span>
+                            </div>
+                            <span class="crack-ext-char-count">
+                                ( <span style="${tColor}">${mem.title.length}자</span> / 20자 )
+                            </span>
+                        </div>
+                        <div class="crack-ext-session-content">${escapeHtml(mem.summary)}</div>
+                        <div style="text-align:right; margin-top:8px; flex-shrink:0;">
+                            <span class="crack-ext-char-count">
+                                ( <span style="${sColor}">${mem.summary.length}자</span> / 300자 )
+                            </span>
+                        </div>
+                    </div>`;
             }
 
             txtResult.addEventListener('input', updatePreviewCards);
@@ -1690,11 +1724,13 @@
 
             btnGen.onclick = async (e) => {
                 e.stopPropagation();
+                // 요약 설정 화면에 있을 때 클릭 시 자동 전환용 방어 코드 (버튼은 숨겨져 있지만 안전을 위해 유지)
                 if (settingsView.style.display === 'flex') {
                     localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
                     settingsView.style.display = 'none';
                     mainView.style.display = 'flex';
-                    footer.style.display = 'flex';
+                    footerRight.style.display = 'flex';
+                    btnSettings.textContent = '요약 설정';
                 }
 
                 const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
@@ -1736,6 +1772,9 @@
                     if (dialogEl) refreshCurrentTab(dialogEl);
                 } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; }
             };
+
+            // 처음 열었을 때 안내창 미리 띄우기
+            updatePreviewCards();
         }
 
         function injectTopHeaderBtn() {
