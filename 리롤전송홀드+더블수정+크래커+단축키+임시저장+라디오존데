@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 7 in 1 통합팩 (V5.6.6 UI 유지 / 크래커 로직 업데이트 / 툴바 버튼 추가)
+// @name         크랙 7 in 1 통합팩 (V5.6.6 UI 수정 / 선택삭제 & 오토스크롤 추가 및 턴 계산 변경)
 // @namespace    https://crack.wrtn.ai/
 // @version      5.6.6
-// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 UI 개선, 크래커 계산식 업데이트, 삭제 및 오토스크롤 툴바 내장
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 추가
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -17,7 +17,7 @@
     'use strict';
 
     // ==========================================
-    // 모듈 1: 더블클릭 수정 기능 (수정 안 함)
+    // 모듈 1: 더블클릭 수정 기능
     // ==========================================
     function initDoubleClick() {
         function findMessageContainer(target) {
@@ -81,7 +81,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 리롤 길게 누르기 기능 (수정 안 함)
+    // 모듈 2: 리롤 길게 누르기 기능
     // ==========================================
     function initRerollHold() {
         const HOLD_MS = 600;
@@ -175,7 +175,7 @@
     }
 
     // ==========================================
-    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (수정 안 함)
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능
     // ==========================================
     function initSendHold() {
         const HOLD_MS = 600;
@@ -280,11 +280,9 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (수정: HUD 파일 기준 로직 업데이트, UI는 기존 유지)
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (수정됨: 턴 계산 방식 변경)
     // ==========================================
     function initTurnCracker() {
-        const TIMESTAMPS_CACHE_KEY = 'info_display_chat_timestamps';
-
         const SELECTOR = {
             textarea: 'textarea[placeholder*="메시지"]',
             messageGroup: 'div[data-message-group-id]'
@@ -300,10 +298,8 @@
 
         let counterBadge, textSpan, currentTextarea;
         let updateTimer, observer, lastRenderedText = '';
-        let cachedTurns = null, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId = null;
-        let cachedTotalMessages = null;
-        let cachedCumulative = null, isCalculatingCumulative = false, lastProcessedTurns = -1;
-        let cumulativeRetryDoneForChat = null;
+        let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
+        let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
 
         function start() {
             injectBaseStyle();
@@ -392,33 +388,9 @@
         }
 
         function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
-        
-        function getTimeFromObjectId(objectId) {
-            if (!objectId || objectId.length < 8) return 0;
-            try { return parseInt(objectId.substring(0, 8), 16) * 1000; } catch { return 0; }
-        }
+        function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
 
-        function getCachedTimestamps(chatId) {
-            if (!chatId) return [];
-            try {
-                const data = JSON.parse(localStorage.getItem(TIMESTAMPS_CACHE_KEY) || '{}');
-                return Array.isArray(data[chatId]) ? data[chatId] : [];
-            } catch { return []; }
-        }
-
-        function addTimestampsToCache(chatId, newTimestamps) {
-            if (!chatId || !newTimestamps || !newTimestamps.length) return;
-            try {
-                const data = JSON.parse(localStorage.getItem(TIMESTAMPS_CACHE_KEY) || '{}');
-                const existing = new Set(Array.isArray(data[chatId]) ? data[chatId] : []);
-                let changed = false;
-                for (const ts of newTimestamps) {
-                    if (typeof ts === 'number' && ts > 0 && !existing.has(ts)) { existing.add(ts); changed = true; }
-                }
-                if (changed) { data[chatId] = Array.from(existing); localStorage.setItem(TIMESTAMPS_CACHE_KEY, JSON.stringify(data)); }
-            } catch {}
-        }
-
+        // [수정됨] 턴 계산을 유저 기준으로 변경
         async function fetchRoomData() {
             if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
             try {
@@ -427,48 +399,45 @@
                 const chatId = pathInfo.chatRoom();
                 if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
                 
-                let chatCounts = 0; let totalMessages = 0; const liveTimestamps = [];
-                const iterator = CrackUtil.chatRoom().iterateLogs(chatId);
-                for await (let log of iterator) {
+                let chatCounts = 0; 
+                let totalMessages = 0;
+                const timestamps = [];
+                for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
                     totalMessages++;
-                    if (log.isUser()) { chatCounts++; continue; }
-                    liveTimestamps.push(getTimeFromObjectId(log.id));
+                    if (log.isUser()) {
+                        chatCounts++; // AI턴이 아닌 유저턴을 셉니다
+                        continue;
+                    }
+                    timestamps.push(getTimeFromObjectId(log.id));
                 }
-                const validLive = liveTimestamps.filter(t => t > 0);
-                addTimestampsToCache(chatId, validLive);
-                const cachedAll = getCachedTimestamps(chatId);
-                return { chatCounts, totalMessages, timestamps: cachedAll.length > 0 ? cachedAll : validLive };
+                return { chatCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
             } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
         }
 
         async function fetchCumulativeCrackers(timestamps) {
             const token = extractAccessToken();
             if (!token || timestamps.length === 0) return 0;
-            let totalCalculated = 0, page = 1, lastSafePage = 1, keepGoing = true, isWarping = true, fallbackCount = 0;
-            const oldestMsgTime = Math.min(...timestamps), latestMsgTime = Math.max(...timestamps);
-            
-            while (keepGoing && page <= 500 && fallbackCount < 500) {
-                fallbackCount++;
-                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
+            let total = 0, page = 1, lastSafePage = 1, warping = true;
+            const oldest = Math.min(...timestamps), latest = Math.max(...timestamps);
+            for(let i=0; i < 500; i++) {
+                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (!res.ok) break;
                 const json = await res.json();
                 if (!json?.data?.length) break;
-                
                 const pageLatestTime = new Date(json.data[0].date).getTime();
-                if (isWarping && pageLatestTime < latestMsgTime) { page = lastSafePage + 1; isWarping = false; continue; }
-                if (isWarping && pageLatestTime > latestMsgTime + 600000) { lastSafePage = page; page += 15; continue; }
-                isWarping = false;
-                
+                if (warping && pageLatestTime < latest) { page = lastSafePage + 1; warping = false; continue; }
+                if (warping && pageLatestTime > latest + 600000) { lastSafePage = page; page += 15; continue; }
+                warping = false;
+                let pageDone = false;
                 for (let item of json.data) {
                     const itemTime = new Date(item.date).getTime();
-                    if (itemTime < oldestMsgTime - 120000) { keepGoing = false; break; }
-                    if (String(item.isConsumed) === 'true' && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) {
-                        totalCalculated += (item.product === 'superchat' ? item.balance.total * 35 : item.balance.total);
-                    }
+                    if (itemTime < oldest - 120000) { pageDone = true; break; }
+                    if (item.isConsumed && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) total += item.balance.total * (item.product === 'superchat' ? 35 : 1);
                 }
+                if (pageDone) break;
                 page++; await new Promise(r => setTimeout(r, 40));
             }
-            return totalCalculated;
+            return total;
         }
 
         function updateTurnCount() {
@@ -481,7 +450,7 @@
             let forceCalculate = false;
             
             if (currentChatId && currentChatId !== lastChatId) { 
-                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; cachedCumulative = null; lastProcessedTurns = -1; cumulativeRetryDoneForChat = null;
+                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedTurns = -1; 
             }
 
             if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
@@ -489,6 +458,7 @@
                 fetchRoomData().then(data => {
                     const domTotalMessages = document.querySelectorAll(SELECTOR.messageGroup).length;
                     if (data.chatCounts !== -1) {
+                        // [수정됨] API 로그를 못 읽었을 때 DOM 기준 예비 계산 (floor 사용)
                         if (data.chatCounts === 0 && data.totalMessages <= 0 && domTotalMessages > 0) {
                             cachedTurns = Math.floor(domTotalMessages / 2);
                             cachedTotalMessages = domTotalMessages;
@@ -496,21 +466,28 @@
                             cachedTurns = data.chatCounts;
                             cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
                         }
-
+                        
                         if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
                             lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea);
                             
-                            fetchCumulativeCrackers(data.timestamps).then(async cum => {
-                                if (cum === 0 && cachedTurns >= 2 && currentChatId && cumulativeRetryDoneForChat !== currentChatId) {
-                                    cumulativeRetryDoneForChat = currentChatId;
-                                    await new Promise(r => setTimeout(r, 1000));
-                                    cum = await fetchCumulativeCrackers(data.timestamps);
+                            fetchCumulativeCrackers(data.timestamps).then(cum => {
+                                if (currentChatId) {
+                                    const prevCumKey = 'crack_cum_' + currentChatId;
+                                    const prevCum = parseInt(localStorage.getItem(prevCumKey), 10);
+                                    if (!isNaN(prevCum) && cum > prevCum) {
+                                        lastConsumed = cum - prevCum;
+                                    } else if (isNaN(prevCum) || cum < prevCum) {
+                                        lastConsumed = 0;
+                                    }
+                                    localStorage.setItem(prevCumKey, cum);
                                 }
-                                cachedCumulative = cum;
                                 isCalculatingCumulative = false; renderUpdate(textarea);
                             }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea); });
                         }
-                    } else { cachedTotalMessages = domTotalMessages; cachedTurns = Math.floor(domTotalMessages / 2); }
+                    } else { 
+                        cachedTotalMessages = domTotalMessages;
+                        cachedTurns = Math.floor(domTotalMessages / 2); 
+                    }
                     lastCalculatedTime = Date.now(); isCalculatingTurns = false; renderUpdate(textarea);
                 }).catch(() => { isCalculatingTurns = false; renderUpdate(textarea); });
             } else { renderUpdate(textarea); }
@@ -518,9 +495,7 @@
 
         function renderUpdate(textarea) {
             if (!textSpan) return;
-            let displayTurns = cachedTurns;
-            if (displayTurns === null) displayTurns = Math.floor(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
-            
+            let displayTurns = cachedTurns ?? Math.floor(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
             let html = '';
 
             // 1. 턴수 표시
@@ -533,18 +508,17 @@
                 html += `<div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
             }
 
-            // 3. 소모 크래커 표시
+            // 3. 소모 크래커 표시 (숫자만 볼드, '개'는 일반 폰트)
             html += `<span class="my-counter-separator">|</span>`;
-            let cumNum = '대기 중', anim = '', suffix = '';
-            
-            if (isCalculatingCumulative) {
-                cumNum = '...'; anim = 'pulse-anim';
-            } else if (cachedCumulative !== null) {
-                cumNum = cachedCumulative.toLocaleString(); suffix = '개';
-            } else if (displayTurns <= 0) {
-                cumNum = '0'; suffix = '개';
+            let cumNum = '...';
+            let anim = '';
+            let suffix = '';
+            if (isCalculatingCumulative) { 
+                anim = 'pulse-anim'; 
+            } else { 
+                cumNum = `${lastConsumed}`; 
+                suffix = '개'; 
             }
-            
             html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumNum}</span>${suffix}</div>`;
 
             if (html !== lastRenderedText) {
@@ -557,304 +531,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 선택 삭제 코어 모듈 (툴바에 들어갈 버튼 반환 및 기능 세팅)
-    // ==========================================
-    const selectDeleteCore = (function() {
-        const MESSAGE_SELECTOR = '[data-message-group-id]';
-        const SELECTED_CLASS = 'tm-msg-selected';
-        const ANCHOR_CLASS = 'tm-msg-select-anchor';
-        const MODE_CLASS = 'tm-msg-delete-mode';
-        const CONFIRM_OVERLAY_ID = 'tm-delete-confirm-overlay';
-        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
-        
-        let selectedIds = new Set();
-        let deleteMode = false;
-        let isDeleting = false;
-        let isClearing = false;
-        let longPressTimer = null;
-        let longPressFired = false;
-        let currentChatId = null;
-        let networkHooked = false;
-        let theButton = null;
-
-        const iconTrash = `
-          <span class="tm-delete-icon-wrap" style="position:relative; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
-            <svg class="tm-delete-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 25" width="24px" height="24px" style="display:block; color:inherit;">
-              <path d="M15.44 4.34H8.56v-1.6h6.88zm-6 12v-5.6h1.6v5.6zm3.53-5.6v5.6h1.6v-5.6z"></path>
-              <path fill-rule="evenodd" d="M2.6 5.43v1.6h1.57v13.9c0 .78.63 1.4 1.4 1.4h12.86c.77 0 1.4-.62 1.4-1.4V7.04h1.57v-1.6zm15.63 1.6H5.77v13.7h12.46z" clip-rule="evenodd"></path>
-            </svg>
-            <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px solid hsl(var(--foreground, 0 0% 96%) / 0.22); border-top-color:hsl(var(--foreground, 0 0% 96%) / 0.82); opacity:0; pointer-events:none;"></span>
-          </span>
-        `;
-
-        function injectStyle() {
-            if (document.getElementById('tm-delete-mode-style')) return;
-            const style = document.createElement('style');
-            style.id = 'tm-delete-mode-style';
-            style.textContent = `
-              ${MESSAGE_SELECTOR} { position: relative !important; }
-              .${ANCHOR_CLASS} { position: relative !important; isolation: isolate !important; }
-              .${ANCHOR_CLASS}::after { content: ""; position: absolute; inset: -3px; z-index: 5; pointer-events: none; border-radius: 14px; opacity: 0; background: hsl(var(--foreground, 0 0% 96%) / 0.055); border: 2px solid hsl(var(--foreground, 0 0% 96%) / 0.62); box-shadow: 0 0 0 1px hsl(var(--background, 0 0% 8%) / 0.55), 0 0 0 4px hsl(var(--foreground, 0 0% 96%) / 0.12), inset 0 0 0 9999px hsl(var(--foreground, 0 0% 96%) / 0.035); transition: opacity .12s ease; }
-              body.${MODE_CLASS} ${MESSAGE_SELECTOR}, body.${MODE_CLASS} .${ANCHOR_CLASS} { cursor: pointer !important; }
-              ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}::after, .${ANCHOR_CLASS}.${SELECTED_CLASS}::after { opacity: 1; }
-              ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}, .${ANCHOR_CLASS}.${SELECTED_CLASS} { outline: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.34); outline-offset: 2px; }
-              .tm-btn-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; transform: scale(0.96) !important; }
-              .tm-btn-deleting { opacity: 0.55; pointer-events: none; }
-              .tm-btn-clearing { transform: scale(0.94) !important; }
-              .tm-btn-clearing .tm-clear-spinner { opacity: 1; animation: tm-clear-spin .55s linear infinite; }
-              @keyframes tm-clear-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-              #${CONFIRM_OVERLAY_ID} { position: fixed; inset: 0; z-index: 9999999; background: rgba(0, 0, 0, 0.42); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
-              .tm-delete-confirm-card { width: min(300px, calc(100vw - 40px)); border-radius: 16px; background: hsl(var(--background, 0 0% 10%)); color: hsl(var(--foreground, 0 0% 96%)); border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42); padding: 16px; font-family: Pretendard, -apple-system, system-ui, sans-serif; }
-              .tm-delete-confirm-title { font-size: 15px; font-weight: 800; text-align: center; }
-              .tm-delete-confirm-message { margin-top: 10px; font-size: 13px; color: hsl(var(--foreground, 0 0% 96%) / 0.72); text-align: center; }
-              .tm-delete-confirm-actions { margin-top: 18px; display: flex; justify-content: center; gap: 8px; }
-              .tm-delete-confirm-actions button { height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); background: transparent; color: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-              .tm-delete-confirm-actions button:hover { background: hsl(var(--foreground, 0 0% 96%) / 0.08); }
-              .tm-delete-confirm-ok { color: #ff8080 !important; border-color: rgba(255, 77, 79, 0.45) !important; background: rgba(255, 77, 79, 0.12) !important; }
-            `;
-            document.head.appendChild(style);
-        }
-
-        function extractChatIdFromUrl(url) {
-            const patterns = [/\/chats\/([a-f0-9]{24})(?:\/|$)/i, /"chatId":"([a-f0-9]{24})"/i];
-            for (const pattern of patterns) { const match = url.match(pattern); if (match) return match[1]; }
-            return null;
-        }
-
-        function hookNetwork() {
-            if (networkHooked) return;
-            networkHooked = true;
-            const originalFetch = window.fetch;
-            window.fetch = async function (...args) {
-                try { const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''; const id = extractChatIdFromUrl(url); if (id) currentChatId = id; } catch {}
-                return originalFetch.apply(this, args);
-            };
-            const originalOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-                try { const id = extractChatIdFromUrl(String(url || '')); if (id) currentChatId = id; } catch {}
-                return originalOpen.call(this, method, url, ...rest);
-            };
-        }
-
-        function getMessageId(msg) { return msg?.getAttribute('data-message-group-id'); }
-        function getMessageBubble(msg) {
-            const markdown = msg.querySelector('.wrtn-markdown');
-            return markdown?.closest('[data-rr-compare-nav="1"]') || msg.querySelector('[data-rr-compare-nav="1"]') || markdown?.parentElement || msg;
-        }
-        function markMessageSelected(msg, selected) {
-            if (!(msg instanceof HTMLElement)) return;
-            const bubble = getMessageBubble(msg);
-            bubble.classList.add(ANCHOR_CLASS);
-            msg.classList.toggle(SELECTED_CLASS, selected);
-            bubble.classList.toggle(SELECTED_CLASS, selected);
-        }
-        function scanMessages() { document.querySelectorAll(MESSAGE_SELECTOR).forEach(msg => { const id = getMessageId(msg); if (id) markMessageSelected(msg, selectedIds.has(id)); }); updateButtonState(); }
-        
-        function updateButtonState() {
-            if (!theButton) return;
-            theButton.classList.toggle('tm-btn-active', deleteMode || selectedIds.size > 0);
-            theButton.classList.toggle('tm-btn-deleting', isDeleting);
-            theButton.classList.toggle('tm-btn-clearing', isClearing);
-            if (isDeleting) theButton.title = '삭제 처리 중';
-            else if (isClearing) theButton.title = '선택 해제 중';
-            else if (selectedIds.size > 0) theButton.title = `선택 ${selectedIds.size}개, 클릭하면 삭제 / 0.5초 길게 누르면 전체 해제`;
-            else if (deleteMode) { theButton.title = '삭제 모드 켜짐'; scanMessages(); }
-            else theButton.title = '선택 삭제 모드';
-        }
-        function setDeleteMode(val) { deleteMode = val; document.body.classList.toggle(MODE_CLASS, deleteMode); updateButtonState(); }
-        
-        function clearSelection() {
-            selectedIds.clear();
-            document.querySelectorAll(MESSAGE_SELECTOR).forEach(msg => markMessageSelected(msg, false));
-            document.querySelectorAll(`.${ANCHOR_CLASS}.${SELECTED_CLASS}`).forEach(el => el.classList.remove(SELECTED_CLASS));
-            updateButtonState();
-        }
-
-        async function clearSelectionWithSpinner(closeMode) {
-            if (isClearing) return;
-            isClearing = true; updateButtonState();
-            await new Promise(r => setTimeout(r, 260));
-            clearSelection();
-            if (closeMode) setDeleteMode(false);
-            await new Promise(r => setTimeout(r, 260));
-            isClearing = false; updateButtonState();
-        }
-
-        function blockMessageInteraction(e) {
-            if (!deleteMode || isDeleting) return;
-            if (e.target.closest('#tm-delete-btn')) return;
-            if (e.target.closest(MESSAGE_SELECTOR)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
-        }
-
-        function handleMessageClick(e) {
-            if (!deleteMode || isDeleting) return;
-            if (e.target.closest('#tm-delete-btn')) return;
-            const msg = e.target.closest(MESSAGE_SELECTOR);
-            if (!msg) return;
-            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-            const id = getMessageId(msg);
-            if (!id) return;
-            if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
-            markMessageSelected(msg, selectedIds.has(id));
-            updateButtonState();
-        }
-
-        function openDeleteConfirm(count) {
-            return new Promise(resolve => {
-                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
-                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">메시지 삭제</div><div class="tm-delete-confirm-message">선택한 메시지 <b>${count}</b>개를 삭제할까요?<br>이 작업은 되돌릴 수 없습니다.</div><div class="tm-delete-confirm-actions"><button class="tm-delete-confirm-cancel">취소</button><button class="tm-delete-confirm-ok">삭제</button></div></div>`;
-                document.body.appendChild(overlay);
-                const cleanup = res => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(res); };
-                const onKeyDown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cleanup(false); } if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); cleanup(true); } };
-                overlay.querySelector('.tm-delete-confirm-cancel').onclick = () => cleanup(false);
-                overlay.querySelector('.tm-delete-confirm-ok').onclick = () => cleanup(true);
-                document.addEventListener('keydown', onKeyDown, true);
-            });
-        }
-
-        async function startDeleteFlow() {
-            if (isDeleting) return;
-            const queue = [...selectedIds]; if (queue.length === 0) return;
-            if (!currentChatId) { alert("chatId를 찾지 못했습니다. 페이지를 새로고침해주세요."); updateButtonState(); return; }
-            const ok = await openDeleteConfirm(queue.length);
-            if (!ok) { updateButtonState(); return; }
-            isDeleting = true; setDeleteMode(false); updateButtonState();
-            
-            const token = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1];
-            for (const id of queue) {
-                const msg = document.querySelector(`${MESSAGE_SELECTOR}[data-message-group-id="${id}"]`);
-                try {
-                    await fetch(`${API_BASE}/chats/${currentChatId}/messages/${id}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` }});
-                    selectedIds.delete(id);
-                    if (msg) { markMessageSelected(msg, false); msg.remove(); }
-                } catch (e) { console.error('삭제실패', e); }
-                await new Promise(r => setTimeout(r, 120));
-            }
-            isDeleting = false; setDeleteMode(false); clearSelection(); updateButtonState();
-        }
-
-        function createButton() {
-            injectStyle(); hookNetwork();
-            document.addEventListener('pointerdown', blockMessageInteraction, true);
-            document.addEventListener('click', handleMessageClick, true);
-            document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById(CONFIRM_OVERLAY_ID)) { setDeleteMode(false); clearSelection(); }});
-
-            theButton = document.createElement('button');
-            theButton.id = 'tm-delete-btn';
-            theButton.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
-            theButton.innerHTML = iconTrash;
-            theButton.title = "선택 삭제 모드";
-            theButton.onclick = async (e) => {
-                e.preventDefault(); e.stopPropagation();
-                if (longPressFired) { longPressFired = false; return; }
-                if (isDeleting || isClearing) return;
-                if (!deleteMode) { setDeleteMode(true); return; }
-                if (selectedIds.size === 0) { setDeleteMode(false); return; }
-                await startDeleteFlow();
-            };
-            theButton.onpointerdown = () => { if (isDeleting || isClearing) return; longPressFired = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(async () => { if(selectedIds.size>0){ longPressFired=true; await clearSelectionWithSpinner(true); } }, 500); };
-            theButton.onpointerup = () => clearTimeout(longPressTimer);
-            theButton.onpointerleave = () => clearTimeout(longPressTimer);
-            return theButton;
-        }
-        
-        return { getButton: () => { if(!theButton) createButton(); return theButton; } };
-    })();
-
-    // ==========================================
-    // 모듈 9: 오토스크롤 코어 모듈 (툴바에 들어갈 버튼 반환 및 기능 세팅)
-    // ==========================================
-    const autoScrollCore = (function() {
-        let isRunning = false;
-        let theButton = null;
-        
-        const iconUp = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor" style="display:block; width:16px; height:16px;"><path d="M12 4.586l5.707 5.707-1.414 1.414L12 7.414 7.707 11.707 6.293 10.293 12 4.586zm0 6l5.707 5.707-1.414 1.414L12 13.414 7.707 17.707 6.293 16.293 12 10.586z"></path></svg>';
-        const iconStop = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor" style="display:block; width:16px; height:16px;"><path d="M7 7h10v10H7z"></path></svg>';
-
-        function setButtonActive(active) {
-            if (!theButton) return;
-            if (active) {
-                theButton.innerHTML = iconStop;
-                theButton.title = '로딩 중지';
-                theButton.style.boxShadow = 'inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18)';
-                theButton.style.backgroundColor = 'hsl(var(--accent, 0 0% 18%))';
-                theButton.style.transform = 'scale(0.96)';
-            } else {
-                theButton.innerHTML = iconUp;
-                theButton.title = '과거 채팅 불러오기';
-                theButton.style.boxShadow = '';
-                theButton.style.backgroundColor = '';
-                theButton.style.transform = 'none';
-            }
-        }
-
-        function findScrollContainer() {
-            const MESSAGE_SELECTOR = 'div[data-message-group-id]';
-            const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
-            if (messages.length > 0) {
-                const candidates = new Set();
-                const samples = [messages[0], messages[Math.floor(messages.length / 2)], messages[messages.length - 1]].filter(Boolean);
-                for (const msg of samples) {
-                    let current = msg.parentElement;
-                    while (current && current !== document.body) {
-                        const style = window.getComputedStyle(current);
-                        if (current.scrollHeight > current.clientHeight + 2 && current.clientHeight > 300 && ['auto', 'scroll'].includes(style.overflowY)) {
-                            candidates.add(current);
-                        }
-                        current = current.parentElement;
-                    }
-                }
-                const sorted = Array.from(candidates).sort((a, b) => b.querySelectorAll(MESSAGE_SELECTOR).length - a.querySelectorAll(MESSAGE_SELECTOR).length);
-                if (sorted[0]) return sorted[0];
-            }
-            return window;
-        }
-
-        function scrollToTop(target) {
-            if (target === window) { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; return; }
-            target.scrollTop = 0;
-            try { target.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
-        }
-
-        async function doScroll() {
-            let prevSignature = ''; let atTopStableCount = 0; let stuckCount = 0;
-            while (isRunning) {
-                const target = findScrollContainer();
-                scrollToTop(target);
-                await new Promise(r => setTimeout(r, 500));
-                
-                const msgs = Array.from(document.querySelectorAll('div[data-message-group-id]'));
-                const scrollTop = target === window ? (window.scrollY || document.documentElement.scrollTop) : target.scrollTop;
-                const signature = [msgs.length, msgs[0]?.getAttribute('data-message-group-id'), target.scrollHeight || 0].join('|');
-                
-                if (scrollTop <= 2 && signature === prevSignature) atTopStableCount++; else atTopStableCount = 0;
-                if (signature === prevSignature) stuckCount++; else stuckCount = 0;
-                
-                prevSignature = signature;
-                if (atTopStableCount >= 3 || stuckCount >= 10) break;
-            }
-            isRunning = false; setButtonActive(false);
-        }
-
-        function createButton() {
-            document.addEventListener('keydown', e => { if (e.key === 'Escape') { isRunning = false; setButtonActive(false); }});
-            theButton = document.createElement('button');
-            theButton.id = 'tm-scroll-btn';
-            theButton.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
-            theButton.onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                if (isRunning) { isRunning = false; setButtonActive(false); }
-                else { isRunning = true; setButtonActive(true); doScroll(); }
-            };
-            setButtonActive(false);
-            return theButton;
-        }
-        
-        return { getButton: () => { if(!theButton) createButton(); return theButton; } };
-    })();
-
-    // ==========================================
-    // 모듈 5: 고정형 RP 대사 입력 도우미 (+ 선택삭제, 오토스크롤 버튼 통합, 추천답변 유지 및 기본버튼 숨김)
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 렌더링)
     // ==========================================
     function initRPToolbar() {
         const fixedTools = [
@@ -867,12 +544,14 @@
             { icon: '♧', pre: '(OOC：', suf: ')' }
         ];
 
-        // 방어막(igx-keep-btn)이 없는 기본 버튼들만 모조리 숨기는 CSS
+        // 방어막(igx-keep-btn)이 없는 기본 버튼들만 모조리 숨기는 마법(CSS) 주입
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
             style.id = 'hide-native-rp-btns';
             style.textContent = `
-                .igx-rp-container-hooked > button:not(.igx-keep-btn) { display: none !important; }
+                .igx-rp-container-hooked > button:not(.igx-keep-btn) {
+                    display: none !important;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -880,15 +559,20 @@
         function wrapText(prefix, suffix) {
             const textarea = document.querySelector('textarea');
             if (!textarea) return;
+
             const start = textarea.selectionStart || 0;
             const end = textarea.selectionEnd || 0;
             const text = textarea.value || '';
             const selected = text.substring(start, end);
-            const newValue = text.substring(0, start) + prefix + selected + suffix + text.substring(end, text.length);
-            
+            const before = text.substring(0, start);
+            const after = text.substring(end, text.length);
+
+            const newValue = before + prefix + selected + suffix + after;
+
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
             nativeInputValueSetter.call(textarea, newValue);
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
             textarea.focus();
             textarea.setSelectionRange(start + prefix.length, end + prefix.length);
         }
@@ -898,15 +582,21 @@
             btn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
             btn.type = "button";
             btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
+
             btn.onmousedown = (e) => e.preventDefault();
-            btn.onclick = (e) => { e.preventDefault(); onClick(); };
+            btn.onclick = (e) => {
+                e.preventDefault();
+                onClick();
+            };
             return btn;
         }
 
         document.addEventListener('keydown', (e) => {
             if (!e.altKey) return;
             let idx = -1;
-            const code = e.code; const key = e.key;
+            const code = e.code;
+            const key = e.key;
+
             if (code === 'Backquote' || key === '`' || key === '~') idx = 0;
             else if (code === 'Digit1' || key === '1') idx = 1;
             else if (code === 'Digit2' || key === '2') idx = 2;
@@ -914,46 +604,74 @@
             else if (code === 'Digit4' || key === '4') idx = 4;
             else if (code === 'Digit5' || key === '5') idx = 5;
             else if (code === 'Digit6' || key === '6') idx = 6;
+
             if (idx !== -1) {
                 const textarea = document.querySelector('textarea');
                 if (document.activeElement === textarea) {
-                    if (fixedTools[idx]) { e.preventDefault(); e.stopPropagation(); wrapText(fixedTools[idx].pre, fixedTools[idx].suf); }
+                    if (fixedTools[idx]) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        wrapText(fixedTools[idx].pre, fixedTools[idx].suf);
+                    }
                 }
             }
         }, true);
 
         setInterval(() => {
+            // 하단 툴바 구역 찾기
             const btnContainer = document.querySelector('.flex.items-center.space-x-2');
             if (!btnContainer) return;
-            if (!btnContainer.classList.contains('igx-rp-container-hooked')) btnContainer.classList.add('igx-rp-container-hooked');
 
+            // 우리가 심어둔 CSS가 먹히도록 구역에 이름표 달아주기
+            if (!btnContainer.classList.contains('igx-rp-container-hooked')) {
+                btnContainer.classList.add('igx-rp-container-hooked');
+            }
+
+            // '추천답변' 버튼을 찾아서 얘한테만 방어막(igx-keep-btn) 씌워주기 (안 숨겨지게)
             const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
-            if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) recommendBtn.classList.add('igx-keep-btn');
+            if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) {
+                recommendBtn.classList.add('igx-keep-btn');
+            }
 
+            // 내 커스텀 툴바가 없으면 집어넣기
             if (!document.getElementById('custom-rp-tools')) {
                 const toolWrapper = document.createElement('div');
                 toolWrapper.id = 'custom-rp-tools';
-                toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
+                // [수정됨] 입력창 기준, 우측 전송버튼과의 간격 대칭을 위해 marginLeft = 12px 추가
+                toolWrapper.className = 'flex items-center space-x-1 mr-1';
+                toolWrapper.style.marginLeft = '12px';
 
-                // 1. 선택삭제 버튼 부착
-                toolWrapper.appendChild(selectDeleteCore.getButton());
-                
-                // 2. 오토스크롤 버튼 부착 (그리고 우측 마진을 8px로 설정해 두 배 띄움)
-                const scrollBtn = autoScrollCore.getButton();
-                scrollBtn.style.marginRight = '8px';
-                toolWrapper.appendChild(scrollBtn);
+                // 1. 선택삭제 버튼 껍데기 추가 (이벤트는 모듈 8에서 처리)
+                const selectDeleteBtn = document.createElement('button');
+                selectDeleteBtn.id = 'tm-message-delete-mode-btn';
+                selectDeleteBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+                toolWrapper.appendChild(selectDeleteBtn);
 
-                // 3. 기존 RP 고정 도우미 버튼들 부착
-                fixedTools.forEach((t) => { toolWrapper.appendChild(createToolButton(t.icon, () => wrapText(t.pre, t.suf))); });
+                // 2. 오토스크롤 버튼 껍데기 추가 (이벤트는 모듈 9에서 처리)
+                const autoScrollBtn = document.createElement('button');
+                autoScrollBtn.id = 'turbo-scroll-btn';
+                autoScrollBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+                autoScrollBtn.style.marginRight = "4px"; // [수정됨] ★과의 간격을 두 배로 넓히기 위해 우측 마진 추가 (기본 gap 4px + 마진 4px = 8px)
+                toolWrapper.appendChild(autoScrollBtn);
 
-                if (recommendBtn) btnContainer.insertBefore(toolWrapper, recommendBtn);
-                else btnContainer.appendChild(toolWrapper);
+                // 3. 기존 커스텀 툴바 버튼 추가
+                fixedTools.forEach((t) => {
+                    const btn = createToolButton(t.icon, () => wrapText(t.pre, t.suf));
+                    toolWrapper.appendChild(btn);
+                });
+
+                // 추천답변 버튼이 있으면 그 옆에 예쁘게 배치, 없으면 그냥 끝에 붙임
+                if (recommendBtn) {
+                    btnContainer.insertBefore(toolWrapper, recommendBtn);
+                } else {
+                    btnContainer.appendChild(toolWrapper);
+                }
             }
         }, 500);
     }
 
     // ==========================================
-    // 모듈 6: 입력창 자동 임시저장 (수정 안 함)
+    // 모듈 6: 입력창 자동 임시저장
     // ==========================================
     function initAutoSaver() {
         function getRoomId() {
@@ -1018,7 +736,7 @@
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (외부 우측 배치, 팝업 상향 표시) (수정 안 함)
+    // 모듈 7: 라디오존데 (외부 우측 배치, 팝업 상향 표시)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -1132,7 +850,6 @@
             }
         });
 
-
         const last = new Map();
         function renderBarline() {
             const parts = MODELS.filter(m => visibility[m.slug]).map((m) => {
@@ -1223,6 +940,428 @@
     }
 
     // ==========================================
+    // 모듈 8: 메시지 선택 삭제 (단축키 모듈에서 만든 버튼에 기능 씌우기)
+    // ==========================================
+    function initSelectDelete() {
+        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
+        const MESSAGE_SELECTOR = '[data-message-group-id]';
+        const BTN_ID = 'tm-message-delete-mode-btn';
+        const STYLE_ID = 'tm-message-delete-mode-style';
+        const CONFIRM_OVERLAY_ID = 'tm-delete-confirm-overlay';
+
+        const SELECTED_CLASS = 'tm-msg-selected';
+        const ANCHOR_CLASS = 'tm-msg-select-anchor';
+        const MODE_CLASS = 'tm-msg-delete-mode';
+        const LONG_PRESS_MS = 500;
+
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        const iconTrash = `
+            <span class="tm-delete-icon-wrap" style="position:relative; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
+                <svg class="tm-delete-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 25" width="24px" height="24px" style="display:block; color:inherit;">
+                <path d="M15.44 4.34H8.56v-1.6h6.88zm-6 12v-5.6h1.6v5.6zm3.53-5.6v5.6h1.6v-5.6z"></path>
+                <path fill-rule="evenodd" d="M2.6 5.43v1.6h1.57v13.9c0 .78.63 1.4 1.4 1.4h12.86c.77 0 1.4-.62 1.4-1.4V7.04h1.57v-1.6zm15.63 1.6H5.77v13.7h12.46z" clip-rule="evenodd"></path>
+                </svg>
+                <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px solid hsl(var(--foreground,0 0% 96%)/0.22); border-top-color:hsl(var(--foreground,0 0% 96%)/0.82); opacity:0; pointer-events:none;"></span>
+            </span>
+        `;
+
+        let selectedIds = new Set();
+        let deleteMode = false;
+        let isDeleting = false;
+        let isClearing = false;
+        let lastUrlKey = location.origin + location.pathname + location.search;
+
+        let longPressTimer = null;
+        let longPressFired = false;
+        let currentChatId = null;
+        let networkHooked = false;
+
+        function injectStyle() {
+            if (document.getElementById(STYLE_ID)) return;
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+            ${MESSAGE_SELECTOR} { position: relative !important; }
+            .${ANCHOR_CLASS} { position: relative !important; isolation: isolate !important; }
+            .${ANCHOR_CLASS}::after {
+                content: ""; position: absolute; inset: -3px; z-index: 5; pointer-events: none; border-radius: 14px; opacity: 0;
+                background: hsl(var(--foreground, 0 0% 96%) / 0.055); border: 2px solid hsl(var(--foreground, 0 0% 96%) / 0.62);
+                box-shadow: 0 0 0 1px hsl(var(--background, 0 0% 8%) / 0.55), 0 0 0 4px hsl(var(--foreground, 0 0% 96%) / 0.12), inset 0 0 0 9999px hsl(var(--foreground, 0 0% 96%) / 0.035);
+                transition: opacity .12s ease;
+            }
+            body.${MODE_CLASS} ${MESSAGE_SELECTOR}, body.${MODE_CLASS} .${ANCHOR_CLASS} { cursor: pointer !important; }
+            ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}::after, .${ANCHOR_CLASS}.${SELECTED_CLASS}::after { opacity: 1; }
+            ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}, .${ANCHOR_CLASS}.${SELECTED_CLASS} { outline: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.34); outline-offset: 2px; }
+            #${BTN_ID}.tm-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; transform: scale(0.96) !important; }
+            #${BTN_ID}.tm-deleting { opacity: 0.55; pointer-events: none; }
+            #${BTN_ID}.tm-clearing { transform: scale(0.94) !important; }
+            #${BTN_ID}.tm-clearing .tm-clear-spinner { opacity: 1; animation: tm-clear-spin .55s linear infinite; }
+            @keyframes tm-clear-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            #${CONFIRM_OVERLAY_ID} { position: fixed; inset: 0; z-index: 9999999; background: rgba(0, 0, 0, 0.42); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+            #${CONFIRM_OVERLAY_ID} * { box-sizing: border-box; }
+            .tm-delete-confirm-card { width: min(300px, calc(100vw - 40px)); border-radius: 16px; background: hsl(var(--background, 0 0% 10%)); color: hsl(var(--foreground, 0 0% 96%)); border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42); padding: 16px; font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+            .tm-delete-confirm-title { font-size: 15px; font-weight: 800; line-height: 1.35; text-align: center; }
+            .tm-delete-confirm-message { margin-top: 10px; font-size: 13px; line-height: 1.55; color: hsl(var(--foreground, 0 0% 96%) / 0.72); text-align: center; }
+            .tm-delete-confirm-message b { color: hsl(var(--foreground, 0 0% 96%)); font-weight: 850; }
+            .tm-delete-confirm-actions { margin-top: 18px; display: flex; justify-content: center; align-items: center; gap: 8px; }
+            .tm-delete-confirm-actions button { height: 34px; min-width: 68px; padding: 0 14px; border-radius: 999px; border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); background: transparent; color: inherit; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; text-align: center; }
+            .tm-delete-confirm-actions button:hover { background: hsl(var(--foreground, 0 0% 96%) / 0.08); }
+            .tm-delete-confirm-ok { color: #ff8080 !important; border-color: rgba(255, 77, 79, 0.45) !important; background: rgba(255, 77, 79, 0.12) !important; }
+            .tm-delete-confirm-ok:hover { background: rgba(255, 77, 79, 0.18) !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function getMessageBubble(msg) {
+            const markdown = msg.querySelector('.wrtn-markdown');
+            const compareBubble = markdown?.closest('[data-rr-compare-nav="1"]');
+            if (compareBubble instanceof HTMLElement) return compareBubble;
+            const rrBubble = msg.querySelector('[data-rr-compare-nav="1"]');
+            if (rrBubble instanceof HTMLElement) return rrBubble;
+            const markdownParent = markdown?.parentElement;
+            if (markdownParent instanceof HTMLElement) return markdownParent;
+            return msg;
+        }
+
+        function markMessageSelected(msg, selected) {
+            if (!(msg instanceof HTMLElement)) return;
+            const bubble = getMessageBubble(msg);
+            bubble.classList.add(ANCHOR_CLASS);
+            msg.classList.toggle(SELECTED_CLASS, selected);
+            bubble.classList.toggle(SELECTED_CLASS, selected);
+        }
+
+        function scanMessages() {
+            const currentUrlKey = location.origin + location.pathname + location.search;
+            if (currentUrlKey !== lastUrlKey) {
+                lastUrlKey = currentUrlKey;
+                selectedIds.clear();
+                deleteMode = false;
+                isDeleting = false;
+                isClearing = false;
+                currentChatId = null;
+                document.body.classList.remove(MODE_CLASS);
+            }
+            [...document.querySelectorAll(MESSAGE_SELECTOR)].filter(el => el instanceof HTMLElement).forEach(msg => {
+                const id = msg?.getAttribute('data-message-group-id');
+                if (id) markMessageSelected(msg, selectedIds.has(id));
+            });
+            updateButtonState();
+        }
+
+        function updateButtonState() {
+            const btn = document.getElementById(BTN_ID);
+            if (!btn) return;
+            btn.classList.toggle('tm-active', deleteMode || selectedIds.size > 0);
+            btn.classList.toggle('tm-deleting', isDeleting);
+            btn.classList.toggle('tm-clearing', isClearing);
+            if (isDeleting) btn.title = '삭제 처리 중';
+            else if (isClearing) btn.title = '선택 해제 중';
+            else if (selectedIds.size > 0) btn.title = `선택 ${selectedIds.size}개, 클릭하면 한 번에 삭제 / 0.5초 길게 누르면 전체 해제`;
+            else if (deleteMode) btn.title = '삭제 모드 켜짐';
+            else btn.title = '삭제 모드';
+        }
+
+        function setDeleteMode(value) {
+            deleteMode = value;
+            document.body.classList.toggle(MODE_CLASS, deleteMode);
+            updateButtonState();
+        }
+
+        function clearSelection() {
+            selectedIds.clear();
+            [...document.querySelectorAll(MESSAGE_SELECTOR)].filter(el => el instanceof HTMLElement).forEach(msg => markMessageSelected(msg, false));
+            document.querySelectorAll(`.${ANCHOR_CLASS}.${SELECTED_CLASS}`).forEach(el => el.classList.remove(SELECTED_CLASS));
+            updateButtonState();
+        }
+
+        async function clearSelectionWithSpinner(closeMode = false) {
+            if (isClearing) return;
+            isClearing = true; updateButtonState();
+            await sleep(260);
+            clearSelection();
+            if (closeMode) setDeleteMode(false);
+            await sleep(260);
+            isClearing = false; updateButtonState();
+        }
+
+        function blockMessageInteraction(e) {
+            if (!deleteMode || isDeleting) return;
+            if (e.target.closest(`#${BTN_ID}`) || e.target.closest('[data-tm-toolbar-button="1"]')) return;
+            if (e.target.closest(MESSAGE_SELECTOR)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+        }
+
+        function handleMessageClick(e) {
+            if (!deleteMode || isDeleting) return;
+            if (e.target.closest(`#${BTN_ID}`) || e.target.closest('[data-tm-toolbar-button="1"]')) return;
+            const msg = e.target.closest(MESSAGE_SELECTOR);
+            if (!msg) return;
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+            const id = msg.getAttribute('data-message-group-id');
+            if (!id) return;
+            const willSelect = !selectedIds.has(id);
+            if (willSelect) selectedIds.add(id); else selectedIds.delete(id);
+            markMessageSelected(msg, willSelect);
+            updateButtonState();
+        }
+
+        async function handleDeleteButtonClick(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (longPressFired) { longPressFired = false; return; }
+            if (isDeleting || isClearing) return;
+            if (!deleteMode) { setDeleteMode(true); return; }
+            if (selectedIds.size === 0) { setDeleteMode(false); return; }
+            await startDeleteFlow();
+        }
+
+        function handleDeleteButtonPointerDown() {
+            if (isDeleting || isClearing) return;
+            longPressFired = false; clearTimeout(longPressTimer);
+            longPressTimer = setTimeout(async () => { if (selectedIds.size <= 0) return; longPressFired = true; await clearSelectionWithSpinner(true); }, LONG_PRESS_MS);
+        }
+
+        function handleDeleteButtonPointerEnd() { clearTimeout(longPressTimer); longPressTimer = null; }
+
+        async function startDeleteFlow() {
+            if (isDeleting) return;
+            const queue = [...selectedIds]; if (queue.length === 0) return;
+            const chatId = findChatId();
+            if (!chatId) { await openNoticeModal('삭제 불가', 'chatId를 찾지 못했습니다. 새로고침 후 시도하세요.'); updateButtonState(); return; }
+            const ok = await openDeleteConfirm(queue.length);
+            if (!ok) { updateButtonState(); return; }
+            isDeleting = true; setDeleteMode(false); updateButtonState();
+            const failed = [];
+            for (const id of queue) {
+                const msg = document.querySelector(`${MESSAGE_SELECTOR}[data-message-group-id="${id}"]`);
+                try {
+                    await deleteMessageFromServer(chatId, id);
+                    selectedIds.delete(id);
+                    if (msg) { markMessageSelected(msg, false); msg.remove(); }
+                } catch (err) { failed.push(id); }
+                await sleep(120);
+            }
+            isDeleting = false; setDeleteMode(false);
+            if (failed.length > 0) await openNoticeModal('일부 삭제 실패', `성공: ${queue.length - failed.length}개\n실패: ${failed.length}개`);
+            clearSelection(); updateButtonState();
+        }
+
+        function openDeleteConfirm(count) {
+            return new Promise(resolve => {
+                const old = document.getElementById(CONFIRM_OVERLAY_ID); if (old) old.remove();
+                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
+                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">메시지 삭제</div><div class="tm-delete-confirm-message">선택한 메시지 <b>${count}</b>개를 삭제할까요?<br>이 작업은 되돌릴 수 없습니다.</div><div class="tm-delete-confirm-actions"><button type="button" class="tm-delete-confirm-cancel">취소</button><button type="button" class="tm-delete-confirm-ok">삭제</button></div></div>`;
+                document.body.appendChild(overlay);
+                const cleanup = result => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(result); };
+                const onKeyDown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(false); } if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(true); } };
+                overlay.querySelector('.tm-delete-confirm-cancel').addEventListener('click', () => cleanup(false)); overlay.querySelector('.tm-delete-confirm-ok').addEventListener('click', () => cleanup(true));
+                overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(false); }); document.addEventListener('keydown', onKeyDown, true); overlay.querySelector('.tm-delete-confirm-ok')?.focus();
+            });
+        }
+
+        function openNoticeModal(title, message) {
+            return new Promise(resolve => {
+                const old = document.getElementById(CONFIRM_OVERLAY_ID); if (old) old.remove();
+                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
+                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">${title}</div><div class="tm-delete-confirm-message">${message.replace(/\n/g, '<br>')}</div><div class="tm-delete-confirm-actions"><button type="button" class="tm-delete-confirm-ok">확인</button></div></div>`;
+                document.body.appendChild(overlay);
+                const cleanup = () => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(); };
+                const onKeyDown = e => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(); } };
+                overlay.querySelector('.tm-delete-confirm-ok').addEventListener('click', cleanup); overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+                document.addEventListener('keydown', onKeyDown, true); overlay.querySelector('.tm-delete-confirm-ok')?.focus();
+            });
+        }
+
+        function extractChatIdFromUrl(url) {
+            if (!url || typeof url !== 'string') return null;
+            for (const pattern of [/\/chats\/([a-f0-9]{24})(?:\/|$)/i, /"chatId":"([a-f0-9]{24})"/i]) {
+                const match = url.match(pattern); if (match) return match[1];
+            } return null;
+        }
+
+        function setCurrentChatId(chatId) { if (chatId) currentChatId = chatId; }
+
+        function hookNetworkForChatId() {
+            if (networkHooked) return; networkHooked = true;
+            const originalFetch = window.fetch;
+            window.fetch = async function (...args) {
+                try { const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''; const detected = extractChatIdFromUrl(url); if (detected) setCurrentChatId(detected); } catch {}
+                return originalFetch.apply(this, args);
+            };
+            const originalOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+                try { const detected = extractChatIdFromUrl(String(url || '')); if (detected) setCurrentChatId(detected); } catch {}
+                return originalOpen.call(this, method, url, ...rest);
+            };
+        }
+
+        function findChatId() {
+            if (typeof CrackUtil !== 'undefined') return CrackUtil.path().chatRoom();
+            if (currentChatId) return currentChatId;
+            const match1 = document.documentElement.innerHTML.match(/\/chats\/([a-f0-9]{24})\/messages/i); if (match1) { setCurrentChatId(match1[1]); return match1[1]; }
+            return null;
+        }
+
+        function getCookie(name) { const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)')); return match ? decodeURIComponent(match[1]) : null; }
+
+        async function deleteMessageFromServer(chatId, messageId) {
+            const token = getCookie('access_token');
+            const headers = { accept: 'application/json, text/plain, */*', platform: 'web', 'wrtn-locale': 'ko-KR' };
+            if (token) headers.authorization = `Bearer ${token}`;
+            const wrtnId = getCookie('__w_id'); if (wrtnId) headers['x-wrtn-id'] = wrtnId;
+            const mixpanelId = getCookie('Mixpanel-Distinct-Id'); if (mixpanelId) headers['mixpanel-distinct-id'] = mixpanelId;
+            const res = await fetch(`${API_BASE}/chats/${chatId}/messages/${messageId}`, { method: 'DELETE', credentials: 'include', headers });
+            if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
+            return await res.json().catch(() => ({}));
+        }
+
+        hookNetworkForChatId();
+        injectStyle();
+        document.addEventListener('pointerdown', blockMessageInteraction, true);
+        document.addEventListener('mousedown', blockMessageInteraction, true);
+        document.addEventListener('mouseup', blockMessageInteraction, true);
+        document.addEventListener('touchstart', blockMessageInteraction, true);
+        document.addEventListener('contextmenu', blockMessageInteraction, true);
+        document.addEventListener('click', handleMessageClick, true);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (document.getElementById(CONFIRM_OVERLAY_ID)) return; setDeleteMode(false); clearSelection(); } });
+
+        setInterval(() => {
+            const btn = document.getElementById(BTN_ID);
+            if (btn && !btn.dataset.hooked) {
+                btn.dataset.hooked = 'true';
+                btn.innerHTML = iconTrash;
+                btn.onpointerdown = handleDeleteButtonPointerDown;
+                btn.onpointerup = handleDeleteButtonPointerEnd;
+                btn.onpointerleave = handleDeleteButtonPointerEnd;
+                btn.onpointercancel = handleDeleteButtonPointerEnd;
+                btn.onclick = handleDeleteButtonClick;
+                updateButtonState();
+            }
+            if (isClearing || isDeleting) updateButtonState();
+            scanMessages();
+            findChatId();
+        }, 1000);
+    }
+
+    // ==========================================
+    // 모듈 9: 채팅방 자동 스크롤 (단축키 모듈에서 만든 버튼에 기능 씌우기)
+    // ==========================================
+    function initAutoScroll() {
+        const WAIT_TIME = 500;
+        const TOP_THRESHOLD = 2;
+        const AT_TOP_STABLE_LIMIT = 3;
+        const MAX_STUCK_COUNT = 10;
+        const BTN_ID = 'turbo-scroll-btn';
+        const STYLE_ID = 'turbo-scroll-style';
+        const MESSAGE_SELECTOR = 'div[data-message-group-id]';
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        const iconUp = 'M12 4.586l5.707 5.707-1.414 1.414L12 7.414 7.707 11.707 6.293 10.293 12 4.586zm0 6l5.707 5.707-1.414 1.414L12 13.414 7.707 17.707 6.293 16.293 12 10.586z';
+        const iconStop = 'M7 7h10v10H7z';
+
+        let isRunning = false;
+
+        function injectStyle() {
+            if (document.getElementById(STYLE_ID)) return;
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = `
+                #${BTN_ID}.tm-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; }
+                #${BTN_ID} svg, #${BTN_ID} svg path { color: inherit !important; fill: currentColor !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function updateIcon(btn, path) {
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor"><path d="${path}"></path></svg>`;
+        }
+
+        function setButtonActive(btn, active) {
+            if (!btn) return;
+            btn.classList.toggle('tm-active', active);
+            if (active) { updateIcon(btn, iconStop); btn.title = '로딩 중지'; btn.style.setProperty('transform', 'scale(0.96)', 'important'); } 
+            else { updateIcon(btn, iconUp); btn.title = '과거 채팅 불러오기'; btn.style.setProperty('transform', 'none', 'important'); }
+        }
+
+        function isScrollableMessageContainer(el) {
+            if (!el || el === document.body || el === document.documentElement) return false;
+            const style = window.getComputedStyle(el);
+            return (el.scrollHeight > el.clientHeight + 2 && el.clientHeight > 300 && ['auto', 'scroll'].includes(style.overflowY) && el.querySelectorAll(MESSAGE_SELECTOR).length > 0);
+        }
+
+        function findScrollContainer() {
+            const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
+            if (messages.length > 0) {
+                const candidates = new Set();
+                const sampleMessages = [messages[0], messages[Math.floor(messages.length / 2)], messages[messages.length - 1]].filter(Boolean);
+                for (const msg of sampleMessages) {
+                    let current = msg.parentElement;
+                    while (current && current !== document.body) { if (isScrollableMessageContainer(current)) candidates.add(current); current = current.parentElement; }
+                }
+                const sorted = Array.from(candidates).sort((a, b) => {
+                    const aMsg = a.querySelectorAll(MESSAGE_SELECTOR).length, bMsg = b.querySelectorAll(MESSAGE_SELECTOR).length;
+                    if (aMsg !== bMsg) return bMsg - aMsg;
+                    return (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight);
+                });
+                if (sorted[0]) return sorted[0];
+            }
+            const fallback = Array.from(document.querySelectorAll('div')).filter(isScrollableMessageContainer).sort((a, b) => {
+                const aMsg = a.querySelectorAll(MESSAGE_SELECTOR).length, bMsg = b.querySelectorAll(MESSAGE_SELECTOR).length;
+                if (aMsg !== bMsg) return bMsg - aMsg;
+                return (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight);
+            });
+            return fallback[0] || window;
+        }
+
+        function scrollToTop(target) {
+            if (target === window) { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; return; }
+            target.scrollTop = 0;
+            try { target.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+            try { target.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -1500 })); } catch {}
+        }
+
+        function getSnapshot(target) {
+            const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
+            return { count: messages.length, firstId: messages[0]?.getAttribute('data-message-group-id') || '', lastId: messages[messages.length - 1]?.getAttribute('data-message-group-id') || '', scrollHeight: target === window ? Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0) : target.scrollHeight || 0, scrollTop: target === window ? window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0 : target.scrollTop || 0 };
+        }
+
+        function getContentSignature(snapshot) { return snapshot ? [snapshot.count, snapshot.firstId, snapshot.lastId, snapshot.scrollHeight].join('|') : ''; }
+
+        async function handleClick(e) {
+            e.preventDefault(); e.stopPropagation();
+            const btn = e.currentTarget;
+            if (isRunning) { isRunning = false; setButtonActive(btn, false); return; }
+            isRunning = true; setButtonActive(btn, true);
+            let prevSignature = '', atTopStableCount = 0, stuckCount = 0;
+            while (isRunning) {
+                const target = findScrollContainer();
+                scrollToTop(target);
+                await sleep(WAIT_TIME);
+                const snapshot = getSnapshot(target);
+                const signature = getContentSignature(snapshot);
+                if (snapshot.scrollTop <= TOP_THRESHOLD && signature === prevSignature) atTopStableCount++; else atTopStableCount = 0;
+                if (signature === prevSignature) stuckCount++; else stuckCount = 0;
+                prevSignature = signature;
+                if (atTopStableCount >= AT_TOP_STABLE_LIMIT || stuckCount >= MAX_STUCK_COUNT) break;
+            }
+            isRunning = false; setButtonActive(btn, false);
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { isRunning = false; const btn = document.getElementById(BTN_ID); if (btn) setButtonActive(btn, false); } });
+        injectStyle();
+
+        setInterval(() => {
+            const btn = document.getElementById(BTN_ID);
+            if (btn && !btn.dataset.hooked) {
+                btn.dataset.hooked = 'true';
+                updateIcon(btn, iconUp);
+                btn.onclick = handleClick;
+                setButtonActive(btn, isRunning);
+            }
+        }, 1000);
+    }
+
+    // ==========================================
     // 통합팩 동시 실행 관리
     // ==========================================
     function startAll() {
@@ -1236,6 +1375,10 @@
         try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
         try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
         try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
+        
+        // 새롭게 추가된 모듈 호출
+        try { initSelectDelete(); } catch (e) { console.error("[ 통합팩 ] 선택삭제 모듈 오류:", e); }
+        try { initAutoScroll();   } catch (e) { console.error("[ 통합팩 ] 오토스크롤 모듈 오류:", e); }
     }
 
     if (document.readyState === 'loading') {
