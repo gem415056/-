@@ -1,0 +1,1247 @@
+// ==UserScript==
+// @name         크랙 7 in 1 통합팩 (V5.6.6 UI 유지 / 크래커 로직 업데이트 / 툴바 버튼 추가)
+// @namespace    https://crack.wrtn.ai/
+// @version      5.6.6
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 UI 개선, 크래커 계산식 업데이트, 삭제 및 오토스크롤 툴바 내장
+// @author       User & Gemini (수정)
+// @match        https://crack.wrtn.ai/*
+// @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
+// @connect      rs.igx.kr
+// @run-at       document-idle
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // ==========================================
+    // 모듈 1: 더블클릭 수정 기능 (수정 안 함)
+    // ==========================================
+    function initDoubleClick() {
+        function findMessageContainer(target) {
+            let el = target;
+            while (el && el !== document.body) {
+                if (el.hasAttribute('data-message-group-id')) return el;
+                el = el.parentElement;
+            }
+            return null;
+        }
+
+        function getReactProps(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactProps'));
+            return key ? el[key] : null;
+        }
+
+        function firePointerClick(el) {
+            const opts = { bubbles: true, cancelable: true };
+            el.dispatchEvent(new PointerEvent('pointerover', opts));
+            el.dispatchEvent(new PointerEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+            el.dispatchEvent(new PointerEvent('pointerdown', opts));
+            el.dispatchEvent(new PointerEvent('pointerup', opts));
+            el.click();
+        }
+
+        function tryReactEditClick(container) {
+            const trigger = container.querySelector('div[aria-haspopup="menu"]');
+            if (!trigger) return false;
+
+            const style = document.createElement('style');
+            style.id = 'igx-hide-dropdown';
+            style.textContent = `[data-radix-popper-content-wrapper], [role="menu"] { opacity: 0 !important; pointer-events: none !important; }`;
+            document.head.appendChild(style);
+
+            firePointerClick(trigger);
+
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const item = Array.from(document.querySelectorAll('div[role="menuitem"]')).find(el => el.textContent.includes('수정'));
+                if (item) {
+                    clearInterval(timer);
+                    const props = getReactProps(item);
+                    if (props?.onSelect) props.onSelect();
+                    else firePointerClick(item);
+                    setTimeout(() => style.remove(), 100);
+                } else if (Date.now() - start > 1500) {
+                    clearInterval(timer);
+                    style.remove();
+                }
+            }, 30);
+            return true;
+        }
+
+        document.addEventListener('dblclick', (e) => {
+            const container = findMessageContainer(e.target);
+            if (!container) return;
+            window.getSelection().removeAllRanges();
+            tryReactEditClick(container);
+        });
+    }
+
+    // ==========================================
+    // 모듈 2: 리롤 길게 누르기 기능 (수정 안 함)
+    // ==========================================
+    function initRerollHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #rr-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #rr-progress-ring.active { display: block; }
+            #rr-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #rr-progress-ring circle.fill { fill: none; stroke: #e8302a; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'rr-progress-ring';
+        ring.innerHTML = `<svg id="rr-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isRerollBtn(el) {
+            if (!el) return false;
+            if (el.id === 'exp-reroll-btn') return true;
+            return el.querySelector?.('svg path')?.getAttribute('d')?.startsWith('M3.8 12a8.2') ?? false;
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left}px`; ring.style.top  = `${rect.top}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        document.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        });
+
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', (e) => {
+            const btn = e.target.closest('button, [id="exp-reroll-btn"]');
+            if (!isRerollBtn(btn)) return;
+            e.preventDefault(); showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (수정 안 함)
+    // ==========================================
+    function initSendHold() {
+        const HOLD_MS = 600;
+        let isConfirmed = false;
+        let holdTimer = null;
+
+        const css = `
+            #sh-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; }
+            #sh-progress-ring.active { display: block; }
+            #sh-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; }
+            #sh-progress-ring circle.fill { fill: none; stroke: #f97316; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }
+        `;
+        const styleEl = document.createElement('style');
+        styleEl.textContent = css;
+        document.head.appendChild(styleEl);
+
+        const ring = document.createElement('div');
+        ring.id = 'sh-progress-ring';
+        ring.innerHTML = `<svg id="sh-svg"><circle class="track"/><circle class="fill"/></svg>`;
+        document.body.appendChild(ring);
+
+        const svg = ring.querySelector('svg');
+        const trackCircle = ring.querySelector('circle.track');
+        const fillCircle  = ring.querySelector('circle.fill');
+
+        function isStopButton(btn) {
+            const path = btn.querySelector('svg path');
+            const d = path?.getAttribute('d') || '';
+            return d.includes('M6 6h12v12H6Z');
+        }
+
+        function isGeneralSendButton(btn) {
+            if (!btn) return false;
+            const cls = btn.className || '';
+            return (
+                cls.includes('bg-primary') &&
+                cls.includes('rounded-full') &&
+                cls.includes('text-primary-foreground')
+            );
+        }
+
+        function isHoldableSendBtn(el) {
+            return isGeneralSendButton(el) && !isStopButton(el);
+        }
+
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height) + 4;
+            const cx = size / 2, cy = size / 2, r = (size / 2) - 2;
+            const circumference = 2 * Math.PI * r;
+
+            svg.setAttribute('width', size); svg.setAttribute('height', size);
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray  = circumference;
+            fillCircle.style.strokeDashoffset = circumference;
+
+            ring.style.left = `${rect.left - 2}px`; ring.style.top  = `${rect.top - 2}px`;
+            ring.classList.add('active');
+
+            requestAnimationFrame(() => {
+                fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`;
+                fillCircle.style.strokeDashoffset = '0';
+            });
+        }
+
+        function hideRing() {
+            ring.classList.remove('active');
+            fillCircle.style.transition = 'none';
+            if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray;
+        }
+
+        function cancel() {
+            if (!holdTimer) return;
+            clearTimeout(holdTimer);
+            holdTimer = null;
+            hideRing();
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (isConfirmed) { isConfirmed = false; return; }
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        }, true);
+
+        function handlePressStart(e) {
+            const btn = e.target.closest('button');
+            if (!isHoldableSendBtn(btn)) return;
+            if (e.type === 'touchstart') e.preventDefault();
+            showRing(btn);
+            holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS);
+        }
+
+        document.addEventListener('mousedown', handlePressStart);
+        document.addEventListener('mouseup', cancel);
+        document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', handlePressStart, { passive: false });
+        document.addEventListener('touchend', cancel);
+        document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (수정: HUD 파일 기준 로직 업데이트, UI는 기존 유지)
+    // ==========================================
+    function initTurnCracker() {
+        const TIMESTAMPS_CACHE_KEY = 'info_display_chat_timestamps';
+
+        const SELECTOR = {
+            textarea: 'textarea[placeholder*="메시지"]',
+            messageGroup: 'div[data-message-group-id]'
+        };
+
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.10.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+
+        const ICON = {
+            clock: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; opacity:0.8;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:1;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
+            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="currentColor" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
+        };
+
+        let counterBadge, textSpan, currentTextarea;
+        let updateTimer, observer, lastRenderedText = '';
+        let cachedTurns = null, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId = null;
+        let cachedTotalMessages = null;
+        let cachedCumulative = null, isCalculatingCumulative = false, lastProcessedTurns = -1;
+        let cumulativeRetryDoneForChat = null;
+
+        function start() {
+            injectBaseStyle();
+            startObserver();
+            scheduleUpdate();
+        }
+
+        function injectBaseStyle() {
+            if (document.getElementById('info-display-base-style')) return;
+            const style = document.createElement('style');
+            style.id = 'info-display-base-style';
+            style.textContent = `
+            #my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; }
+            #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; }
+            .my-counter-part { all: unset; display: inline-flex; align-items: center; border-radius: 4px; padding: 1px 4px; user-select: none; }
+            .my-counter-separator { opacity: 0.3; margin: 0 2px; user-select: none; }
+            @keyframes info-pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+            .pulse-anim { animation: info-pulse 1s infinite ease-in-out; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function startObserver() {
+            if (observer) return;
+            observer = new MutationObserver((mutations) => {
+                if (mutations.every(m => m.target.closest?.('#my-custom-info-display'))) return;
+                scheduleUpdate();
+            });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow'] });
+        }
+
+        function scheduleUpdate() { clearTimeout(updateTimer); updateTimer = setTimeout(updateTurnCount, 80); }
+
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { bg, text: isDark ? '#888' : '#777' };
+        }
+
+        function getCrackerCount() {
+            const label = Array.from(document.querySelectorAll('span')).find(span => span.textContent.trim() === '나의 크래커');
+            if (label?.nextElementSibling?.textContent.match(/[\d,]+/)) return parseInt(label.nextElementSibling.textContent.match(/[\d,]+/)[0].replace(/,/g, ''), 10);
+            const topBar = document.getElementById('chasm-cracker-text');
+            if (topBar) {
+                const text = topBar.getAttribute('chasm-tmi-current') || topBar.textContent;
+                const parsed = parseInt(String(text).replace(/,/g, ''), 10);
+                if (!Number.isNaN(parsed)) return parsed;
+            }
+            return null;
+        }
+
+        function initUI(textarea) {
+            document.getElementById('my-custom-info-display')?.remove();
+            lastRenderedText = ''; currentTextarea = textarea;
+            
+            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display';
+            textSpan = document.createElement('span'); textSpan.id = 'my-counter-text';
+            counterBadge.appendChild(textSpan); 
+            
+            const colors = getThemeColors(textarea);
+            counterBadge.style.color = colors.text;
+            updateLayout(textarea);
+        }
+
+        function updateLayout(textarea) {
+            if (!counterBadge) return;
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
+            if (!container) return;
+
+            if (counterBadge.parentElement !== container) {
+                container.appendChild(counterBadge);
+                container.style.position = 'relative';
+            }
+
+            counterBadge.style.top = '-26px';
+            counterBadge.style.left = '4px';
+
+            textarea.style.removeProperty('padding-top');
+            textarea.style.removeProperty('min-height');
+        }
+
+        function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
+        
+        function getTimeFromObjectId(objectId) {
+            if (!objectId || objectId.length < 8) return 0;
+            try { return parseInt(objectId.substring(0, 8), 16) * 1000; } catch { return 0; }
+        }
+
+        function getCachedTimestamps(chatId) {
+            if (!chatId) return [];
+            try {
+                const data = JSON.parse(localStorage.getItem(TIMESTAMPS_CACHE_KEY) || '{}');
+                return Array.isArray(data[chatId]) ? data[chatId] : [];
+            } catch { return []; }
+        }
+
+        function addTimestampsToCache(chatId, newTimestamps) {
+            if (!chatId || !newTimestamps || !newTimestamps.length) return;
+            try {
+                const data = JSON.parse(localStorage.getItem(TIMESTAMPS_CACHE_KEY) || '{}');
+                const existing = new Set(Array.isArray(data[chatId]) ? data[chatId] : []);
+                let changed = false;
+                for (const ts of newTimestamps) {
+                    if (typeof ts === 'number' && ts > 0 && !existing.has(ts)) { existing.add(ts); changed = true; }
+                }
+                if (changed) { data[chatId] = Array.from(existing); localStorage.setItem(TIMESTAMPS_CACHE_KEY, JSON.stringify(data)); }
+            } catch {}
+        }
+
+        async function fetchRoomData() {
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+            try {
+                const pathInfo = CrackUtil.path();
+                if (!pathInfo.isChattingPath()) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                const chatId = pathInfo.chatRoom();
+                if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                
+                let chatCounts = 0; let totalMessages = 0; const liveTimestamps = [];
+                const iterator = CrackUtil.chatRoom().iterateLogs(chatId);
+                for await (let log of iterator) {
+                    totalMessages++;
+                    if (log.isUser()) { chatCounts++; continue; }
+                    liveTimestamps.push(getTimeFromObjectId(log.id));
+                }
+                const validLive = liveTimestamps.filter(t => t > 0);
+                addTimestampsToCache(chatId, validLive);
+                const cachedAll = getCachedTimestamps(chatId);
+                return { chatCounts, totalMessages, timestamps: cachedAll.length > 0 ? cachedAll : validLive };
+            } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
+        }
+
+        async function fetchCumulativeCrackers(timestamps) {
+            const token = extractAccessToken();
+            if (!token || timestamps.length === 0) return 0;
+            let totalCalculated = 0, page = 1, lastSafePage = 1, keepGoing = true, isWarping = true, fallbackCount = 0;
+            const oldestMsgTime = Math.min(...timestamps), latestMsgTime = Math.max(...timestamps);
+            
+            while (keepGoing && page <= 500 && fallbackCount < 500) {
+                fallbackCount++;
+                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } });
+                if (!res.ok) break;
+                const json = await res.json();
+                if (!json?.data?.length) break;
+                
+                const pageLatestTime = new Date(json.data[0].date).getTime();
+                if (isWarping && pageLatestTime < latestMsgTime) { page = lastSafePage + 1; isWarping = false; continue; }
+                if (isWarping && pageLatestTime > latestMsgTime + 600000) { lastSafePage = page; page += 15; continue; }
+                isWarping = false;
+                
+                for (let item of json.data) {
+                    const itemTime = new Date(item.date).getTime();
+                    if (itemTime < oldestMsgTime - 120000) { keepGoing = false; break; }
+                    if (String(item.isConsumed) === 'true' && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) {
+                        totalCalculated += (item.product === 'superchat' ? item.balance.total * 35 : item.balance.total);
+                    }
+                }
+                page++; await new Promise(r => setTimeout(r, 40));
+            }
+            return totalCalculated;
+        }
+
+        function updateTurnCount() {
+            const now = Date.now();
+            const textarea = document.querySelector(SELECTOR.textarea);
+            if (!textarea) { counterBadge?.remove(); counterBadge = null; currentTextarea = null; return; }
+            if (!counterBadge || currentTextarea !== textarea || !counterBadge.parentElement) initUI(textarea);
+            if (!counterBadge || !textSpan) return;
+            const currentChatId = typeof CrackUtil !== 'undefined' ? CrackUtil.path().chatRoom() : null;
+            let forceCalculate = false;
+            
+            if (currentChatId && currentChatId !== lastChatId) { 
+                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; cachedCumulative = null; lastProcessedTurns = -1; cumulativeRetryDoneForChat = null;
+            }
+
+            if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
+                isCalculatingTurns = true;
+                fetchRoomData().then(data => {
+                    const domTotalMessages = document.querySelectorAll(SELECTOR.messageGroup).length;
+                    if (data.chatCounts !== -1) {
+                        if (data.chatCounts === 0 && data.totalMessages <= 0 && domTotalMessages > 0) {
+                            cachedTurns = Math.floor(domTotalMessages / 2);
+                            cachedTotalMessages = domTotalMessages;
+                        } else {
+                            cachedTurns = data.chatCounts;
+                            cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
+                        }
+
+                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea);
+                            
+                            fetchCumulativeCrackers(data.timestamps).then(async cum => {
+                                if (cum === 0 && cachedTurns >= 2 && currentChatId && cumulativeRetryDoneForChat !== currentChatId) {
+                                    cumulativeRetryDoneForChat = currentChatId;
+                                    await new Promise(r => setTimeout(r, 1000));
+                                    cum = await fetchCumulativeCrackers(data.timestamps);
+                                }
+                                cachedCumulative = cum;
+                                isCalculatingCumulative = false; renderUpdate(textarea);
+                            }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea); });
+                        }
+                    } else { cachedTotalMessages = domTotalMessages; cachedTurns = Math.floor(domTotalMessages / 2); }
+                    lastCalculatedTime = Date.now(); isCalculatingTurns = false; renderUpdate(textarea);
+                }).catch(() => { isCalculatingTurns = false; renderUpdate(textarea); });
+            } else { renderUpdate(textarea); }
+        }
+
+        function renderUpdate(textarea) {
+            if (!textSpan) return;
+            let displayTurns = cachedTurns;
+            if (displayTurns === null) displayTurns = Math.floor(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
+            
+            let html = '';
+
+            // 1. 턴수 표시
+            html += `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
+
+            // 2. 총 크래커 표시
+            const crackerCount = getCrackerCount();
+            if (crackerCount !== null) {
+                html += `<span class="my-counter-separator">|</span>`;
+                html += `<div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
+            }
+
+            // 3. 소모 크래커 표시
+            html += `<span class="my-counter-separator">|</span>`;
+            let cumNum = '대기 중', anim = '', suffix = '';
+            
+            if (isCalculatingCumulative) {
+                cumNum = '...'; anim = 'pulse-anim';
+            } else if (cachedCumulative !== null) {
+                cumNum = cachedCumulative.toLocaleString(); suffix = '개';
+            } else if (displayTurns <= 0) {
+                cumNum = '0'; suffix = '개';
+            }
+            
+            html += `<div class="my-counter-part ${anim}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${cumNum}</span>${suffix}</div>`;
+
+            if (html !== lastRenderedText) {
+                textSpan.innerHTML = html;
+                lastRenderedText = html;
+            }
+            updateLayout(textarea);
+        }
+        start();
+    }
+
+    // ==========================================
+    // 모듈 8: 선택 삭제 코어 모듈 (툴바에 들어갈 버튼 반환 및 기능 세팅)
+    // ==========================================
+    const selectDeleteCore = (function() {
+        const MESSAGE_SELECTOR = '[data-message-group-id]';
+        const SELECTED_CLASS = 'tm-msg-selected';
+        const ANCHOR_CLASS = 'tm-msg-select-anchor';
+        const MODE_CLASS = 'tm-msg-delete-mode';
+        const CONFIRM_OVERLAY_ID = 'tm-delete-confirm-overlay';
+        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
+        
+        let selectedIds = new Set();
+        let deleteMode = false;
+        let isDeleting = false;
+        let isClearing = false;
+        let longPressTimer = null;
+        let longPressFired = false;
+        let currentChatId = null;
+        let networkHooked = false;
+        let theButton = null;
+
+        const iconTrash = `
+          <span class="tm-delete-icon-wrap" style="position:relative; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
+            <svg class="tm-delete-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 25" width="24px" height="24px" style="display:block; color:inherit;">
+              <path d="M15.44 4.34H8.56v-1.6h6.88zm-6 12v-5.6h1.6v5.6zm3.53-5.6v5.6h1.6v-5.6z"></path>
+              <path fill-rule="evenodd" d="M2.6 5.43v1.6h1.57v13.9c0 .78.63 1.4 1.4 1.4h12.86c.77 0 1.4-.62 1.4-1.4V7.04h1.57v-1.6zm15.63 1.6H5.77v13.7h12.46z" clip-rule="evenodd"></path>
+            </svg>
+            <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px solid hsl(var(--foreground, 0 0% 96%) / 0.22); border-top-color:hsl(var(--foreground, 0 0% 96%) / 0.82); opacity:0; pointer-events:none;"></span>
+          </span>
+        `;
+
+        function injectStyle() {
+            if (document.getElementById('tm-delete-mode-style')) return;
+            const style = document.createElement('style');
+            style.id = 'tm-delete-mode-style';
+            style.textContent = `
+              ${MESSAGE_SELECTOR} { position: relative !important; }
+              .${ANCHOR_CLASS} { position: relative !important; isolation: isolate !important; }
+              .${ANCHOR_CLASS}::after { content: ""; position: absolute; inset: -3px; z-index: 5; pointer-events: none; border-radius: 14px; opacity: 0; background: hsl(var(--foreground, 0 0% 96%) / 0.055); border: 2px solid hsl(var(--foreground, 0 0% 96%) / 0.62); box-shadow: 0 0 0 1px hsl(var(--background, 0 0% 8%) / 0.55), 0 0 0 4px hsl(var(--foreground, 0 0% 96%) / 0.12), inset 0 0 0 9999px hsl(var(--foreground, 0 0% 96%) / 0.035); transition: opacity .12s ease; }
+              body.${MODE_CLASS} ${MESSAGE_SELECTOR}, body.${MODE_CLASS} .${ANCHOR_CLASS} { cursor: pointer !important; }
+              ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}::after, .${ANCHOR_CLASS}.${SELECTED_CLASS}::after { opacity: 1; }
+              ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}, .${ANCHOR_CLASS}.${SELECTED_CLASS} { outline: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.34); outline-offset: 2px; }
+              .tm-btn-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; transform: scale(0.96) !important; }
+              .tm-btn-deleting { opacity: 0.55; pointer-events: none; }
+              .tm-btn-clearing { transform: scale(0.94) !important; }
+              .tm-btn-clearing .tm-clear-spinner { opacity: 1; animation: tm-clear-spin .55s linear infinite; }
+              @keyframes tm-clear-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+              #${CONFIRM_OVERLAY_ID} { position: fixed; inset: 0; z-index: 9999999; background: rgba(0, 0, 0, 0.42); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+              .tm-delete-confirm-card { width: min(300px, calc(100vw - 40px)); border-radius: 16px; background: hsl(var(--background, 0 0% 10%)); color: hsl(var(--foreground, 0 0% 96%)); border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42); padding: 16px; font-family: Pretendard, -apple-system, system-ui, sans-serif; }
+              .tm-delete-confirm-title { font-size: 15px; font-weight: 800; text-align: center; }
+              .tm-delete-confirm-message { margin-top: 10px; font-size: 13px; color: hsl(var(--foreground, 0 0% 96%) / 0.72); text-align: center; }
+              .tm-delete-confirm-actions { margin-top: 18px; display: flex; justify-content: center; gap: 8px; }
+              .tm-delete-confirm-actions button { height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); background: transparent; color: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+              .tm-delete-confirm-actions button:hover { background: hsl(var(--foreground, 0 0% 96%) / 0.08); }
+              .tm-delete-confirm-ok { color: #ff8080 !important; border-color: rgba(255, 77, 79, 0.45) !important; background: rgba(255, 77, 79, 0.12) !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function extractChatIdFromUrl(url) {
+            const patterns = [/\/chats\/([a-f0-9]{24})(?:\/|$)/i, /"chatId":"([a-f0-9]{24})"/i];
+            for (const pattern of patterns) { const match = url.match(pattern); if (match) return match[1]; }
+            return null;
+        }
+
+        function hookNetwork() {
+            if (networkHooked) return;
+            networkHooked = true;
+            const originalFetch = window.fetch;
+            window.fetch = async function (...args) {
+                try { const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''; const id = extractChatIdFromUrl(url); if (id) currentChatId = id; } catch {}
+                return originalFetch.apply(this, args);
+            };
+            const originalOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+                try { const id = extractChatIdFromUrl(String(url || '')); if (id) currentChatId = id; } catch {}
+                return originalOpen.call(this, method, url, ...rest);
+            };
+        }
+
+        function getMessageId(msg) { return msg?.getAttribute('data-message-group-id'); }
+        function getMessageBubble(msg) {
+            const markdown = msg.querySelector('.wrtn-markdown');
+            return markdown?.closest('[data-rr-compare-nav="1"]') || msg.querySelector('[data-rr-compare-nav="1"]') || markdown?.parentElement || msg;
+        }
+        function markMessageSelected(msg, selected) {
+            if (!(msg instanceof HTMLElement)) return;
+            const bubble = getMessageBubble(msg);
+            bubble.classList.add(ANCHOR_CLASS);
+            msg.classList.toggle(SELECTED_CLASS, selected);
+            bubble.classList.toggle(SELECTED_CLASS, selected);
+        }
+        function scanMessages() { document.querySelectorAll(MESSAGE_SELECTOR).forEach(msg => { const id = getMessageId(msg); if (id) markMessageSelected(msg, selectedIds.has(id)); }); updateButtonState(); }
+        
+        function updateButtonState() {
+            if (!theButton) return;
+            theButton.classList.toggle('tm-btn-active', deleteMode || selectedIds.size > 0);
+            theButton.classList.toggle('tm-btn-deleting', isDeleting);
+            theButton.classList.toggle('tm-btn-clearing', isClearing);
+            if (isDeleting) theButton.title = '삭제 처리 중';
+            else if (isClearing) theButton.title = '선택 해제 중';
+            else if (selectedIds.size > 0) theButton.title = `선택 ${selectedIds.size}개, 클릭하면 삭제 / 0.5초 길게 누르면 전체 해제`;
+            else if (deleteMode) { theButton.title = '삭제 모드 켜짐'; scanMessages(); }
+            else theButton.title = '선택 삭제 모드';
+        }
+        function setDeleteMode(val) { deleteMode = val; document.body.classList.toggle(MODE_CLASS, deleteMode); updateButtonState(); }
+        
+        function clearSelection() {
+            selectedIds.clear();
+            document.querySelectorAll(MESSAGE_SELECTOR).forEach(msg => markMessageSelected(msg, false));
+            document.querySelectorAll(`.${ANCHOR_CLASS}.${SELECTED_CLASS}`).forEach(el => el.classList.remove(SELECTED_CLASS));
+            updateButtonState();
+        }
+
+        async function clearSelectionWithSpinner(closeMode) {
+            if (isClearing) return;
+            isClearing = true; updateButtonState();
+            await new Promise(r => setTimeout(r, 260));
+            clearSelection();
+            if (closeMode) setDeleteMode(false);
+            await new Promise(r => setTimeout(r, 260));
+            isClearing = false; updateButtonState();
+        }
+
+        function blockMessageInteraction(e) {
+            if (!deleteMode || isDeleting) return;
+            if (e.target.closest('#tm-delete-btn')) return;
+            if (e.target.closest(MESSAGE_SELECTOR)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+        }
+
+        function handleMessageClick(e) {
+            if (!deleteMode || isDeleting) return;
+            if (e.target.closest('#tm-delete-btn')) return;
+            const msg = e.target.closest(MESSAGE_SELECTOR);
+            if (!msg) return;
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+            const id = getMessageId(msg);
+            if (!id) return;
+            if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+            markMessageSelected(msg, selectedIds.has(id));
+            updateButtonState();
+        }
+
+        function openDeleteConfirm(count) {
+            return new Promise(resolve => {
+                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
+                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">메시지 삭제</div><div class="tm-delete-confirm-message">선택한 메시지 <b>${count}</b>개를 삭제할까요?<br>이 작업은 되돌릴 수 없습니다.</div><div class="tm-delete-confirm-actions"><button class="tm-delete-confirm-cancel">취소</button><button class="tm-delete-confirm-ok">삭제</button></div></div>`;
+                document.body.appendChild(overlay);
+                const cleanup = res => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(res); };
+                const onKeyDown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cleanup(false); } if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); cleanup(true); } };
+                overlay.querySelector('.tm-delete-confirm-cancel').onclick = () => cleanup(false);
+                overlay.querySelector('.tm-delete-confirm-ok').onclick = () => cleanup(true);
+                document.addEventListener('keydown', onKeyDown, true);
+            });
+        }
+
+        async function startDeleteFlow() {
+            if (isDeleting) return;
+            const queue = [...selectedIds]; if (queue.length === 0) return;
+            if (!currentChatId) { alert("chatId를 찾지 못했습니다. 페이지를 새로고침해주세요."); updateButtonState(); return; }
+            const ok = await openDeleteConfirm(queue.length);
+            if (!ok) { updateButtonState(); return; }
+            isDeleting = true; setDeleteMode(false); updateButtonState();
+            
+            const token = document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1];
+            for (const id of queue) {
+                const msg = document.querySelector(`${MESSAGE_SELECTOR}[data-message-group-id="${id}"]`);
+                try {
+                    await fetch(`${API_BASE}/chats/${currentChatId}/messages/${id}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` }});
+                    selectedIds.delete(id);
+                    if (msg) { markMessageSelected(msg, false); msg.remove(); }
+                } catch (e) { console.error('삭제실패', e); }
+                await new Promise(r => setTimeout(r, 120));
+            }
+            isDeleting = false; setDeleteMode(false); clearSelection(); updateButtonState();
+        }
+
+        function createButton() {
+            injectStyle(); hookNetwork();
+            document.addEventListener('pointerdown', blockMessageInteraction, true);
+            document.addEventListener('click', handleMessageClick, true);
+            document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById(CONFIRM_OVERLAY_ID)) { setDeleteMode(false); clearSelection(); }});
+
+            theButton = document.createElement('button');
+            theButton.id = 'tm-delete-btn';
+            theButton.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            theButton.innerHTML = iconTrash;
+            theButton.title = "선택 삭제 모드";
+            theButton.onclick = async (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if (longPressFired) { longPressFired = false; return; }
+                if (isDeleting || isClearing) return;
+                if (!deleteMode) { setDeleteMode(true); return; }
+                if (selectedIds.size === 0) { setDeleteMode(false); return; }
+                await startDeleteFlow();
+            };
+            theButton.onpointerdown = () => { if (isDeleting || isClearing) return; longPressFired = false; clearTimeout(longPressTimer); longPressTimer = setTimeout(async () => { if(selectedIds.size>0){ longPressFired=true; await clearSelectionWithSpinner(true); } }, 500); };
+            theButton.onpointerup = () => clearTimeout(longPressTimer);
+            theButton.onpointerleave = () => clearTimeout(longPressTimer);
+            return theButton;
+        }
+        
+        return { getButton: () => { if(!theButton) createButton(); return theButton; } };
+    })();
+
+    // ==========================================
+    // 모듈 9: 오토스크롤 코어 모듈 (툴바에 들어갈 버튼 반환 및 기능 세팅)
+    // ==========================================
+    const autoScrollCore = (function() {
+        let isRunning = false;
+        let theButton = null;
+        
+        const iconUp = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor" style="display:block; width:16px; height:16px;"><path d="M12 4.586l5.707 5.707-1.414 1.414L12 7.414 7.707 11.707 6.293 10.293 12 4.586zm0 6l5.707 5.707-1.414 1.414L12 13.414 7.707 17.707 6.293 16.293 12 10.586z"></path></svg>';
+        const iconStop = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor" style="display:block; width:16px; height:16px;"><path d="M7 7h10v10H7z"></path></svg>';
+
+        function setButtonActive(active) {
+            if (!theButton) return;
+            if (active) {
+                theButton.innerHTML = iconStop;
+                theButton.title = '로딩 중지';
+                theButton.style.boxShadow = 'inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18)';
+                theButton.style.backgroundColor = 'hsl(var(--accent, 0 0% 18%))';
+                theButton.style.transform = 'scale(0.96)';
+            } else {
+                theButton.innerHTML = iconUp;
+                theButton.title = '과거 채팅 불러오기';
+                theButton.style.boxShadow = '';
+                theButton.style.backgroundColor = '';
+                theButton.style.transform = 'none';
+            }
+        }
+
+        function findScrollContainer() {
+            const MESSAGE_SELECTOR = 'div[data-message-group-id]';
+            const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
+            if (messages.length > 0) {
+                const candidates = new Set();
+                const samples = [messages[0], messages[Math.floor(messages.length / 2)], messages[messages.length - 1]].filter(Boolean);
+                for (const msg of samples) {
+                    let current = msg.parentElement;
+                    while (current && current !== document.body) {
+                        const style = window.getComputedStyle(current);
+                        if (current.scrollHeight > current.clientHeight + 2 && current.clientHeight > 300 && ['auto', 'scroll'].includes(style.overflowY)) {
+                            candidates.add(current);
+                        }
+                        current = current.parentElement;
+                    }
+                }
+                const sorted = Array.from(candidates).sort((a, b) => b.querySelectorAll(MESSAGE_SELECTOR).length - a.querySelectorAll(MESSAGE_SELECTOR).length);
+                if (sorted[0]) return sorted[0];
+            }
+            return window;
+        }
+
+        function scrollToTop(target) {
+            if (target === window) { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; return; }
+            target.scrollTop = 0;
+            try { target.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+        }
+
+        async function doScroll() {
+            let prevSignature = ''; let atTopStableCount = 0; let stuckCount = 0;
+            while (isRunning) {
+                const target = findScrollContainer();
+                scrollToTop(target);
+                await new Promise(r => setTimeout(r, 500));
+                
+                const msgs = Array.from(document.querySelectorAll('div[data-message-group-id]'));
+                const scrollTop = target === window ? (window.scrollY || document.documentElement.scrollTop) : target.scrollTop;
+                const signature = [msgs.length, msgs[0]?.getAttribute('data-message-group-id'), target.scrollHeight || 0].join('|');
+                
+                if (scrollTop <= 2 && signature === prevSignature) atTopStableCount++; else atTopStableCount = 0;
+                if (signature === prevSignature) stuckCount++; else stuckCount = 0;
+                
+                prevSignature = signature;
+                if (atTopStableCount >= 3 || stuckCount >= 10) break;
+            }
+            isRunning = false; setButtonActive(false);
+        }
+
+        function createButton() {
+            document.addEventListener('keydown', e => { if (e.key === 'Escape') { isRunning = false; setButtonActive(false); }});
+            theButton = document.createElement('button');
+            theButton.id = 'tm-scroll-btn';
+            theButton.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            theButton.onclick = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if (isRunning) { isRunning = false; setButtonActive(false); }
+                else { isRunning = true; setButtonActive(true); doScroll(); }
+            };
+            setButtonActive(false);
+            return theButton;
+        }
+        
+        return { getButton: () => { if(!theButton) createButton(); return theButton; } };
+    })();
+
+    // ==========================================
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+ 선택삭제, 오토스크롤 버튼 통합, 추천답변 유지 및 기본버튼 숨김)
+    // ==========================================
+    function initRPToolbar() {
+        const fixedTools = [
+            { icon: '★', pre: '*', suf: '*' },
+            { icon: '♠', pre: '"', suf: '"' },
+            { icon: '♤', pre: "'", suf: "'" },
+            { icon: '◆', pre: '`', suf: '`' },
+            { icon: '■', pre: '[', suf: ']' },
+            { icon: '♣', pre: '(!', suf: ')' },
+            { icon: '♧', pre: '(OOC：', suf: ')' }
+        ];
+
+        // 방어막(igx-keep-btn)이 없는 기본 버튼들만 모조리 숨기는 CSS
+        if (!document.getElementById('hide-native-rp-btns')) {
+            const style = document.createElement('style');
+            style.id = 'hide-native-rp-btns';
+            style.textContent = `
+                .igx-rp-container-hooked > button:not(.igx-keep-btn) { display: none !important; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        function wrapText(prefix, suffix) {
+            const textarea = document.querySelector('textarea');
+            if (!textarea) return;
+            const start = textarea.selectionStart || 0;
+            const end = textarea.selectionEnd || 0;
+            const text = textarea.value || '';
+            const selected = text.substring(start, end);
+            const newValue = text.substring(0, start) + prefix + selected + suffix + text.substring(end, text.length);
+            
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+            nativeInputValueSetter.call(textarea, newValue);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.focus();
+            textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+        }
+
+        function createToolButton(iconText, onClick) {
+            const btn = document.createElement('button');
+            btn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            btn.type = "button";
+            btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
+            btn.onmousedown = (e) => e.preventDefault();
+            btn.onclick = (e) => { e.preventDefault(); onClick(); };
+            return btn;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!e.altKey) return;
+            let idx = -1;
+            const code = e.code; const key = e.key;
+            if (code === 'Backquote' || key === '`' || key === '~') idx = 0;
+            else if (code === 'Digit1' || key === '1') idx = 1;
+            else if (code === 'Digit2' || key === '2') idx = 2;
+            else if (code === 'Digit3' || key === '3') idx = 3;
+            else if (code === 'Digit4' || key === '4') idx = 4;
+            else if (code === 'Digit5' || key === '5') idx = 5;
+            else if (code === 'Digit6' || key === '6') idx = 6;
+            if (idx !== -1) {
+                const textarea = document.querySelector('textarea');
+                if (document.activeElement === textarea) {
+                    if (fixedTools[idx]) { e.preventDefault(); e.stopPropagation(); wrapText(fixedTools[idx].pre, fixedTools[idx].suf); }
+                }
+            }
+        }, true);
+
+        setInterval(() => {
+            const btnContainer = document.querySelector('.flex.items-center.space-x-2');
+            if (!btnContainer) return;
+            if (!btnContainer.classList.contains('igx-rp-container-hooked')) btnContainer.classList.add('igx-rp-container-hooked');
+
+            const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
+            if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) recommendBtn.classList.add('igx-keep-btn');
+
+            if (!document.getElementById('custom-rp-tools')) {
+                const toolWrapper = document.createElement('div');
+                toolWrapper.id = 'custom-rp-tools';
+                toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
+
+                // 1. 선택삭제 버튼 부착
+                toolWrapper.appendChild(selectDeleteCore.getButton());
+                
+                // 2. 오토스크롤 버튼 부착 (그리고 우측 마진을 8px로 설정해 두 배 띄움)
+                const scrollBtn = autoScrollCore.getButton();
+                scrollBtn.style.marginRight = '8px';
+                toolWrapper.appendChild(scrollBtn);
+
+                // 3. 기존 RP 고정 도우미 버튼들 부착
+                fixedTools.forEach((t) => { toolWrapper.appendChild(createToolButton(t.icon, () => wrapText(t.pre, t.suf))); });
+
+                if (recommendBtn) btnContainer.insertBefore(toolWrapper, recommendBtn);
+                else btnContainer.appendChild(toolWrapper);
+            }
+        }, 500);
+    }
+
+    // ==========================================
+    // 모듈 6: 입력창 자동 임시저장 (수정 안 함)
+    // ==========================================
+    function initAutoSaver() {
+        function getRoomId() {
+            const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
+            return match ? match[1] : 'global_room';
+        }
+
+        function getDraftKey() {
+            return 'crack_typing_draft_' + getRoomId();
+        }
+
+        let isRestoredForCurrentRoom = false;
+        let currentRoomId = '';
+
+        function setNativeValue(element, value) {
+            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+            const prototype = Object.getPrototypeOf(element);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+
+            if (valueSetter && valueSetter !== prototypeValueSetter) {
+                prototypeValueSetter.call(element, value);
+            } else {
+                valueSetter.call(element, value);
+            }
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function processAutoSave() {
+            const textarea = document.querySelector('textarea.__chat_input_textarea') || document.querySelector('textarea[placeholder*="메시지"]');
+            if (!textarea) return;
+
+            const newRoomId = getRoomId();
+            if (currentRoomId !== newRoomId) {
+                currentRoomId = newRoomId;
+                isRestoredForCurrentRoom = false;
+                textarea.dataset.draftHooked = 'false';
+            }
+
+            const DRAFT_KEY = getDraftKey();
+
+            if (!isRestoredForCurrentRoom) {
+                const savedDraft = localStorage.getItem(DRAFT_KEY);
+                if (savedDraft && textarea.value.trim() === '') {
+                    setNativeValue(textarea, savedDraft);
+                }
+                isRestoredForCurrentRoom = true;
+            }
+
+            if (textarea.dataset.draftHooked !== 'true') {
+                textarea.dataset.draftHooked = 'true';
+                textarea.addEventListener('input', (e) => {
+                    const text = e.target.value;
+                    if (text.trim() === '') {
+                        localStorage.removeItem(getDraftKey());
+                    } else {
+                        localStorage.setItem(getDraftKey(), text);
+                    }
+                });
+            }
+        }
+        setInterval(processAutoSave, 1000);
+    }
+
+    // ==========================================
+    // 모듈 7: 라디오존데 (외부 우측 배치, 팝업 상향 표시) (수정 안 함)
+    // ==========================================
+    function initRadiosonde() {
+        const MODELS = [
+            { slug: "claude-opus-4.7", label: "Claude 4.7 Opus", short: "O4.7" },
+            { slug: "claude-opus-4.6", label: "Claude 4.6 Opus", short: "O4.6" },
+            { slug: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet", short: "S4.6" },
+            { slug: "gemini-3-1-pro", label: "Gemini 3.1 Pro", short: "G3.1" },
+            { slug: "gemini-2.5-pro", label: "Gemini 2.5 Pro", short: "G2.5" },
+        ];
+
+        const API_BASE = "https://rs.igx.kr/api/simple/";
+        const POLL_MS = 60 * 1000;
+        const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
+
+        GM_addStyle(`
+            #igx-rs-inline-host {
+                position: absolute; display: flex; align-items: center; gap: 4px;
+                z-index: 998; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+                font-size: 11px; font-weight: 500;
+            }
+            #igx-rs-inline-host * { pointer-events: auto; }
+            
+            .igx-rs-btn { 
+                width: 18px; height: 18px; min-width: 18px; padding: 0; 
+                background: transparent; border: none; color: inherit; cursor: pointer; 
+                opacity: 0.65; border-radius: 4px; display: flex; justify-content: center; align-items: center; 
+            }
+            .igx-rs-btn:hover { background: rgba(128,128,128,0.15); opacity: 1; }
+
+            .igx-rs-barline { display: flex; gap: 4px; align-items: center; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .igx-rs-barline::-webkit-scrollbar { display: none; }
+            
+            .igx-rs-item { 
+                display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px; 
+                border-radius: 999px; background: transparent; border: none; cursor: default; 
+            }
+            .igx-rs-item:hover { background: rgba(128,128,128,0.1); }
+            
+            .igx-rs-dot { width: 6px; height: 6px; border-radius: 50%; }
+            .rs-active { background: #3ddc84; } .rs-degraded { background: #ffd54a; }
+            .rs-impacted { background: #ff5c5c; } .rs-unknown { background: #9aa0a6; }
+            
+            .rs-name { opacity: 1; font-weight: 700; line-height: 1; }
+            .rs-score { font-weight: 900; line-height: 1; }
+            .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
+
+            #igx-rs-settings {
+                display: none; 
+                position: fixed; 
+                z-index: 100001; 
+                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
+                background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
+            }
+            
+            .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+            .igx-rs-set-chk { margin: 0; accent-color: #3ddc84; cursor: pointer; }
+
+            @media (max-width: 600px) {
+                #igx-rs-inline-host { font-size: 11px; }
+            }
+        `);
+
+        let visibility = {};
+        try { visibility = JSON.parse(localStorage.getItem(STORE_KEY_VISIBILITY)) || {}; } catch {}
+        MODELS.forEach(m => { if (visibility[m.slug] === undefined) visibility[m.slug] = true; });
+
+        const host = document.createElement("div"); host.id = "igx-rs-inline-host";
+        
+        const btnSettings = document.createElement("button"); btnSettings.className = "igx-rs-btn"; 
+        btnSettings.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
+        
+        const barline = document.createElement("div"); barline.className = "igx-rs-barline"; barline.textContent = "불러오는 중…";
+
+        const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-rs-btn"; btnRefresh.textContent = "↻"; btnRefresh.style.fontSize = "13px";
+
+        const settings = document.createElement("div"); settings.id = "igx-rs-settings";
+        settings.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; font-size:12px; border-bottom:1px solid rgba(128,128,128,0.2); padding-bottom:4px;">모델 표시 설정</div>`;
+        
+        for (const m of MODELS) {
+            const label = document.createElement("label"); label.className = "igx-rs-set-row";
+            const chk = document.createElement("input"); chk.type = "checkbox"; chk.className = "igx-rs-set-chk"; chk.checked = visibility[m.slug];
+            chk.addEventListener("change", (e) => {
+                visibility[m.slug] = e.target.checked;
+                localStorage.setItem(STORE_KEY_VISIBILITY, JSON.stringify(visibility));
+                renderBarline();
+            });
+            label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
+        }
+
+        document.body.appendChild(settings);
+        host.append(btnSettings, barline, btnRefresh);
+
+        btnSettings.addEventListener("click", e => {
+            e.stopPropagation();
+            if (settings.style.display === 'flex') {
+                settings.style.display = 'none';
+            } else {
+                const rect = btnSettings.getBoundingClientRect();
+                settings.style.right = `${window.innerWidth - rect.right}px`;
+                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; 
+                settings.style.display = 'flex';
+            }
+        });
+        
+        btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
+
+        document.addEventListener("click", e => {
+            if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) {
+                 settings.style.display = 'none';
+            }
+        });
+
+
+        const last = new Map();
+        function renderBarline() {
+            const parts = MODELS.filter(m => visibility[m.slug]).map((m) => {
+                const d = last.get(m.slug) || { status: "unknown", score: "—", lat: "—" };
+                const c = "rs-" + d.status;
+                return `<div class="igx-rs-item" title="${m.label}">
+                    <div class="igx-rs-dot ${c}"></div>
+                    <span class="rs-name">${m.short}</span>
+                    <span class="rs-score">${d.score}</span>
+                    <span class="rs-lat">${d.lat}s</span>
+                </div>`;
+            }).join("");
+            barline.innerHTML = parts || "<span style='opacity:0.6; font-size:11px; padding-left:4px;'>선택 안됨</span>";
+        }
+
+        async function refreshAll() {
+            const results = await Promise.allSettled(MODELS.map(m => new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET", url: API_BASE + encodeURIComponent(m.slug), timeout: 6000, headers: { Accept: "application/json" },
+                    onload: res => { try { resolve(JSON.parse(res.responseText)); } catch(e){ reject(e); } },
+                    onerror: reject, ontimeout: () => reject(new Error("timeout"))
+                });
+            })));
+
+            results.forEach((res, i) => {
+                const m = MODELS[i];
+                if (res.status === "fulfilled" && res.value?.success) {
+                    const d = res.value.data;
+                    const status = d.status || "unknown";
+                    const lat = Number.isFinite(Number(d.latency)) ? (d.latency >= 50 ? d.latency/1000 : d.latency).toFixed(2) : "—";
+                    const score = Number.isFinite(Number(d.score)) ? Math.round(d.score).toString() : "—";
+                    last.set(m.slug, { status, score, lat });
+                } else {
+                    last.set(m.slug, { status: "unknown", score: "—", lat: "—" });
+                }
+            });
+            renderBarline();
+        }
+
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { 
+                text: isDark ? '#888' : '#777',
+                textName: isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.88)',
+                setBg: isDark ? '#282828' : '#fff',
+                setBorder: isDark ? '#444' : '#e5e5e5',
+                setText: isDark ? '#ccc' : '#444'
+            };
+        }
+
+        function ensureAttached() {
+            const textarea = document.querySelector('textarea[placeholder*="메시지"]');
+            if (!textarea) {
+                if (host.parentElement) host.remove();
+                return;
+            }
+            
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg");
+            if (!container) return;
+
+            if (host.parentElement !== container) {
+                container.appendChild(host);
+                container.style.position = 'relative'; 
+            }
+
+            host.style.position = 'absolute';
+            host.style.top = '-26px';
+            host.style.right = '4px';
+
+            const theme = getThemeColors(textarea);
+            host.style.color = theme.text;
+            host.style.setProperty('--rs-text-name', theme.textName);
+            settings.style.setProperty('--rs-bg', theme.setBg);
+            settings.style.setProperty('--rs-border', theme.setBorder);
+            settings.style.setProperty('--rs-text', theme.setText);
+        }
+
+        setInterval(ensureAttached, 1000);
+        setInterval(refreshAll, POLL_MS);
+        setTimeout(refreshAll, 500);
+    }
+
+    // ==========================================
+    // 통합팩 동시 실행 관리
+    // ==========================================
+    function startAll() {
+        setTimeout(() => {
+            try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+        }, 100);
+
+        try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
+        try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+        try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
+        try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
+        try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
+        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
