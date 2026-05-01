@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 7 in 1 통합팩 (V5.6.4 UI 및 팝업 수정 / 대사입력기 기본버튼 완전삭제)
+// @name         크랙 7 in 1 통합팩 (V5.6.5 UI 수정 / 기본버튼 삭제 및 추천답변 유지)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.6.4
-// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 기본버튼 강제 숨김
+// @version      5.6.5
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 필요없는 기본버튼 강제 숨김
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -512,7 +512,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 고정형 RP 대사 입력 도우미 (수정됨: 사이트 기본 버튼 강제 차단)
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (수정됨: 추천답변 살리고 나머지 기본버튼 강제 차단)
     // ==========================================
     function initRPToolbar() {
         const fixedTools = [
@@ -525,14 +525,12 @@
             { icon: '♧', pre: '(OOC：', suf: ')' }
         ];
 
-        // [중요 추가] 사이트가 버튼을 다시 살려내지 못하도록 강제 CSS 주입 (오직 내 툴만 보이게)
+        // [중요 추가] 방어막(igx-keep-btn)이 없는 기본 버튼들만 모조리 숨기는 마법(CSS) 주입
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
             style.id = 'hide-native-rp-btns';
-            // igx-rp-container-hooked 라는 이름표가 달린 구역 안에서는, 
-            // id가 custom-rp-tools가 아닌 녀석들은 절대 화면에 나타나지 못하게 차단합니다.
             style.textContent = `
-                .igx-rp-container-hooked > :not(#custom-rp-tools) {
+                .igx-rp-container-hooked > button:not(.igx-keep-btn) {
                     display: none !important;
                 }
             `;
@@ -605,9 +603,15 @@
             const btnContainer = document.querySelector('.flex.items-center.space-x-2');
             if (!btnContainer) return;
 
-            // 우리가 심어둔 CSS가 먹히도록 이름표 달아주기
+            // 우리가 심어둔 CSS가 먹히도록 구역에 이름표 달아주기
             if (!btnContainer.classList.contains('igx-rp-container-hooked')) {
                 btnContainer.classList.add('igx-rp-container-hooked');
+            }
+
+            // '추천답변' 버튼을 찾아서 얘한테만 방어막(igx-keep-btn) 씌워주기 (안 숨겨지게)
+            const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
+            if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) {
+                recommendBtn.classList.add('igx-keep-btn');
             }
 
             // 내 커스텀 툴바가 없으면 집어넣기
@@ -621,7 +625,12 @@
                     toolWrapper.appendChild(btn);
                 });
 
-                btnContainer.appendChild(toolWrapper);
+                // 추천답변 버튼이 있으면 그 옆에 예쁘게 배치, 없으면 그냥 끝에 붙임
+                if (recommendBtn) {
+                    btnContainer.insertBefore(toolWrapper, recommendBtn);
+                } else {
+                    btnContainer.appendChild(toolWrapper);
+                }
             }
         }, 500);
     }
