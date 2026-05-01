@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V6.0 완벽 안정화 / 선택삭제, 오토스크롤 포함 및 크래커 소모량 픽스)
+// @name         크랙 8 in 1 통합팩 (V7.0 완벽 안정화 / 오토스크롤 포함 및 크래커 소모량 픽스)
 // @namespace    https://crack.wrtn.ai/
-// @version      6.0
-// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 텍스트 통일화
+// @version      7.0
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 오토스크롤 버튼 추가
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -280,7 +280,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 계산식 7in1 기존 방식으로 복구)
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -465,7 +465,6 @@
                             cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
                         }
                         
-                        // [복구됨] 7 in 1 원본과 동일하게 턴수가 바뀔 때만 (cum - prevCum)로 안전하게 단일 턴 계산
                         if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
                             lastProcessedTurns = cachedTurns; 
                             isCalculatingCumulative = true; 
@@ -533,7 +532,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 및 대칭 조절, 점선 추가)
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+오토스크롤 버튼 및 대칭 조절, 점선 추가)
     // ==========================================
     function initRPToolbar() {
         const fixedTools = [
@@ -637,21 +636,14 @@
                 
                 toolWrapper.className = 'flex items-center gap-1';
 
-                // 1. 선택삭제 버튼 껍데기 (텍스트 '□')
-                const selectDeleteBtn = document.createElement('button');
-                selectDeleteBtn.id = 'tm-message-delete-mode-btn';
-                selectDeleteBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
-                selectDeleteBtn.innerHTML = `<span style="font-size:15px;">□</span>`;
-                toolWrapper.appendChild(selectDeleteBtn);
-
-                // 2. 오토스크롤 버튼 껍데기 (텍스트 '△')
+                // 1. 오토스크롤 버튼 껍데기 (텍스트 '△')
                 const autoScrollBtn = document.createElement('button');
                 autoScrollBtn.id = 'turbo-scroll-btn';
                 autoScrollBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
-                // 3. 오토스크롤과 ★ 사이에 구분선 (점선) 추가, 양옆 마진으로 1.5배 이상 간격 형성
+                // 2. 오토스크롤과 ★ 사이에 구분선 (점선) 추가, 양옆 마진으로 1.5배 이상 간격 형성
                 const divider = document.createElement('div');
                 divider.style.width = '1px';
                 divider.style.height = '14px';
@@ -660,7 +652,7 @@
                 divider.style.margin = '0 8px'; // 양옆에 넉넉하게 공간 부여
                 toolWrapper.appendChild(divider);
 
-                // 4. 기존 커스텀 툴바 버튼 추가
+                // 3. 기존 커스텀 툴바 버튼 추가
                 fixedTools.forEach((t) => {
                     const btn = createToolButton(t.icon, () => wrapText(t.pre, t.suf));
                     toolWrapper.appendChild(btn);
@@ -945,308 +937,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 메시지 선택 삭제 
-    // ==========================================
-    function initSelectDelete() {
-        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
-        const MESSAGE_SELECTOR = '[data-message-group-id]';
-        const BTN_ID = 'tm-message-delete-mode-btn';
-        const STYLE_ID = 'tm-message-delete-mode-style';
-        const CONFIRM_OVERLAY_ID = 'tm-delete-confirm-overlay';
-
-        const SELECTED_CLASS = 'tm-msg-selected';
-        const ANCHOR_CLASS = 'tm-msg-select-anchor';
-        const MODE_CLASS = 'tm-msg-delete-mode';
-        const LONG_PRESS_MS = 500;
-
-        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-        const iconTrash = `
-            <span class="tm-delete-icon-wrap" style="position:relative; display:inline-flex; align-items:center; justify-content:center; width:100%; height:100%;">
-                <span style="font-size:15px;">□</span>
-                <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px dotted hsl(var(--foreground,0 0% 96%)/0.4); opacity:0; pointer-events:none;"></span>
-            </span>
-        `;
-
-        let selectedIds = new Set();
-        let deleteMode = false;
-        let isDeleting = false;
-        let isClearing = false;
-        let lastUrlKey = location.origin + location.pathname + location.search;
-
-        let longPressTimer = null;
-        let longPressFired = false;
-        let currentChatId = null;
-        let networkHooked = false;
-
-        function injectStyle() {
-            if (document.getElementById(STYLE_ID)) return;
-            const style = document.createElement('style');
-            style.id = STYLE_ID;
-            style.textContent = `
-            ${MESSAGE_SELECTOR} { position: relative !important; }
-            .${ANCHOR_CLASS} { position: relative !important; isolation: isolate !important; }
-            .${ANCHOR_CLASS}::after {
-                content: ""; position: absolute; inset: -3px; z-index: 5; pointer-events: none; border-radius: 14px; opacity: 0;
-                background: hsl(var(--foreground, 0 0% 96%) / 0.055); border: 2px solid hsl(var(--foreground, 0 0% 96%) / 0.62);
-                box-shadow: 0 0 0 1px hsl(var(--background, 0 0% 8%) / 0.55), 0 0 0 4px hsl(var(--foreground, 0 0% 96%) / 0.12), inset 0 0 0 9999px hsl(var(--foreground, 0 0% 96%) / 0.035);
-                transition: opacity .12s ease;
-            }
-            body.${MODE_CLASS} ${MESSAGE_SELECTOR}, body.${MODE_CLASS} .${ANCHOR_CLASS} { cursor: pointer !important; }
-            ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}::after, .${ANCHOR_CLASS}.${SELECTED_CLASS}::after { opacity: 1; }
-            ${MESSAGE_SELECTOR}.${SELECTED_CLASS} .${ANCHOR_CLASS}, .${ANCHOR_CLASS}.${SELECTED_CLASS} { outline: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.34); outline-offset: 2px; }
-            #${BTN_ID}.tm-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; transform: scale(0.96) !important; }
-            #${BTN_ID}.tm-deleting { opacity: 0.55; pointer-events: none; }
-            #${BTN_ID}.tm-clearing { transform: scale(0.94) !important; }
-            #${BTN_ID}.tm-clearing .tm-clear-spinner { opacity: 1; animation: tm-clear-spin .55s linear infinite; }
-            @keyframes tm-clear-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-            #${CONFIRM_OVERLAY_ID} { position: fixed; inset: 0; z-index: 9999999; background: rgba(0, 0, 0, 0.42); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
-            #${CONFIRM_OVERLAY_ID} * { box-sizing: border-box; }
-            .tm-delete-confirm-card { width: min(300px, calc(100vw - 40px)); border-radius: 16px; background: hsl(var(--background, 0 0% 10%)); color: hsl(var(--foreground, 0 0% 96%)); border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42); padding: 16px; font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
-            .tm-delete-confirm-title { font-size: 15px; font-weight: 800; line-height: 1.35; text-align: center; }
-            .tm-delete-confirm-message { margin-top: 10px; font-size: 13px; line-height: 1.55; color: hsl(var(--foreground, 0 0% 96%) / 0.72); text-align: center; }
-            .tm-delete-confirm-message b { color: hsl(var(--foreground, 0 0% 96%)); font-weight: 850; }
-            .tm-delete-confirm-actions { margin-top: 18px; display: flex; justify-content: center; align-items: center; gap: 8px; }
-            .tm-delete-confirm-actions button { height: 34px; min-width: 68px; padding: 0 14px; border-radius: 999px; border: 1px solid hsl(var(--foreground, 0 0% 96%) / 0.14); background: transparent; color: inherit; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; text-align: center; }
-            .tm-delete-confirm-actions button:hover { background: hsl(var(--foreground, 0 0% 96%) / 0.08); }
-            .tm-delete-confirm-ok { color: #ff8080 !important; border-color: rgba(255, 77, 79, 0.45) !important; background: rgba(255, 77, 79, 0.12) !important; }
-            .tm-delete-confirm-ok:hover { background: rgba(255, 77, 79, 0.18) !important; }
-            `;
-            document.head.appendChild(style);
-        }
-
-        function getMessageBubble(msg) {
-            const markdown = msg.querySelector('.wrtn-markdown');
-            const compareBubble = markdown?.closest('[data-rr-compare-nav="1"]');
-            if (compareBubble instanceof HTMLElement) return compareBubble;
-            const rrBubble = msg.querySelector('[data-rr-compare-nav="1"]');
-            if (rrBubble instanceof HTMLElement) return rrBubble;
-            const markdownParent = markdown?.parentElement;
-            if (markdownParent instanceof HTMLElement) return markdownParent;
-            return msg;
-        }
-
-        function markMessageSelected(msg, selected) {
-            if (!(msg instanceof HTMLElement)) return;
-            const bubble = getMessageBubble(msg);
-            bubble.classList.add(ANCHOR_CLASS);
-            msg.classList.toggle(SELECTED_CLASS, selected);
-            bubble.classList.toggle(SELECTED_CLASS, selected);
-        }
-
-        function scanMessages() {
-            const currentUrlKey = location.origin + location.pathname + location.search;
-            if (currentUrlKey !== lastUrlKey) {
-                lastUrlKey = currentUrlKey;
-                selectedIds.clear();
-                deleteMode = false;
-                isDeleting = false;
-                isClearing = false;
-                currentChatId = null;
-                document.body.classList.remove(MODE_CLASS);
-            }
-            [...document.querySelectorAll(MESSAGE_SELECTOR)].filter(el => el instanceof HTMLElement).forEach(msg => {
-                const id = msg?.getAttribute('data-message-group-id');
-                if (id) markMessageSelected(msg, selectedIds.has(id));
-            });
-            updateButtonState();
-        }
-
-        function updateButtonState() {
-            const btn = document.getElementById(BTN_ID);
-            if (!btn) return;
-            btn.classList.toggle('tm-active', deleteMode || selectedIds.size > 0);
-            btn.classList.toggle('tm-deleting', isDeleting);
-            btn.classList.toggle('tm-clearing', isClearing);
-            if (isDeleting) btn.title = '삭제 처리 중';
-            else if (isClearing) btn.title = '선택 해제 중';
-            else if (selectedIds.size > 0) btn.title = `선택 ${selectedIds.size}개, 클릭하면 한 번에 삭제 / 0.5초 길게 누르면 전체 해제`;
-            else if (deleteMode) btn.title = '삭제 모드 켜짐';
-            else btn.title = '삭제 모드';
-        }
-
-        function setDeleteMode(value) {
-            deleteMode = value;
-            document.body.classList.toggle(MODE_CLASS, deleteMode);
-            updateButtonState();
-        }
-
-        function clearSelection() {
-            selectedIds.clear();
-            [...document.querySelectorAll(MESSAGE_SELECTOR)].filter(el => el instanceof HTMLElement).forEach(msg => markMessageSelected(msg, false));
-            document.querySelectorAll(`.${ANCHOR_CLASS}.${SELECTED_CLASS}`).forEach(el => el.classList.remove(SELECTED_CLASS));
-            updateButtonState();
-        }
-
-        async function clearSelectionWithSpinner(closeMode = false) {
-            if (isClearing) return;
-            isClearing = true; updateButtonState();
-            await sleep(260);
-            clearSelection();
-            if (closeMode) setDeleteMode(false);
-            await sleep(260);
-            isClearing = false; updateButtonState();
-        }
-
-        function blockMessageInteraction(e) {
-            if (!deleteMode || isDeleting) return;
-            if (e.target.closest(`#${BTN_ID}`) || e.target.closest('[data-tm-toolbar-button="1"]')) return;
-            if (e.target.closest(MESSAGE_SELECTOR)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
-        }
-
-        function handleMessageClick(e) {
-            if (!deleteMode || isDeleting) return;
-            if (e.target.closest(`#${BTN_ID}`) || e.target.closest('[data-tm-toolbar-button="1"]')) return;
-            const msg = e.target.closest(MESSAGE_SELECTOR);
-            if (!msg) return;
-            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-            const id = msg.getAttribute('data-message-group-id');
-            if (!id) return;
-            const willSelect = !selectedIds.has(id);
-            if (willSelect) selectedIds.add(id); else selectedIds.delete(id);
-            markMessageSelected(msg, willSelect);
-            updateButtonState();
-        }
-
-        async function handleDeleteButtonClick(e) {
-            e.preventDefault(); e.stopPropagation();
-            if (longPressFired) { longPressFired = false; return; }
-            if (isDeleting || isClearing) return;
-            if (!deleteMode) { setDeleteMode(true); return; }
-            if (selectedIds.size === 0) { setDeleteMode(false); return; }
-            await startDeleteFlow();
-        }
-
-        function handleDeleteButtonPointerDown() {
-            if (isDeleting || isClearing) return;
-            longPressFired = false; clearTimeout(longPressTimer);
-            longPressTimer = setTimeout(async () => { if (selectedIds.size <= 0) return; longPressFired = true; await clearSelectionWithSpinner(true); }, LONG_PRESS_MS);
-        }
-
-        function handleDeleteButtonPointerEnd() { clearTimeout(longPressTimer); longPressTimer = null; }
-
-        async function startDeleteFlow() {
-            if (isDeleting) return;
-            const queue = [...selectedIds]; if (queue.length === 0) return;
-            const chatId = findChatId();
-            if (!chatId) { await openNoticeModal('삭제 불가', 'chatId를 찾지 못했습니다. 새로고침 후 시도하세요.'); updateButtonState(); return; }
-            const ok = await openDeleteConfirm(queue.length);
-            if (!ok) { updateButtonState(); return; }
-            isDeleting = true; setDeleteMode(false); updateButtonState();
-            const failed = [];
-            for (const id of queue) {
-                const msg = document.querySelector(`${MESSAGE_SELECTOR}[data-message-group-id="${id}"]`);
-                try {
-                    await deleteMessageFromServer(chatId, id);
-                    selectedIds.delete(id);
-                    if (msg) { markMessageSelected(msg, false); msg.remove(); }
-                } catch (err) { failed.push(id); }
-                await sleep(120);
-            }
-            isDeleting = false; setDeleteMode(false);
-            if (failed.length > 0) await openNoticeModal('일부 삭제 실패', `성공: ${queue.length - failed.length}개\n실패: ${failed.length}개`);
-            clearSelection(); updateButtonState();
-        }
-
-        function openDeleteConfirm(count) {
-            return new Promise(resolve => {
-                const old = document.getElementById(CONFIRM_OVERLAY_ID); if (old) old.remove();
-                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
-                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">메시지 삭제</div><div class="tm-delete-confirm-message">선택한 메시지 <b>${count}</b>개를 삭제할까요?<br>이 작업은 되돌릴 수 없습니다.</div><div class="tm-delete-confirm-actions"><button type="button" class="tm-delete-confirm-cancel">취소</button><button type="button" class="tm-delete-confirm-ok">삭제</button></div></div>`;
-                document.body.appendChild(overlay);
-                const cleanup = result => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(result); };
-                const onKeyDown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(false); } if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(true); } };
-                overlay.querySelector('.tm-delete-confirm-cancel').addEventListener('click', () => cleanup(false)); overlay.querySelector('.tm-delete-confirm-ok').addEventListener('click', () => cleanup(true));
-                overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(false); }); document.addEventListener('keydown', onKeyDown, true); overlay.querySelector('.tm-delete-confirm-ok')?.focus();
-            });
-        }
-
-        function openNoticeModal(title, message) {
-            return new Promise(resolve => {
-                const old = document.getElementById(CONFIRM_OVERLAY_ID); if (old) old.remove();
-                const overlay = document.createElement('div'); overlay.id = CONFIRM_OVERLAY_ID;
-                overlay.innerHTML = `<div class="tm-delete-confirm-card"><div class="tm-delete-confirm-title">${title}</div><div class="tm-delete-confirm-message">${message.replace(/\n/g, '<br>')}</div><div class="tm-delete-confirm-actions"><button type="button" class="tm-delete-confirm-ok">확인</button></div></div>`;
-                document.body.appendChild(overlay);
-                const cleanup = () => { document.removeEventListener('keydown', onKeyDown, true); overlay.remove(); resolve(); };
-                const onKeyDown = e => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cleanup(); } };
-                overlay.querySelector('.tm-delete-confirm-ok').addEventListener('click', cleanup); overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
-                document.addEventListener('keydown', onKeyDown, true); overlay.querySelector('.tm-delete-confirm-ok')?.focus();
-            });
-        }
-
-        function extractChatIdFromUrl(url) {
-            if (!url || typeof url !== 'string') return null;
-            for (const pattern of [/\/chats\/([a-f0-9]{24})(?:\/|$)/i, /"chatId":"([a-f0-9]{24})"/i]) {
-                const match = url.match(pattern); if (match) return match[1];
-            } return null;
-        }
-
-        function setCurrentChatId(chatId) { if (chatId) currentChatId = chatId; }
-
-        function hookNetworkForChatId() {
-            if (networkHooked) return; networkHooked = true;
-            const originalFetch = window.fetch;
-            window.fetch = async function (...args) {
-                try { const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || ''; const detected = extractChatIdFromUrl(url); if (detected) setCurrentChatId(detected); } catch {}
-                return originalFetch.apply(this, args);
-            };
-            const originalOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-                try { const detected = extractChatIdFromUrl(String(url || '')); if (detected) setCurrentChatId(detected); } catch {}
-                return originalOpen.call(this, method, url, ...rest);
-            };
-        }
-
-        function findChatId() {
-            if (typeof CrackUtil !== 'undefined') return CrackUtil.path().chatRoom();
-            if (currentChatId) return currentChatId;
-            const match1 = document.documentElement.innerHTML.match(/\/chats\/([a-f0-9]{24})\/messages/i); if (match1) { setCurrentChatId(match1[1]); return match1[1]; }
-            return null;
-        }
-
-        function getCookie(name) { const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)')); return match ? decodeURIComponent(match[1]) : null; }
-
-        async function deleteMessageFromServer(chatId, messageId) {
-            const token = getCookie('access_token');
-            const headers = { accept: 'application/json, text/plain, */*', platform: 'web', 'wrtn-locale': 'ko-KR' };
-            if (token) headers.authorization = `Bearer ${token}`;
-            const wrtnId = getCookie('__w_id'); if (wrtnId) headers['x-wrtn-id'] = wrtnId;
-            const mixpanelId = getCookie('Mixpanel-Distinct-Id'); if (mixpanelId) headers['mixpanel-distinct-id'] = mixpanelId;
-            const res = await fetch(`${API_BASE}/chats/${chatId}/messages/${messageId}`, { method: 'DELETE', credentials: 'include', headers });
-            if (!res.ok) throw new Error(`삭제 실패 (${res.status})`);
-            return await res.json().catch(() => ({}));
-        }
-
-        hookNetworkForChatId();
-        injectStyle();
-        document.addEventListener('pointerdown', blockMessageInteraction, true);
-        document.addEventListener('mousedown', blockMessageInteraction, true);
-        document.addEventListener('mouseup', blockMessageInteraction, true);
-        document.addEventListener('touchstart', blockMessageInteraction, true);
-        document.addEventListener('contextmenu', blockMessageInteraction, true);
-        document.addEventListener('click', handleMessageClick, true);
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (document.getElementById(CONFIRM_OVERLAY_ID)) return; setDeleteMode(false); clearSelection(); } });
-
-        setInterval(() => {
-            const btn = document.getElementById(BTN_ID);
-            if (btn && !btn.dataset.hooked) {
-                btn.dataset.hooked = 'true';
-                btn.innerHTML = iconTrash;
-                btn.onpointerdown = handleDeleteButtonPointerDown;
-                btn.onpointerup = handleDeleteButtonPointerEnd;
-                btn.onpointerleave = handleDeleteButtonPointerEnd;
-                btn.onpointercancel = handleDeleteButtonPointerEnd;
-                btn.onclick = handleDeleteButtonClick;
-                updateButtonState();
-            }
-            if (isClearing || isDeleting) updateButtonState();
-            scanMessages();
-            findChatId();
-        }, 1000);
-    }
-
-    // ==========================================
-    // 모듈 9: 채팅방 자동 스크롤 
+    // 모듈 8: 채팅방 자동 스크롤 
     // ==========================================
     function initAutoScroll() {
         const WAIT_TIME = 500;
@@ -1369,20 +1060,18 @@
     function startAll() {
         try {
             setTimeout(() => {
-                try { initTurnCracker(); } catch (e) { console.error("[ 9in1 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+                try { initTurnCracker(); } catch (e) { console.error("[ 8in1 통합팩 ] 턴수 크래커 모듈 오류:", e); }
             }, 100);
 
-            try { initDoubleClick(); } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 모듈 오류:", e); }
-            try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
-            try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
-            try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 모듈 오류:", e); }
-            try { initAutoSaver();   } catch (e) { console.error("[ 9in1 통합팩 ] 임시저장 모듈 오류:", e); }
-            try { initRadiosonde();  } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
-            
-            try { initSelectDelete(); } catch (e) { console.error("[ 9in1 통합팩 ] 선택삭제 모듈 오류:", e); }
-            try { initAutoScroll();   } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
+            try { initDoubleClick(); } catch (e) { console.error("[ 8in1 통합팩 ] 더블클릭 모듈 오류:", e); }
+            try { initRerollHold();  } catch (e) { console.error("[ 8in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+            try { initSendHold();    } catch (e) { console.error("[ 8in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
+            try { initRPToolbar();   } catch (e) { console.error("[ 8in1 통합팩 ] 대사 툴바 모듈 오류:", e); }
+            try { initAutoSaver();   } catch (e) { console.error("[ 8in1 통합팩 ] 임시저장 모듈 오류:", e); }
+            try { initRadiosonde();  } catch (e) { console.error("[ 8in1 통합팩 ] 라디오존데 모듈 오류:", e); }
+            try { initAutoScroll();  } catch (e) { console.error("[ 8in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
         } catch(e) {
-            console.error("[ 9in1 통합팩 ] 치명적인 시작 오류 발생:", e);
+            console.error("[ 8in1 통합팩 ] 치명적인 시작 오류 발생:", e);
         }
     }
 
