@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V5.6.7 UI 수정 / 선택삭제 & 오토스크롤 아이콘화, 대칭 조절, 크래커 타이밍 픽스)
+// @name         크랙 9 in 1 통합팩 (V5.6.8 완벽 안정화 / 대칭 정렬, 구분선 추가, 크래커 타이밍 픽스)
 // @namespace    https://crack.wrtn.ai/
 // @version      6.0
 // @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 텍스트 통일화
@@ -280,7 +280,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 타이밍 픽스)
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 중복 합산 방지 적용)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -300,7 +300,7 @@
         let updateTimer, observer, lastRenderedText = '';
         let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
         let lastConsumed = 0, isCalculatingCumulative = false;
-        let lastProcessedAiCount = -1; // AI 응답 수 기준으로 크래커 계산 트리거 분리
+        let lastProcessedAiCount = -1; 
 
         function start() {
             injectBaseStyle();
@@ -391,7 +391,6 @@
         function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
         function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
 
-        // [수정됨] 턴수는 유저 기준으로, 크래커 타이밍을 위해 AI 응답 개수도 같이 셉니다.
         async function fetchRoomData() {
             if (typeof CrackUtil === 'undefined') return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
             try {
@@ -407,13 +406,13 @@
                 for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
                     totalMessages++;
                     if (log.isUser()) {
-                        chatCounts++; // 화면 표시용 (유저 턴)
+                        chatCounts++; 
                         continue;
                     }
-                    aiCounts++; // 크래커 계산 트리거용 (AI 응답 완료)
+                    aiCounts++; 
                     timestamps.push(getTimeFromObjectId(log.id));
                 }
-                return { chatCounts, aiCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
+                return { chatCounts, aiCounts, totalMessages, timestamps: timestamps.filter(t => t > 0).sort((a,b)=>a-b) };
             } catch { return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] }; }
         }
 
@@ -469,12 +468,14 @@
                             cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
                         }
                         
-                        // [수정됨] 크래커 계산은 유저 턴수 증가 시점이 아니라, AI 답변 완료(aiCounts 증가) 시점에만 1회 작동합니다.
                         const currentAiCount = data.aiCounts !== -1 ? data.aiCounts : Math.ceil(domTotalMessages / 2);
                         if (currentAiCount !== lastProcessedAiCount && !isCalculatingCumulative && data.timestamps.length > 0) {
                             lastProcessedAiCount = currentAiCount; isCalculatingCumulative = true; renderUpdate(textarea);
                             
-                            fetchCumulativeCrackers(data.timestamps).then(cum => {
+                            // [수정됨] 무조건 가장 최신 1개의 Timestamp만 넘겨서 이전 턴 크래커 소모량이 중복 합산되는 버그 차단
+                            const latestTimestampOnly = [data.timestamps[data.timestamps.length - 1]];
+                            
+                            fetchCumulativeCrackers(latestTimestampOnly).then(cum => {
                                 if (currentChatId) {
                                     const prevCumKey = 'crack_cum_' + currentChatId;
                                     const prevCum = parseInt(localStorage.getItem(prevCumKey), 10);
@@ -535,7 +536,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 렌더링, 구분선 추가)
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 및 대칭 조절, 점선 추가)
     // ==========================================
     function initRPToolbar() {
         const fixedTools = [
@@ -582,7 +583,7 @@
 
         function createToolButton(iconText, onClick) {
             const btn = document.createElement('button');
-            btn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+            btn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
             btn.type = "button";
             btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
 
@@ -636,30 +637,31 @@
             if (!document.getElementById('custom-rp-tools')) {
                 const toolWrapper = document.createElement('div');
                 toolWrapper.id = 'custom-rp-tools';
-                // [수정됨] 우측 여백 강제 값을 빼고, 원래대로 복원하여 우측 전송버튼부와 대칭 간격 조화
-                toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
+                
+                // [수정됨] 강제 마진(ml-1 등)을 완전히 빼고 gap을 사용하여 우측 전송버튼과의 자연스러운 대칭 구현
+                toolWrapper.className = 'flex items-center gap-1';
 
-                // 1. 선택삭제 버튼 껍데기 (텍스트 아이콘화)
+                // 1. 선택삭제 버튼 껍데기 (텍스트 '□')
                 const selectDeleteBtn = document.createElement('button');
                 selectDeleteBtn.id = 'tm-message-delete-mode-btn';
-                selectDeleteBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+                selectDeleteBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 selectDeleteBtn.innerHTML = `<span style="font-size:15px;">□</span>`;
                 toolWrapper.appendChild(selectDeleteBtn);
 
-                // 2. 오토스크롤 버튼 껍데기 (텍스트 아이콘화)
+                // 2. 오토스크롤 버튼 껍데기 (텍스트 '△')
                 const autoScrollBtn = document.createElement('button');
                 autoScrollBtn.id = 'turbo-scroll-btn';
-                autoScrollBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+                autoScrollBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
-                // [수정됨] 3. 오토스크롤과 ★ 사이에 1.5배 간격과 세로 회색 점선 넣기
+                // [수정됨] 3. 오토스크롤과 ★ 사이에 구분선 (점선) 추가, 양옆 마진으로 1.5배 이상 간격 형성
                 const divider = document.createElement('div');
                 divider.style.width = '1px';
                 divider.style.height = '14px';
-                divider.style.borderRight = '2px dotted currentColor';
+                divider.style.borderLeft = '1px dashed currentColor';
                 divider.style.opacity = '0.3';
-                divider.style.margin = '0 6px 0 2px'; 
+                divider.style.margin = '0 8px'; // 양옆에 넉넉하게 공간 부여
                 toolWrapper.appendChild(divider);
 
                 // 4. 기존 커스텀 툴바 버튼 추가
@@ -963,7 +965,6 @@
 
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-        // [수정됨] SVG 대신 텍스트 유지
         const iconTrash = `
             <span class="tm-delete-icon-wrap" style="position:relative; display:inline-flex; align-items:center; justify-content:center; width:100%; height:100%;">
                 <span style="font-size:15px;">□</span>
@@ -1249,7 +1250,7 @@
     }
 
     // ==========================================
-    // 모듈 9: 채팅방 자동 스크롤
+    // 모듈 9: 채팅방 자동 스크롤 
     // ==========================================
     function initAutoScroll() {
         const WAIT_TIME = 500;
@@ -1261,7 +1262,6 @@
         const MESSAGE_SELECTOR = 'div[data-message-group-id]';
         const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-        // [수정됨] 텍스트 아이콘화
         const iconUp = `<span style="font-size:15px;">△</span>`;
         const iconStop = `<span style="font-size:15px;">▲</span>`;
 
@@ -1368,22 +1368,26 @@
     }
 
     // ==========================================
-    // 통합팩 동시 실행 관리
+    // 통합팩 동시 실행 관리 (안전장치 추가)
     // ==========================================
     function startAll() {
-        setTimeout(() => {
-            try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
-        }, 100);
+        try {
+            setTimeout(() => {
+                try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+            }, 100);
 
-        try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
-        try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
-        try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
-        try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
-        try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
-        try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
-        
-        try { initSelectDelete(); } catch (e) { console.error("[ 통합팩 ] 선택삭제 모듈 오류:", e); }
-        try { initAutoScroll();   } catch (e) { console.error("[ 통합팩 ] 오토스크롤 모듈 오류:", e); }
+            try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
+            try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+            try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
+            try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
+            try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
+            try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 모듈 오류:", e); }
+            
+            try { initSelectDelete(); } catch (e) { console.error("[ 통합팩 ] 선택삭제 모듈 오류:", e); }
+            try { initAutoScroll();   } catch (e) { console.error("[ 통합팩 ] 오토스크롤 모듈 오류:", e); }
+        } catch(e) {
+            console.error("[ 통합팩 ] 치명적인 시작 오류 발생:", e);
+        }
     }
 
     if (document.readyState === 'loading') {
@@ -1391,5 +1395,12 @@
     } else {
         startAll();
     }
+    
+    // 만약에 대비한 추가 로드 이벤터 안전장치
+    window.addEventListener('load', () => {
+        if (!document.getElementById('custom-rp-tools') && !document.getElementById('my-custom-info-display')) {
+            startAll();
+        }
+    });
 
 })();
