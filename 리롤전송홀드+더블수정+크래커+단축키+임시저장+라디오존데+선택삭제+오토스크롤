@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V5.6.8 완벽 안정화 / 대칭 정렬, 구분선 추가, 크래커 타이밍 픽스)
+// @name         크랙 9 in 1 통합팩 (V6.0 완벽 안정화 / 선택삭제, 오토스크롤 포함 및 크래커 소모량 픽스)
 // @namespace    https://crack.wrtn.ai/
 // @version      6.0
 // @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 텍스트 통일화
@@ -280,7 +280,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 중복 합산 방지 적용)
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 계산식 7in1 기존 방식으로 복구)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -299,8 +299,7 @@
         let counterBadge, textSpan, currentTextarea;
         let updateTimer, observer, lastRenderedText = '';
         let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
-        let lastConsumed = 0, isCalculatingCumulative = false;
-        let lastProcessedAiCount = -1; 
+        let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
 
         function start() {
             injectBaseStyle();
@@ -392,15 +391,14 @@
         function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
 
         async function fetchRoomData() {
-            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
             try {
                 const pathInfo = CrackUtil.path();
-                if (!pathInfo.isChattingPath()) return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
+                if (!pathInfo.isChattingPath()) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
                 const chatId = pathInfo.chatRoom();
-                if (!chatId) return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
+                if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
                 
                 let chatCounts = 0; 
-                let aiCounts = 0;
                 let totalMessages = 0;
                 const timestamps = [];
                 for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
@@ -409,11 +407,10 @@
                         chatCounts++; 
                         continue;
                     }
-                    aiCounts++; 
                     timestamps.push(getTimeFromObjectId(log.id));
                 }
-                return { chatCounts, aiCounts, totalMessages, timestamps: timestamps.filter(t => t > 0).sort((a,b)=>a-b) };
-            } catch { return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] }; }
+                return { chatCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
+            } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
         }
 
         async function fetchCumulativeCrackers(timestamps) {
@@ -452,7 +449,7 @@
             let forceCalculate = false;
             
             if (currentChatId && currentChatId !== lastChatId) { 
-                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedAiCount = -1; 
+                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedTurns = -1; 
             }
 
             if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
@@ -468,14 +465,13 @@
                             cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
                         }
                         
-                        const currentAiCount = data.aiCounts !== -1 ? data.aiCounts : Math.ceil(domTotalMessages / 2);
-                        if (currentAiCount !== lastProcessedAiCount && !isCalculatingCumulative && data.timestamps.length > 0) {
-                            lastProcessedAiCount = currentAiCount; isCalculatingCumulative = true; renderUpdate(textarea);
+                        // [복구됨] 7 in 1 원본과 동일하게 턴수가 바뀔 때만 (cum - prevCum)로 안전하게 단일 턴 계산
+                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedTurns = cachedTurns; 
+                            isCalculatingCumulative = true; 
+                            renderUpdate(textarea);
                             
-                            // [수정됨] 무조건 가장 최신 1개의 Timestamp만 넘겨서 이전 턴 크래커 소모량이 중복 합산되는 버그 차단
-                            const latestTimestampOnly = [data.timestamps[data.timestamps.length - 1]];
-                            
-                            fetchCumulativeCrackers(latestTimestampOnly).then(cum => {
+                            fetchCumulativeCrackers(data.timestamps).then(cum => {
                                 if (currentChatId) {
                                     const prevCumKey = 'crack_cum_' + currentChatId;
                                     const prevCum = parseInt(localStorage.getItem(prevCumKey), 10);
@@ -486,7 +482,8 @@
                                     }
                                     localStorage.setItem(prevCumKey, cum);
                                 }
-                                isCalculatingCumulative = false; renderUpdate(textarea);
+                                isCalculatingCumulative = false; 
+                                renderUpdate(textarea);
                             }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea); });
                         }
                     } else { 
@@ -638,7 +635,6 @@
                 const toolWrapper = document.createElement('div');
                 toolWrapper.id = 'custom-rp-tools';
                 
-                // [수정됨] 강제 마진(ml-1 등)을 완전히 빼고 gap을 사용하여 우측 전송버튼과의 자연스러운 대칭 구현
                 toolWrapper.className = 'flex items-center gap-1';
 
                 // 1. 선택삭제 버튼 껍데기 (텍스트 '□')
@@ -655,7 +651,7 @@
                 autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
-                // [수정됨] 3. 오토스크롤과 ★ 사이에 구분선 (점선) 추가, 양옆 마진으로 1.5배 이상 간격 형성
+                // 3. 오토스크롤과 ★ 사이에 구분선 (점선) 추가, 양옆 마진으로 1.5배 이상 간격 형성
                 const divider = document.createElement('div');
                 divider.style.width = '1px';
                 divider.style.height = '14px';
@@ -1368,25 +1364,25 @@
     }
 
     // ==========================================
-    // 통합팩 동시 실행 관리 (안전장치 추가)
+    // 통합팩 동시 실행 관리 (안전장치 강화)
     // ==========================================
     function startAll() {
         try {
             setTimeout(() => {
-                try { initTurnCracker(); } catch (e) { console.error("[ 통합팩 ] 턴수 크래커 모듈 오류:", e); }
+                try { initTurnCracker(); } catch (e) { console.error("[ 9in1 통합팩 ] 턴수 크래커 모듈 오류:", e); }
             }, 100);
 
-            try { initDoubleClick(); } catch (e) { console.error("[ 통합팩 ] 더블클릭 모듈 오류:", e); }
-            try { initRerollHold();  } catch (e) { console.error("[ 통합팩 ] 리롤 홀드 모듈 오류:", e); }
-            try { initSendHold();    } catch (e) { console.error("[ 통합팩 ] 전송 홀드 모듈 오류:", e); }
-            try { initRPToolbar();   } catch (e) { console.error("[ 통합팩 ] 대사 툴바 모듈 오류:", e); }
-            try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
-            try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 모듈 오류:", e); }
+            try { initDoubleClick(); } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 모듈 오류:", e); }
+            try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+            try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
+            try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 모듈 오류:", e); }
+            try { initAutoSaver();   } catch (e) { console.error("[ 9in1 통합팩 ] 임시저장 모듈 오류:", e); }
+            try { initRadiosonde();  } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
             
-            try { initSelectDelete(); } catch (e) { console.error("[ 통합팩 ] 선택삭제 모듈 오류:", e); }
-            try { initAutoScroll();   } catch (e) { console.error("[ 통합팩 ] 오토스크롤 모듈 오류:", e); }
+            try { initSelectDelete(); } catch (e) { console.error("[ 9in1 통합팩 ] 선택삭제 모듈 오류:", e); }
+            try { initAutoScroll();   } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
         } catch(e) {
-            console.error("[ 통합팩 ] 치명적인 시작 오류 발생:", e);
+            console.error("[ 9in1 통합팩 ] 치명적인 시작 오류 발생:", e);
         }
     }
 
@@ -1395,12 +1391,5 @@
     } else {
         startAll();
     }
-    
-    // 만약에 대비한 추가 로드 이벤터 안전장치
-    window.addEventListener('load', () => {
-        if (!document.getElementById('custom-rp-tools') && !document.getElementById('my-custom-info-display')) {
-            startAll();
-        }
-    });
 
 })();
