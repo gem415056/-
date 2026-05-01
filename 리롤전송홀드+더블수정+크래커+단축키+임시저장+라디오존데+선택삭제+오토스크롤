@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 7 in 1 통합팩 (V5.6.6 UI 수정 / 선택삭제 & 오토스크롤 추가 및 턴 계산 변경)
+// @name         크랙 9 in 1 통합팩 (V5.6.7 UI 수정 / 선택삭제 & 오토스크롤 아이콘화, 대칭 조절, 크래커 타이밍 픽스)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.6.6
-// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 추가
+// @version      6.0
+// @description  입력창 외부 좌(크래커)·우(라디오존데) 대칭 배치 및 라디오존데 팝업 상향 표시, UI 개선, 선택삭제/스크롤버튼 텍스트 통일화
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -280,7 +280,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (수정됨: 턴 계산 방식 변경)
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기 (크래커 타이밍 픽스)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -299,7 +299,8 @@
         let counterBadge, textSpan, currentTextarea;
         let updateTimer, observer, lastRenderedText = '';
         let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
-        let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
+        let lastConsumed = 0, isCalculatingCumulative = false;
+        let lastProcessedAiCount = -1; // AI 응답 수 기준으로 크래커 계산 트리거 분리
 
         function start() {
             injectBaseStyle();
@@ -390,28 +391,30 @@
         function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
         function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
 
-        // [수정됨] 턴 계산을 유저 기준으로 변경
+        // [수정됨] 턴수는 유저 기준으로, 크래커 타이밍을 위해 AI 응답 개수도 같이 셉니다.
         async function fetchRoomData() {
-            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
             try {
                 const pathInfo = CrackUtil.path();
-                if (!pathInfo.isChattingPath()) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                if (!pathInfo.isChattingPath()) return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
                 const chatId = pathInfo.chatRoom();
-                if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                if (!chatId) return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] };
                 
                 let chatCounts = 0; 
+                let aiCounts = 0;
                 let totalMessages = 0;
                 const timestamps = [];
                 for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) {
                     totalMessages++;
                     if (log.isUser()) {
-                        chatCounts++; // AI턴이 아닌 유저턴을 셉니다
+                        chatCounts++; // 화면 표시용 (유저 턴)
                         continue;
                     }
+                    aiCounts++; // 크래커 계산 트리거용 (AI 응답 완료)
                     timestamps.push(getTimeFromObjectId(log.id));
                 }
-                return { chatCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
-            } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
+                return { chatCounts, aiCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
+            } catch { return { chatCounts: -1, aiCounts: -1, totalMessages: -1, timestamps: [] }; }
         }
 
         async function fetchCumulativeCrackers(timestamps) {
@@ -450,7 +453,7 @@
             let forceCalculate = false;
             
             if (currentChatId && currentChatId !== lastChatId) { 
-                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedTurns = -1; 
+                lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedAiCount = -1; 
             }
 
             if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
@@ -458,7 +461,6 @@
                 fetchRoomData().then(data => {
                     const domTotalMessages = document.querySelectorAll(SELECTOR.messageGroup).length;
                     if (data.chatCounts !== -1) {
-                        // [수정됨] API 로그를 못 읽었을 때 DOM 기준 예비 계산 (floor 사용)
                         if (data.chatCounts === 0 && data.totalMessages <= 0 && domTotalMessages > 0) {
                             cachedTurns = Math.floor(domTotalMessages / 2);
                             cachedTotalMessages = domTotalMessages;
@@ -467,8 +469,10 @@
                             cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null;
                         }
                         
-                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
-                            lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea);
+                        // [수정됨] 크래커 계산은 유저 턴수 증가 시점이 아니라, AI 답변 완료(aiCounts 증가) 시점에만 1회 작동합니다.
+                        const currentAiCount = data.aiCounts !== -1 ? data.aiCounts : Math.ceil(domTotalMessages / 2);
+                        if (currentAiCount !== lastProcessedAiCount && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedAiCount = currentAiCount; isCalculatingCumulative = true; renderUpdate(textarea);
                             
                             fetchCumulativeCrackers(data.timestamps).then(cum => {
                                 if (currentChatId) {
@@ -531,7 +535,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 렌더링)
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+선택삭제/오토스크롤 버튼 렌더링, 구분선 추가)
     // ==========================================
     function initRPToolbar() {
         const fixedTools = [
@@ -544,7 +548,6 @@
             { icon: '♧', pre: '(OOC：', suf: ')' }
         ];
 
-        // 방어막(igx-keep-btn)이 없는 기본 버튼들만 모조리 숨기는 마법(CSS) 주입
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
             style.id = 'hide-native-rp-btns';
@@ -618,49 +621,53 @@
         }, true);
 
         setInterval(() => {
-            // 하단 툴바 구역 찾기
             const btnContainer = document.querySelector('.flex.items-center.space-x-2');
             if (!btnContainer) return;
 
-            // 우리가 심어둔 CSS가 먹히도록 구역에 이름표 달아주기
             if (!btnContainer.classList.contains('igx-rp-container-hooked')) {
                 btnContainer.classList.add('igx-rp-container-hooked');
             }
 
-            // '추천답변' 버튼을 찾아서 얘한테만 방어막(igx-keep-btn) 씌워주기 (안 숨겨지게)
             const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
             if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) {
                 recommendBtn.classList.add('igx-keep-btn');
             }
 
-            // 내 커스텀 툴바가 없으면 집어넣기
             if (!document.getElementById('custom-rp-tools')) {
                 const toolWrapper = document.createElement('div');
                 toolWrapper.id = 'custom-rp-tools';
-                // [수정됨] 입력창 기준, 우측 전송버튼과의 간격 대칭을 위해 marginLeft = 12px 추가
-                toolWrapper.className = 'flex items-center space-x-1 mr-1';
-                toolWrapper.style.marginLeft = '12px';
+                // [수정됨] 우측 여백 강제 값을 빼고, 원래대로 복원하여 우측 전송버튼부와 대칭 간격 조화
+                toolWrapper.className = 'flex items-center space-x-1 ml-1 mr-1';
 
-                // 1. 선택삭제 버튼 껍데기 추가 (이벤트는 모듈 8에서 처리)
+                // 1. 선택삭제 버튼 껍데기 (텍스트 아이콘화)
                 const selectDeleteBtn = document.createElement('button');
                 selectDeleteBtn.id = 'tm-message-delete-mode-btn';
                 selectDeleteBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
+                selectDeleteBtn.innerHTML = `<span style="font-size:15px;">□</span>`;
                 toolWrapper.appendChild(selectDeleteBtn);
 
-                // 2. 오토스크롤 버튼 껍데기 추가 (이벤트는 모듈 9에서 처리)
+                // 2. 오토스크롤 버튼 껍데기 (텍스트 아이콘화)
                 const autoScrollBtn = document.createElement('button');
                 autoScrollBtn.id = 'turbo-scroll-btn';
                 autoScrollBtn.className = "relative inline-flex items-center gap-1 rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7 justify-center";
-                autoScrollBtn.style.marginRight = "4px"; // [수정됨] ★과의 간격을 두 배로 넓히기 위해 우측 마진 추가 (기본 gap 4px + 마진 4px = 8px)
+                autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
-                // 3. 기존 커스텀 툴바 버튼 추가
+                // [수정됨] 3. 오토스크롤과 ★ 사이에 1.5배 간격과 세로 회색 점선 넣기
+                const divider = document.createElement('div');
+                divider.style.width = '1px';
+                divider.style.height = '14px';
+                divider.style.borderRight = '2px dotted currentColor';
+                divider.style.opacity = '0.3';
+                divider.style.margin = '0 6px 0 2px'; 
+                toolWrapper.appendChild(divider);
+
+                // 4. 기존 커스텀 툴바 버튼 추가
                 fixedTools.forEach((t) => {
                     const btn = createToolButton(t.icon, () => wrapText(t.pre, t.suf));
                     toolWrapper.appendChild(btn);
                 });
 
-                // 추천답변 버튼이 있으면 그 옆에 예쁘게 배치, 없으면 그냥 끝에 붙임
                 if (recommendBtn) {
                     btnContainer.insertBefore(toolWrapper, recommendBtn);
                 } else {
@@ -940,7 +947,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 메시지 선택 삭제 (단축키 모듈에서 만든 버튼에 기능 씌우기)
+    // 모듈 8: 메시지 선택 삭제 
     // ==========================================
     function initSelectDelete() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
@@ -956,13 +963,11 @@
 
         const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+        // [수정됨] SVG 대신 텍스트 유지
         const iconTrash = `
-            <span class="tm-delete-icon-wrap" style="position:relative; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">
-                <svg class="tm-delete-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 25" width="24px" height="24px" style="display:block; color:inherit;">
-                <path d="M15.44 4.34H8.56v-1.6h6.88zm-6 12v-5.6h1.6v5.6zm3.53-5.6v5.6h1.6v-5.6z"></path>
-                <path fill-rule="evenodd" d="M2.6 5.43v1.6h1.57v13.9c0 .78.63 1.4 1.4 1.4h12.86c.77 0 1.4-.62 1.4-1.4V7.04h1.57v-1.6zm15.63 1.6H5.77v13.7h12.46z" clip-rule="evenodd"></path>
-                </svg>
-                <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px solid hsl(var(--foreground,0 0% 96%)/0.22); border-top-color:hsl(var(--foreground,0 0% 96%)/0.82); opacity:0; pointer-events:none;"></span>
+            <span class="tm-delete-icon-wrap" style="position:relative; display:inline-flex; align-items:center; justify-content:center; width:100%; height:100%;">
+                <span style="font-size:15px;">□</span>
+                <span class="tm-clear-spinner" style="position:absolute; inset:-4px; border-radius:999px; border:2px dotted hsl(var(--foreground,0 0% 96%)/0.4); opacity:0; pointer-events:none;"></span>
             </span>
         `;
 
@@ -1244,7 +1249,7 @@
     }
 
     // ==========================================
-    // 모듈 9: 채팅방 자동 스크롤 (단축키 모듈에서 만든 버튼에 기능 씌우기)
+    // 모듈 9: 채팅방 자동 스크롤
     // ==========================================
     function initAutoScroll() {
         const WAIT_TIME = 500;
@@ -1256,8 +1261,9 @@
         const MESSAGE_SELECTOR = 'div[data-message-group-id]';
         const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-        const iconUp = 'M12 4.586l5.707 5.707-1.414 1.414L12 7.414 7.707 11.707 6.293 10.293 12 4.586zm0 6l5.707 5.707-1.414 1.414L12 13.414 7.707 17.707 6.293 16.293 12 10.586z';
-        const iconStop = 'M7 7h10v10H7z';
+        // [수정됨] 텍스트 아이콘화
+        const iconUp = `<span style="font-size:15px;">△</span>`;
+        const iconStop = `<span style="font-size:15px;">▲</span>`;
 
         let isRunning = false;
 
@@ -1267,13 +1273,13 @@
             style.id = STYLE_ID;
             style.textContent = `
                 #${BTN_ID}.tm-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; }
-                #${BTN_ID} svg, #${BTN_ID} svg path { color: inherit !important; fill: currentColor !important; }
+                #${BTN_ID} span { color: inherit !important; fill: currentColor !important; }
             `;
             document.head.appendChild(style);
         }
 
-        function updateIcon(btn, path) {
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="currentColor"><path d="${path}"></path></svg>`;
+        function updateIcon(btn, iconHtml) {
+            btn.innerHTML = iconHtml;
         }
 
         function setButtonActive(btn, active) {
@@ -1376,7 +1382,6 @@
         try { initAutoSaver();   } catch (e) { console.error("[ 통합팩 ] 임시저장 모듈 오류:", e); }
         try { initRadiosonde();  } catch (e) { console.error("[ 통합팩 ] 라디오존데 우측 배치 모듈 오류:", e); }
         
-        // 새롭게 추가된 모듈 호출
         try { initSelectDelete(); } catch (e) { console.error("[ 통합팩 ] 선택삭제 모듈 오류:", e); }
         try { initAutoScroll();   } catch (e) { console.error("[ 통합팩 ] 오토스크롤 모듈 오류:", e); }
     }
