@@ -1,0 +1,884 @@
+// ==UserScript==
+// @name         크랙 9 in 1 통합팩 (V8.0 / 8in1 + 저장모듈 완벽 UI 통합)
+// @namespace    https://crack.wrtn.ai/
+// @version      8.0
+// @description  오토스크롤, 툴바, 턴수표시 등 기존 기능 + 채팅 저장(CrackSafe) 기능 통합 및 UI 완벽 동기화
+// @author       User & Assistant
+// @match        https://crack.wrtn.ai/*
+// @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
+// @connect      rs.igx.kr
+// @connect      crack-api.wrtn.ai
+// @run-at       document-idle
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
+// @require      https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js
+// @require      https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // 전역 강조 색상 (북마크 등 다른 팩과 동일한 색상)
+    const GLOBAL_ACCENT_COLOR = '#FBA707';
+
+    // ==========================================
+    // 모듈 1: 더블클릭 수정 기능
+    // ==========================================
+    function initDoubleClick() {
+        function findMessageContainer(target) {
+            let el = target;
+            while (el && el !== document.body) {
+                if (el.hasAttribute('data-message-group-id')) return el;
+                el = el.parentElement;
+            }
+            return null;
+        }
+        function getReactProps(el) {
+            const key = Object.keys(el).find(k => k.startsWith('__reactProps'));
+            return key ? el[key] : null;
+        }
+        function firePointerClick(el) {
+            const opts = { bubbles: true, cancelable: true };
+            el.dispatchEvent(new PointerEvent('pointerover', opts));
+            el.dispatchEvent(new PointerEvent('pointerenter', opts));
+            el.dispatchEvent(new MouseEvent('mouseenter', opts));
+            el.dispatchEvent(new PointerEvent('pointerdown', opts));
+            el.dispatchEvent(new PointerEvent('pointerup', opts));
+            el.click();
+        }
+        function tryReactEditClick(container) {
+            const trigger = container.querySelector('div[aria-haspopup="menu"]');
+            if (!trigger) return false;
+            const style = document.createElement('style');
+            style.id = 'igx-hide-dropdown';
+            style.textContent = `[data-radix-popper-content-wrapper], [role="menu"] { opacity: 0 !important; pointer-events: none !important; }`;
+            document.head.appendChild(style);
+            firePointerClick(trigger);
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const item = Array.from(document.querySelectorAll('div[role="menuitem"]')).find(el => el.textContent.includes('수정'));
+                if (item) {
+                    clearInterval(timer);
+                    const props = getReactProps(item);
+                    if (props?.onSelect) props.onSelect();
+                    else firePointerClick(item);
+                    setTimeout(() => style.remove(), 100);
+                } else if (Date.now() - start > 1500) {
+                    clearInterval(timer);
+                    style.remove();
+                }
+            }, 30);
+            return true;
+        }
+        document.addEventListener('dblclick', (e) => {
+            const container = findMessageContainer(e.target);
+            if (!container) return;
+            window.getSelection().removeAllRanges();
+            tryReactEditClick(container);
+        });
+    }
+
+    // ==========================================
+    // 모듈 2: 리롤 길게 누르기 기능
+    // ==========================================
+    function initRerollHold() {
+        const HOLD_MS = 600; let isConfirmed = false; let holdTimer = null;
+        const css = `#rr-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; } #rr-progress-ring.active { display: block; } #rr-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; } #rr-progress-ring circle.fill { fill: none; stroke: #e8302a; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }`;
+        const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl);
+        const ring = document.createElement('div'); ring.id = 'rr-progress-ring'; ring.innerHTML = `<svg id="rr-svg"><circle class="track"/><circle class="fill"/></svg>`; document.body.appendChild(ring);
+        const svg = ring.querySelector('svg'); const trackCircle = ring.querySelector('circle.track'); const fillCircle = ring.querySelector('circle.fill');
+        function isRerollBtn(el) { if (!el) return false; if (el.id === 'exp-reroll-btn') return true; return el.querySelector?.('svg path')?.getAttribute('d')?.startsWith('M3.8 12a8.2') ?? false; }
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect(); const size = Math.max(rect.width, rect.height); const cx = size / 2, cy = size / 2, r = (size / 2) - 2; const circumference = 2 * Math.PI * r;
+            svg.setAttribute('width', size); svg.setAttribute('height', size); svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray = circumference; fillCircle.style.strokeDashoffset = circumference;
+            ring.style.left = `${rect.left}px`; ring.style.top = `${rect.top}px`; ring.classList.add('active');
+            requestAnimationFrame(() => { fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`; fillCircle.style.strokeDashoffset = '0'; });
+        }
+        function hideRing() { ring.classList.remove('active'); fillCircle.style.transition = 'none'; if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray; }
+        function cancel() { if (!holdTimer) return; clearTimeout(holdTimer); holdTimer = null; hideRing(); }
+        document.addEventListener('click', (e) => { const btn = e.target.closest('button, [id="exp-reroll-btn"]'); if (!isRerollBtn(btn)) return; if (isConfirmed) { isConfirmed = false; return; } e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }, true);
+        document.addEventListener('mousedown', (e) => { const btn = e.target.closest('button, [id="exp-reroll-btn"]'); if (!isRerollBtn(btn)) return; showRing(btn); holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS); });
+        document.addEventListener('mouseup', cancel); document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', (e) => { const btn = e.target.closest('button, [id="exp-reroll-btn"]'); if (!isRerollBtn(btn)) return; e.preventDefault(); showRing(btn); holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS); }, { passive: false });
+        document.addEventListener('touchend', cancel); document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능
+    // ==========================================
+    function initSendHold() {
+        const HOLD_MS = 600; let isConfirmed = false; let holdTimer = null;
+        const css = `#sh-progress-ring { position: fixed; pointer-events: none; z-index: 999999; display: none; } #sh-progress-ring.active { display: block; } #sh-progress-ring circle.track { fill: none; stroke: rgba(255,255,255,.15); stroke-width: 3; } #sh-progress-ring circle.fill { fill: none; stroke: #f97316; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; transition: stroke-dashoffset linear; }`;
+        const styleEl = document.createElement('style'); styleEl.textContent = css; document.head.appendChild(styleEl);
+        const ring = document.createElement('div'); ring.id = 'sh-progress-ring'; ring.innerHTML = `<svg id="sh-svg"><circle class="track"/><circle class="fill"/></svg>`; document.body.appendChild(ring);
+        const svg = ring.querySelector('svg'); const trackCircle = ring.querySelector('circle.track'); const fillCircle = ring.querySelector('circle.fill');
+        function isStopButton(btn) { const d = btn.querySelector('svg path')?.getAttribute('d') || ''; return d.includes('M6 6h12v12H6Z'); }
+        function isGeneralSendButton(btn) { if (!btn) return false; const cls = btn.className || ''; return (cls.includes('bg-primary') && cls.includes('rounded-full') && cls.includes('text-primary-foreground')); }
+        function isHoldableSendBtn(el) { return isGeneralSendButton(el) && !isStopButton(el); }
+        function showRing(btn) {
+            const rect = btn.getBoundingClientRect(); const size = Math.max(rect.width, rect.height) + 4; const cx = size / 2, cy = size / 2, r = (size / 2) - 2; const circumference = 2 * Math.PI * r;
+            svg.setAttribute('width', size); svg.setAttribute('height', size); svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            trackCircle.setAttribute('cx', cx); trackCircle.setAttribute('cy', cy); trackCircle.setAttribute('r', r);
+            fillCircle.setAttribute('cx', cx); fillCircle.setAttribute('cy', cy); fillCircle.setAttribute('r', r);
+            fillCircle.style.strokeDasharray = circumference; fillCircle.style.strokeDashoffset = circumference;
+            ring.style.left = `${rect.left - 2}px`; ring.style.top = `${rect.top - 2}px`; ring.classList.add('active');
+            requestAnimationFrame(() => { fillCircle.style.transition = `stroke-dashoffset ${HOLD_MS}ms linear`; fillCircle.style.strokeDashoffset = '0'; });
+        }
+        function hideRing() { ring.classList.remove('active'); fillCircle.style.transition = 'none'; if (fillCircle.style.strokeDasharray) fillCircle.style.strokeDashoffset = fillCircle.style.strokeDasharray; }
+        function cancel() { if (!holdTimer) return; clearTimeout(holdTimer); holdTimer = null; hideRing(); }
+        document.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!isHoldableSendBtn(btn)) return; if (isConfirmed) { isConfirmed = false; return; } e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }, true);
+        function handlePressStart(e) { const btn = e.target.closest('button'); if (!isHoldableSendBtn(btn)) return; if (e.type === 'touchstart') e.preventDefault(); showRing(btn); holdTimer = setTimeout(() => { hideRing(); isConfirmed = true; btn.click(); holdTimer = null; }, HOLD_MS); }
+        document.addEventListener('mousedown', handlePressStart); document.addEventListener('mouseup', cancel); document.addEventListener('mouseleave', cancel);
+        document.addEventListener('touchstart', handlePressStart, { passive: false }); document.addEventListener('touchend', cancel); document.addEventListener('touchcancel', cancel);
+    }
+
+    // ==========================================
+    // 모듈 4: 외부 좌측 배치 턴수 & 크래커 표시기
+    // ==========================================
+    function initTurnCracker() {
+        const SELECTOR = { textarea: 'textarea[placeholder*="메시지"]', messageGroup: 'div[data-message-group-id]' };
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.10.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+        const ICON = { clock: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; opacity:0.8;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`, cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:1;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`, bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="currentColor" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>` };
+        let counterBadge, textSpan, currentTextarea, updateTimer, observer, lastRenderedText = '';
+        let cachedTurns, cachedTotalMessages, isCalculatingTurns = false, lastCalculatedTime = 0, lastChatId;
+        let lastConsumed = 0, isCalculatingCumulative = false, lastProcessedTurns = -1;
+
+        function start() { injectBaseStyle(); startObserver(); scheduleUpdate(); }
+        function injectBaseStyle() {
+            if (document.getElementById('info-display-base-style')) return;
+            const style = document.createElement('style'); style.id = 'info-display-base-style';
+            style.textContent = `#my-custom-info-display { position: absolute; box-sizing: border-box; font-family: 'Pretendard', sans-serif; font-size: 11px; font-weight: 500; pointer-events: none; z-index: 998; display: flex; align-items: center; border-radius: 12px; } #my-custom-info-display #my-counter-text { display: flex; align-items: center; gap: 0; } .my-counter-part { all: unset; display: inline-flex; align-items: center; border-radius: 4px; padding: 1px 4px; user-select: none; } .my-counter-separator { opacity: 0.3; margin: 0 2px; user-select: none; } @keyframes info-pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } } .pulse-anim { animation: info-pulse 1s infinite ease-in-out; }`;
+            document.head.appendChild(style);
+        }
+        function startObserver() {
+            if (observer) return;
+            observer = new MutationObserver((mutations) => { if (mutations.every(m => m.target.closest?.('#my-custom-info-display'))) return; scheduleUpdate(); });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-valuenow'] });
+        }
+        function scheduleUpdate() { clearTimeout(updateTimer); updateTimer = setTimeout(updateTurnCount, 80); }
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea;
+            while (current && current !== document.body) { const cBg = getComputedStyle(current).backgroundColor; if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; } current = current.parentElement; }
+            const match = bg.match(/\d+/g); const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { bg, text: isDark ? '#888' : '#777' };
+        }
+        function getCrackerCount() {
+            const label = Array.from(document.querySelectorAll('span')).find(span => span.textContent.trim() === '나의 크래커');
+            if (label?.nextElementSibling?.textContent.match(/[\d,]+/)) return parseInt(label.nextElementSibling.textContent.match(/[\d,]+/)[0].replace(/,/g, ''), 10);
+            const topBar = document.getElementById('chasm-cracker-text');
+            if (topBar) { const parsed = parseInt(String(topBar.getAttribute('chasm-tmi-current') || topBar.textContent).replace(/,/g, ''), 10); if (!Number.isNaN(parsed)) return parsed; }
+            return null;
+        }
+        function initUI(textarea) {
+            document.getElementById('my-custom-info-display')?.remove(); lastRenderedText = ''; currentTextarea = textarea;
+            counterBadge = document.createElement('div'); counterBadge.id = 'my-custom-info-display'; textSpan = document.createElement('span'); textSpan.id = 'my-counter-text'; counterBadge.appendChild(textSpan);
+            counterBadge.style.color = getThemeColors(textarea).text; updateLayout(textarea);
+        }
+        function updateLayout(textarea) {
+            if (!counterBadge) return; const container = textarea.closest(".flex.w-full.flex-col.rounded-lg"); if (!container) return;
+            if (counterBadge.parentElement !== container) { container.appendChild(counterBadge); container.style.position = 'relative'; }
+            counterBadge.style.top = '-26px'; counterBadge.style.left = '4px'; textarea.style.removeProperty('padding-top'); textarea.style.removeProperty('min-height');
+        }
+        function extractAccessToken() { return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))?.split('=')[1] || null; }
+        function getTimeFromObjectId(id) { try { return parseInt((id || '').substring(0, 8), 16) * 1000; } catch { return 0; } }
+        async function fetchRoomData() {
+            if (typeof CrackUtil === 'undefined') return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+            try {
+                const pathInfo = CrackUtil.path(); if (!pathInfo.isChattingPath()) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                const chatId = pathInfo.chatRoom(); if (!chatId) return { chatCounts: -1, totalMessages: -1, timestamps: [] };
+                let chatCounts = 0, totalMessages = 0; const timestamps = [];
+                for await (let log of CrackUtil.chatRoom().iterateLogs(chatId)) { totalMessages++; if (log.isUser()) { chatCounts++; continue; } timestamps.push(getTimeFromObjectId(log.id)); }
+                return { chatCounts, totalMessages, timestamps: timestamps.filter(t => t > 0) };
+            } catch { return { chatCounts: -1, totalMessages: -1, timestamps: [] }; }
+        }
+        async function fetchCumulativeCrackers(timestamps) {
+            const token = extractAccessToken(); if (!token || timestamps.length === 0) return 0;
+            let total = 0, page = 1, lastSafePage = 1, warping = true; const oldest = Math.min(...timestamps), latest = Math.max(...timestamps);
+            for(let i=0; i < 500; i++) {
+                const res = await fetch(`https://crack-api.wrtn.ai/crack-cash/crackers/history?limit=10&type=all&page=${page}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) break; const json = await res.json(); if (!json?.data?.length) break;
+                const pageLatestTime = new Date(json.data[0].date).getTime();
+                if (warping && pageLatestTime < latest) { page = lastSafePage + 1; warping = false; continue; }
+                if (warping && pageLatestTime > latest + 600000) { lastSafePage = page; page += 15; continue; }
+                warping = false; let pageDone = false;
+                for (let item of json.data) {
+                    const itemTime = new Date(item.date).getTime(); if (itemTime < oldest - 120000) { pageDone = true; break; }
+                    if (item.isConsumed && timestamps.some(ts => Math.abs(ts - itemTime) <= 60000)) total += item.balance.total * (item.product === 'superchat' ? 35 : 1);
+                }
+                if (pageDone) break; page++; await new Promise(r => setTimeout(r, 40));
+            }
+            return total;
+        }
+        function updateTurnCount() {
+            const now = Date.now(); const textarea = document.querySelector(SELECTOR.textarea);
+            if (!textarea) { counterBadge?.remove(); counterBadge = null; currentTextarea = null; return; }
+            if (!counterBadge || currentTextarea !== textarea || !counterBadge.parentElement) initUI(textarea);
+            if (!counterBadge || !textSpan) return;
+            const currentChatId = typeof CrackUtil !== 'undefined' ? CrackUtil.path().chatRoom() : null; let forceCalculate = false;
+            if (currentChatId && currentChatId !== lastChatId) { lastChatId = currentChatId; forceCalculate = true; cachedTurns = null; cachedTotalMessages = null; lastConsumed = 0; lastProcessedTurns = -1; }
+            if (!isCalculatingTurns && (forceCalculate || now - lastCalculatedTime > 1500)) {
+                isCalculatingTurns = true;
+                fetchRoomData().then(data => {
+                    const domTotalMessages = document.querySelectorAll(SELECTOR.messageGroup).length;
+                    if (data.chatCounts !== -1) {
+                        if (data.chatCounts === 0 && data.totalMessages <= 0 && domTotalMessages > 0) { cachedTurns = Math.floor(domTotalMessages / 2); cachedTotalMessages = domTotalMessages; } 
+                        else { cachedTurns = data.chatCounts; cachedTotalMessages = data.totalMessages !== -1 ? data.totalMessages : null; }
+                        if (cachedTurns !== lastProcessedTurns && !isCalculatingCumulative && data.timestamps.length > 0) {
+                            lastProcessedTurns = cachedTurns; isCalculatingCumulative = true; renderUpdate(textarea);
+                            fetchCumulativeCrackers(data.timestamps).then(cum => {
+                                if (currentChatId) { const prevCumKey = 'crack_cum_' + currentChatId; const prevCum = parseInt(localStorage.getItem(prevCumKey), 10); if (!isNaN(prevCum) && cum > prevCum) { lastConsumed = cum - prevCum; } else if (isNaN(prevCum) || cum < prevCum) { lastConsumed = 0; } localStorage.setItem(prevCumKey, cum); }
+                                isCalculatingCumulative = false; renderUpdate(textarea);
+                            }).catch(() => { isCalculatingCumulative = false; renderUpdate(textarea); });
+                        }
+                    } else { cachedTotalMessages = domTotalMessages; cachedTurns = Math.floor(domTotalMessages / 2); }
+                    lastCalculatedTime = Date.now(); isCalculatingTurns = false; renderUpdate(textarea);
+                }).catch(() => { isCalculatingTurns = false; renderUpdate(textarea); });
+            } else { renderUpdate(textarea); }
+        }
+        function renderUpdate(textarea) {
+            if (!textSpan) return;
+            let displayTurns = cachedTurns ?? Math.floor(document.querySelectorAll(SELECTOR.messageGroup).length / 2);
+            let html = `<div class="my-counter-part">${ICON.clock}<span style="font-weight:700;">${displayTurns > 0 ? displayTurns : '0'}</span>턴</div>`;
+            const crackerCount = getCrackerCount();
+            if (crackerCount !== null) html += `<span class="my-counter-separator">|</span><div class="my-counter-part" style="color: #FFA600;">${ICON.cracker}<span style="font-weight:700;">${crackerCount.toLocaleString()}</span>개</div>`;
+            html += `<span class="my-counter-separator">|</span><div class="my-counter-part ${isCalculatingCumulative ? 'pulse-anim' : ''}" style="color:#ff9b9b;">${ICON.bittenCracker}<span style="font-weight:700;">${isCalculatingCumulative ? '...' : lastConsumed}</span>${isCalculatingCumulative ? '' : '개'}</div>`;
+            if (html !== lastRenderedText) { textSpan.innerHTML = html; lastRenderedText = html; }
+            updateLayout(textarea);
+        }
+        start();
+    }
+
+    // ==========================================
+    // 모듈 5: 고정형 RP 대사 입력 도우미 (+오토스크롤, 저장버튼 껍데기 추가)
+    // ==========================================
+    function initRPToolbar() {
+        const fixedTools = [
+            { icon: '★', pre: '*', suf: '*' }, { icon: '♠', pre: '"', suf: '"' }, { icon: '♤', pre: "'", suf: "'" },
+            { icon: '◆', pre: '`', suf: '`' }, { icon: '■', pre: '[', suf: ']' }, { icon: '♣', pre: '(!', suf: ')' }, { icon: '♧', pre: '(OOC：', suf: ')' }
+        ];
+
+        if (!document.getElementById('hide-native-rp-btns')) {
+            const style = document.createElement('style'); style.id = 'hide-native-rp-btns';
+            style.textContent = `.igx-rp-container-hooked > button:not(.igx-keep-btn) { display: none !important; }`;
+            document.head.appendChild(style);
+        }
+
+        function wrapText(prefix, suffix) {
+            const textarea = document.querySelector('textarea'); if (!textarea) return;
+            const start = textarea.selectionStart || 0, end = textarea.selectionEnd || 0, text = textarea.value || '';
+            const newValue = text.substring(0, start) + prefix + text.substring(start, end) + suffix + text.substring(end, text.length);
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+            nativeInputValueSetter.call(textarea, newValue); textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.focus(); textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+        }
+
+        function createToolButton(id, iconText, onClick) {
+            const btn = document.createElement('button');
+            if (id) btn.id = id;
+            btn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
+            btn.type = "button"; btn.innerHTML = `<span style="font-size:15px;">${iconText}</span>`;
+            btn.onmousedown = (e) => e.preventDefault(); btn.onclick = (e) => { e.preventDefault(); if (onClick) onClick(); };
+            return btn;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!e.altKey) return;
+            let idx = -1; const c = e.code, k = e.key;
+            if (c === 'Backquote' || k === '`' || k === '~') idx = 0; else if (c === 'Digit1' || k === '1') idx = 1; else if (c === 'Digit2' || k === '2') idx = 2; else if (c === 'Digit3' || k === '3') idx = 3; else if (c === 'Digit4' || k === '4') idx = 4; else if (c === 'Digit5' || k === '5') idx = 5; else if (c === 'Digit6' || k === '6') idx = 6;
+            if (idx !== -1) { const ta = document.querySelector('textarea'); if (document.activeElement === ta && fixedTools[idx]) { e.preventDefault(); e.stopPropagation(); wrapText(fixedTools[idx].pre, fixedTools[idx].suf); } }
+        }, true);
+
+        setInterval(() => {
+            const btnContainer = document.querySelector('.flex.items-center.space-x-2');
+            if (!btnContainer) return;
+            if (!btnContainer.classList.contains('igx-rp-container-hooked')) btnContainer.classList.add('igx-rp-container-hooked');
+            const recommendBtn = Array.from(btnContainer.querySelectorAll('button')).find(btn => btn.textContent.includes('추천답변'));
+            if (recommendBtn && !recommendBtn.classList.contains('igx-keep-btn')) recommendBtn.classList.add('igx-keep-btn');
+
+            if (!document.getElementById('custom-rp-tools')) {
+                const toolWrapper = document.createElement('div'); toolWrapper.id = 'custom-rp-tools'; toolWrapper.className = 'flex items-center gap-1';
+                
+                // 1. 오토스크롤 버튼
+                toolWrapper.appendChild(createToolButton('turbo-scroll-btn', '△', null));
+                
+                // 2. 저장(CrackSafe) 버튼 (새로 추가됨)
+                const safeBtn = createToolButton('crack-safe-btn', '▽', null);
+                safeBtn.title = "채팅 저장 (CrackSafe)";
+                toolWrapper.appendChild(safeBtn);
+
+                // 3. 점선 구분선
+                const divider = document.createElement('div');
+                divider.style.cssText = 'width:1px; height:14px; border-left:1px dashed currentColor; opacity:0.3; margin:0 8px;';
+                toolWrapper.appendChild(divider);
+
+                // 4. RP 툴바
+                fixedTools.forEach(t => toolWrapper.appendChild(createToolButton('', t.icon, () => wrapText(t.pre, t.suf))));
+                if (recommendBtn) btnContainer.insertBefore(toolWrapper, recommendBtn); else btnContainer.appendChild(toolWrapper);
+            }
+        }, 500);
+    }
+
+    // ==========================================
+    // 모듈 6: 입력창 자동 임시저장
+    // ==========================================
+    function initAutoSaver() {
+        function getRoomId() { const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/); return match ? match[1] : 'global_room'; }
+        function getDraftKey() { return 'crack_typing_draft_' + getRoomId(); }
+        let isRestoredForCurrentRoom = false, currentRoomId = '';
+        function setNativeValue(element, value) {
+            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set; const prototype = Object.getPrototypeOf(element); const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+            if (valueSetter && valueSetter !== prototypeValueSetter) prototypeValueSetter.call(element, value); else valueSetter.call(element, value);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        function processAutoSave() {
+            const textarea = document.querySelector('textarea.__chat_input_textarea') || document.querySelector('textarea[placeholder*="메시지"]'); if (!textarea) return;
+            const newRoomId = getRoomId(); if (currentRoomId !== newRoomId) { currentRoomId = newRoomId; isRestoredForCurrentRoom = false; textarea.dataset.draftHooked = 'false'; }
+            if (!isRestoredForCurrentRoom) { const savedDraft = localStorage.getItem(getDraftKey()); if (savedDraft && textarea.value.trim() === '') setNativeValue(textarea, savedDraft); isRestoredForCurrentRoom = true; }
+            if (textarea.dataset.draftHooked !== 'true') {
+                textarea.dataset.draftHooked = 'true';
+                textarea.addEventListener('input', (e) => { const text = e.target.value; if (text.trim() === '') localStorage.removeItem(getDraftKey()); else localStorage.setItem(getDraftKey(), text); });
+            }
+        }
+        setInterval(processAutoSave, 1000);
+    }
+
+    // ==========================================
+    // 모듈 7: 라디오존데 (외부 우측 배치)
+    // ==========================================
+    function initRadiosonde() {
+        const MODELS = [{ slug: "claude-opus-4.7", label: "Claude 4.7 Opus", short: "O4.7" }, { slug: "claude-opus-4.6", label: "Claude 4.6 Opus", short: "O4.6" }, { slug: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet", short: "S4.6" }, { slug: "gemini-3-1-pro", label: "Gemini 3.1 Pro", short: "G3.1" }, { slug: "gemini-2.5-pro", label: "Gemini 2.5 Pro", short: "G2.5" }];
+        const API_BASE = "https://rs.igx.kr/api/simple/"; const POLL_MS = 60 * 1000; const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
+        GM_addStyle(`#igx-rs-inline-host { position: absolute; display: flex; align-items: center; gap: 4px; z-index: 998; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial; font-size: 11px; font-weight: 500; } #igx-rs-inline-host * { pointer-events: auto; } .igx-rs-btn { width: 18px; height: 18px; min-width: 18px; padding: 0; background: transparent; border: none; color: inherit; cursor: pointer; opacity: 0.65; border-radius: 4px; display: flex; justify-content: center; align-items: center; } .igx-rs-btn:hover { background: rgba(128,128,128,0.15); opacity: 1; } .igx-rs-barline { display: flex; gap: 4px; align-items: center; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; } .igx-rs-barline::-webkit-scrollbar { display: none; } .igx-rs-item { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px; border-radius: 999px; background: transparent; border: none; cursor: default; } .igx-rs-item:hover { background: rgba(128,128,128,0.1); } .igx-rs-dot { width: 6px; height: 6px; border-radius: 50%; } .rs-active { background: #3ddc84; } .rs-degraded { background: #ffd54a; } .rs-impacted { background: #ff5c5c; } .rs-unknown { background: #9aa0a6; } .rs-name { opacity: 1; font-weight: 700; line-height: 1; } .rs-score { font-weight: 900; line-height: 1; } .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; } #igx-rs-settings { display: none; position: fixed; z-index: 100001; border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444); background: var(--rs-bg, #242424); color: var(--rs-text, #eee); } .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; } .igx-rs-set-chk { margin: 0; accent-color: #3ddc84; cursor: pointer; } @media (max-width: 600px) { #igx-rs-inline-host { font-size: 11px; } }`);
+        let visibility = {}; try { visibility = JSON.parse(localStorage.getItem(STORE_KEY_VISIBILITY)) || {}; } catch {} MODELS.forEach(m => { if (visibility[m.slug] === undefined) visibility[m.slug] = true; });
+        const host = document.createElement("div"); host.id = "igx-rs-inline-host";
+        const btnSettings = document.createElement("button"); btnSettings.className = "igx-rs-btn"; btnSettings.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
+        const barline = document.createElement("div"); barline.className = "igx-rs-barline"; barline.textContent = "불러오는 중…";
+        const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-rs-btn"; btnRefresh.textContent = "↻"; btnRefresh.style.fontSize = "13px";
+        const settings = document.createElement("div"); settings.id = "igx-rs-settings"; settings.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; font-size:12px; border-bottom:1px solid rgba(128,128,128,0.2); padding-bottom:4px;">모델 표시 설정</div>`;
+        for (const m of MODELS) { const label = document.createElement("label"); label.className = "igx-rs-set-row"; const chk = document.createElement("input"); chk.type = "checkbox"; chk.className = "igx-rs-set-chk"; chk.checked = visibility[m.slug]; chk.addEventListener("change", (e) => { visibility[m.slug] = e.target.checked; localStorage.setItem(STORE_KEY_VISIBILITY, JSON.stringify(visibility)); renderBarline(); }); label.append(chk, document.createTextNode(m.label)); settings.appendChild(label); }
+        document.body.appendChild(settings); host.append(btnSettings, barline, btnRefresh);
+        btnSettings.addEventListener("click", e => { e.stopPropagation(); if (settings.style.display === 'flex') { settings.style.display = 'none'; } else { const rect = btnSettings.getBoundingClientRect(); settings.style.right = `${window.innerWidth - rect.right}px`; settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; settings.style.display = 'flex'; } });
+        btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
+        document.addEventListener("click", e => { if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) settings.style.display = 'none'; });
+        const last = new Map();
+        function renderBarline() {
+            const parts = MODELS.filter(m => visibility[m.slug]).map((m) => { const d = last.get(m.slug) || { status: "unknown", score: "—", lat: "—" }; const c = "rs-" + d.status; return `<div class="igx-rs-item" title="${m.label}"><div class="igx-rs-dot ${c}"></div><span class="rs-name">${m.short}</span><span class="rs-score">${d.score}</span><span class="rs-lat">${d.lat}s</span></div>`; }).join("");
+            barline.innerHTML = parts || "<span style='opacity:0.6; font-size:11px; padding-left:4px;'>선택 안됨</span>";
+        }
+        async function refreshAll() {
+            const results = await Promise.allSettled(MODELS.map(m => new Promise((resolve, reject) => { GM_xmlhttpRequest({ method: "GET", url: API_BASE + encodeURIComponent(m.slug), timeout: 6000, headers: { Accept: "application/json" }, onload: res => { try { resolve(JSON.parse(res.responseText)); } catch(e){ reject(e); } }, onerror: reject, ontimeout: () => reject(new Error("timeout")) }); })));
+            results.forEach((res, i) => { const m = MODELS[i]; if (res.status === "fulfilled" && res.value?.success) { const d = res.value.data; last.set(m.slug, { status: d.status || "unknown", score: Number.isFinite(Number(d.score)) ? Math.round(d.score).toString() : "—", lat: Number.isFinite(Number(d.latency)) ? (d.latency >= 50 ? d.latency/1000 : d.latency).toFixed(2) : "—" }); } else last.set(m.slug, { status: "unknown", score: "—", lat: "—" }); });
+            renderBarline();
+        }
+        function getThemeColors(textarea) {
+            let bg = '#212121', current = textarea; while (current && current !== document.body) { const cBg = getComputedStyle(current).backgroundColor; if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; } current = current.parentElement; }
+            const match = bg.match(/\d+/g); const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { text: isDark ? '#888' : '#777', textName: isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.88)', setBg: isDark ? '#282828' : '#fff', setBorder: isDark ? '#444' : '#e5e5e5', setText: isDark ? '#ccc' : '#444' };
+        }
+        function ensureAttached() {
+            const textarea = document.querySelector('textarea[placeholder*="메시지"]'); if (!textarea) { if (host.parentElement) host.remove(); return; }
+            const container = textarea.closest(".flex.w-full.flex-col.rounded-lg"); if (!container) return;
+            if (host.parentElement !== container) { container.appendChild(host); container.style.position = 'relative'; }
+            host.style.position = 'absolute'; host.style.top = '-26px'; host.style.right = '4px';
+            const theme = getThemeColors(textarea); host.style.color = theme.text; host.style.setProperty('--rs-text-name', theme.textName); settings.style.setProperty('--rs-bg', theme.setBg); settings.style.setProperty('--rs-border', theme.setBorder); settings.style.setProperty('--rs-text', theme.setText);
+        }
+        setInterval(ensureAttached, 1000); setInterval(refreshAll, POLL_MS); setTimeout(refreshAll, 500);
+    }
+
+    // ==========================================
+    // 모듈 8: 채팅방 자동 스크롤 
+    // ==========================================
+    function initAutoScroll() {
+        const WAIT_TIME = 500; const TOP_THRESHOLD = 2; const AT_TOP_STABLE_LIMIT = 3; const MAX_STUCK_COUNT = 10; const BTN_ID = 'turbo-scroll-btn'; const STYLE_ID = 'turbo-scroll-style'; const MESSAGE_SELECTOR = 'div[data-message-group-id]'; const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const iconUp = `<span style="font-size:15px;">△</span>`; const iconStop = `<span style="font-size:15px;">▲</span>`; let isRunning = false;
+        function injectStyle() { if (document.getElementById(STYLE_ID)) return; const style = document.createElement('style'); style.id = STYLE_ID; style.textContent = `#${BTN_ID}.tm-active { box-shadow: inset 0 0 0 2px hsl(var(--foreground, 0 0% 96%) / 0.65), 0 0 0 1px hsl(var(--foreground, 0 0% 96%) / 0.18); background: hsl(var(--accent, 0 0% 18%)) !important; } #${BTN_ID} span { color: inherit !important; fill: currentColor !important; }`; document.head.appendChild(style); }
+        function setButtonActive(btn, active) { if (!btn) return; btn.classList.toggle('tm-active', active); if (active) { btn.innerHTML = iconStop; btn.title = '로딩 중지'; btn.style.setProperty('transform', 'scale(0.96)', 'important'); } else { btn.innerHTML = iconUp; btn.title = '과거 채팅 불러오기'; btn.style.setProperty('transform', 'none', 'important'); } }
+        function isScrollableMessageContainer(el) { if (!el || el === document.body || el === document.documentElement) return false; const style = window.getComputedStyle(el); return (el.scrollHeight > el.clientHeight + 2 && el.clientHeight > 300 && ['auto', 'scroll'].includes(style.overflowY) && el.querySelectorAll(MESSAGE_SELECTOR).length > 0); }
+        function findScrollContainer() {
+            const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR));
+            if (messages.length > 0) {
+                const candidates = new Set(); const sampleMessages = [messages[0], messages[Math.floor(messages.length / 2)], messages[messages.length - 1]].filter(Boolean);
+                for (const msg of sampleMessages) { let current = msg.parentElement; while (current && current !== document.body) { if (isScrollableMessageContainer(current)) candidates.add(current); current = current.parentElement; } }
+                const sorted = Array.from(candidates).sort((a, b) => { const aMsg = a.querySelectorAll(MESSAGE_SELECTOR).length, bMsg = b.querySelectorAll(MESSAGE_SELECTOR).length; if (aMsg !== bMsg) return bMsg - aMsg; return (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight); });
+                if (sorted[0]) return sorted[0];
+            }
+            const fallback = Array.from(document.querySelectorAll('div')).filter(isScrollableMessageContainer).sort((a, b) => { const aMsg = a.querySelectorAll(MESSAGE_SELECTOR).length, bMsg = b.querySelectorAll(MESSAGE_SELECTOR).length; if (aMsg !== bMsg) return bMsg - aMsg; return (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight); }); return fallback[0] || window;
+        }
+        function scrollToTop(target) { if (target === window) { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; return; } target.scrollTop = 0; try { target.scrollTo({ top: 0, behavior: 'auto' }); target.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -1500 })); } catch {} }
+        function getSnapshot(target) { const messages = Array.from(document.querySelectorAll(MESSAGE_SELECTOR)); return { count: messages.length, firstId: messages[0]?.getAttribute('data-message-group-id') || '', lastId: messages[messages.length - 1]?.getAttribute('data-message-group-id') || '', scrollHeight: target === window ? Math.max(document.documentElement.scrollHeight || 0, document.body.scrollHeight || 0) : target.scrollHeight || 0, scrollTop: target === window ? window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0 : target.scrollTop || 0 }; }
+        function getContentSignature(snapshot) { return snapshot ? [snapshot.count, snapshot.firstId, snapshot.lastId, snapshot.scrollHeight].join('|') : ''; }
+        async function handleClick(e) {
+            e.preventDefault(); e.stopPropagation(); const btn = e.currentTarget;
+            if (isRunning) { isRunning = false; setButtonActive(btn, false); return; }
+            isRunning = true; setButtonActive(btn, true); let prevSignature = '', atTopStableCount = 0, stuckCount = 0;
+            while (isRunning) { const target = findScrollContainer(); scrollToTop(target); await sleep(WAIT_TIME); const snapshot = getSnapshot(target); const signature = getContentSignature(snapshot); if (snapshot.scrollTop <= TOP_THRESHOLD && signature === prevSignature) atTopStableCount++; else atTopStableCount = 0; if (signature === prevSignature) stuckCount++; else stuckCount = 0; prevSignature = signature; if (atTopStableCount >= AT_TOP_STABLE_LIMIT || stuckCount >= MAX_STUCK_COUNT) break; }
+            isRunning = false; setButtonActive(btn, false);
+        }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { isRunning = false; const btn = document.getElementById(BTN_ID); if (btn) setButtonActive(btn, false); } });
+        injectStyle();
+        setInterval(() => { const btn = document.getElementById(BTN_ID); if (btn && !btn.dataset.hooked) { btn.dataset.hooked = 'true'; btn.innerHTML = iconUp; btn.onclick = handleClick; setButtonActive(btn, isRunning); } }, 1000);
+    }
+
+    // ==========================================
+    // 모듈 9: 채팅 저장 (CrackSafe) - 3in1 UI 통합
+    // ==========================================
+    function initCrackSafe() {
+        const CONFIG = {
+            apiBase: 'https://crack-api.wrtn.ai/crack-gen/v3', storageKey: 'HCD_lastTurnCount', historyKey: 'HCD_downloadHistory',
+            cursorKey: 'HCD_saveCursors', incrFormatKey: 'HCD_incrFormat', clipboardKey: 'HCD_clipboardOn', fullSaveDelay: 1500,
+            retryCount: 3, retryBaseDelay: 1500, paginationDelay: 800, chunkSize: 300, incrChunkSize: 50, hardLimit: 20000, maxHistoryItems: 200,
+        };
+
+        const ICONS = {
+            close: `✕`, forward: `▶`, play: `▶`, stop: `■`, search: `🔍`, disk: `💾`,
+            spinner: `<svg class="spin" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+            pencil: `✎`, trash: `🗑`
+        };
+
+        // 3in1 모듈과 동일한 스타일 적용 (버튼, 탭, 색상 등)
+        const styles = `
+            .hcd-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2147483647; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
+            .hcd-panel { background: #fff !important; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); border-radius: 16px; padding: 28px; box-shadow: 0 8px 40px rgba(0,0,0,0.2); font-family: 'Pretendard', sans-serif; display: flex; flex-direction: column; color: #222 !important; box-sizing: border-box; }
+            .hcd-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-shrink:0; }
+            .hcd-title { margin: 0; font-size: 17px; font-weight: 700; color: #222 !important; display: flex; align-items: center; gap: 6px; }
+            
+            /* 3in1 스타일 창닫기 버튼 */
+            .hcd-close-btn { background: none; border: none; font-size: 14px; cursor: pointer; padding: 4px 8px; border-radius: 6px; color: #666; transition: 0.2s; font-weight: bold; }
+            .hcd-close-btn:hover { background: #eee; color: #222; }
+
+            /* 3in1 스타일 탭 */
+            .cbm-tabs-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px; flex-shrink:0; }
+            .cbm-tabs { display: flex; gap: 12px; margin-bottom: -13px; }
+            .hcd-tab { background: none; border: none; font-size: 14px; font-weight: 600; color: #888; padding: 0 4px 12px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
+            .hcd-tab.active { color: #333; border-bottom-color: ${GLOBAL_ACCENT_COLOR}; }
+
+            .hcd-content { display: none; flex: 1; overflow-y: auto; padding-right: 4px; flex-direction: column; }
+            .hcd-content.active { display: flex; }
+
+            .hcd-label { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #333 !important; }
+            .hcd-actions { display: flex; gap: 10px; margin-top: 10px; }
+            .hcd-btn { flex:1; padding: 10px; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer; background: ${GLOBAL_ACCENT_COLOR}; color: #fff; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; }
+            .hcd-btn:hover { filter: brightness(0.9); }
+            .hcd-btn.secondary { background: #eee; color: #333; }
+            .hcd-btn.secondary:hover { background: #ddd; }
+            .hcd-play-btn { width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; background: ${GLOBAL_ACCENT_COLOR}; color: white; }
+            .hcd-play-btn.danger { background: #FF4430; }
+            .hcd-play-btn:hover { filter: brightness(0.9); }
+
+            .hcd-ctrl-bar { display: none; align-items: center; gap: 10px; margin-top: 10px; padding: 12px; background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; }
+            .hcd-ctrl-bar.active { display: flex; }
+            .hcd-ctrl-progress { flex: 1; }
+            .hcd-ctrl-text { font-size: 13px; font-weight: bold; color: #333; }
+            .hcd-ctrl-sub { font-size: 11px; color: #666; margin-top: 4px; }
+            .hcd-stop-btn { background: #FF4430; color: white; border: none; border-radius: 6px; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+            .hcd-clip-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px; background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; cursor: pointer; }
+            .hcd-clip-cb { accent-color: ${GLOBAL_ACCENT_COLOR}; margin:0; }
+            .hcd-clip-label { font-size: 12px; font-weight: 600; color: #555; flex: 1; }
+
+            .hcd-status { margin-top: auto; padding-top: 10px; font-size: 12px; color: #666; text-align: center; }
+            .hcd-warning { background: rgba(255,68,48,0.08); border: 1px solid rgba(255,68,48,0.3); padding: 12px; border-radius: 8px; font-size: 12px; color: #FF4430; margin-bottom: 12px; }
+            
+            .hcd-incr-box { background: rgba(251,167,7,0.08); border: 1px solid rgba(251,167,7,0.3); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 12px; color: #555; }
+            .hcd-incr-box strong { color: #333; }
+            .hcd-incr-row { display: flex; gap: 8px; margin-top: 10px; }
+            .hcd-select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; background: #fff; }
+            .hcd-incr-btn { flex: 2; background: ${GLOBAL_ACCENT_COLOR}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+            /* History Tab UI */
+            .hcd-history-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; }
+            .hcd-history-list { flex: 1; overflow-y: auto; padding-right: 4px; }
+            .hcd-history-group { margin-bottom: 10px; border: 1px solid #eee; border-radius: 8px; background: #f9f9f9; overflow: hidden; }
+            .hcd-history-group-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; background: #fff; }
+            .hcd-history-group-name { flex: 1; font-weight: bold; font-size: 13px; color: #333; }
+            .hcd-history-group-count { font-size: 11px; color: #888; background: #eee; padding: 2px 6px; border-radius: 4px; }
+            .hcd-history-group-incr { background: ${GLOBAL_ACCENT_COLOR}; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer; }
+            .hcd-history-group-body { display: none; padding: 0 12px 10px; }
+            .hcd-history-group.open .hcd-history-group-body { display: block; }
+            .hcd-history-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed #ddd; font-size: 12px; }
+            .hcd-history-item:last-child { border-bottom: none; padding-bottom: 0; }
+            .hcd-history-type { font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+            .hcd-history-type.html { background: rgba(59,130,246,0.1); color: #2563eb; }
+            .hcd-history-type.txt { background: #eee; color: #666; }
+            .hcd-history-type.json { background: rgba(34,197,94,0.1); color: #16a34a; }
+            .hcd-history-type.full { background: rgba(255,68,48,0.1); color: #FF4430; }
+            .hcd-history-info { flex: 1; }
+            .hcd-history-name { font-weight: bold; color: #555; }
+            .hcd-history-meta { color: #888; font-size: 11px; }
+
+            .hcd-stats { display: flex; gap: 8px; margin-bottom: 12px; }
+            .hcd-stat { flex: 1; background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; padding: 10px; text-align: center; }
+            .hcd-stat-val { font-size: 16px; font-weight: bold; color: #333; }
+            .hcd-stat-label { font-size: 10px; color: #888; }
+            
+            .hcd-backup-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+            .hcd-backup-btn { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fff; color: #555; font-size: 12px; font-weight: bold; cursor: pointer; }
+            .hcd-backup-btn:hover { background: #f5f5f5; }
+            
+            .hcd-batch-btn { width: 100%; padding: 10px; background: #fff; border: 1px solid ${GLOBAL_ACCENT_COLOR}; color: ${GLOBAL_ACCENT_COLOR}; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; margin-bottom: 12px; display:flex; justify-content:center; align-items:center; }
+            .hcd-batch-btn:hover { background: rgba(251,167,7,0.05); }
+
+            /* Tools Tab */
+            .hcd-merge-zone { border: 2px dashed #ddd; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; margin-bottom: 12px; background: #f9f9f9; }
+            .hcd-merge-zone:hover { border-color: ${GLOBAL_ACCENT_COLOR}; }
+
+            .spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }
+
+            /* 다크모드 대응 */
+            body[data-theme="dark"] .hcd-panel { background: #242321 !important; color: #F0EFEB !important; }
+            body[data-theme="dark"] .hcd-title { color: #F0EFEB !important; }
+            body[data-theme="dark"] .hcd-close-btn { color: #aaa; }
+            body[data-theme="dark"] .hcd-close-btn:hover { background: #333; color: #fff; }
+            body[data-theme="dark"] .cbm-tabs-container { border-bottom-color: #444; }
+            body[data-theme="dark"] .hcd-tab.active { color: #fff; }
+            body[data-theme="dark"] .hcd-btn.secondary { background: #333; color: #ccc; }
+            body[data-theme="dark"] .hcd-history-group { background: #1a1918; border-color: #42413D; }
+            body[data-theme="dark"] .hcd-history-group-header { background: #1a1918; }
+            body[data-theme="dark"] .hcd-history-group-name { color: #eee; }
+            body[data-theme="dark"] .hcd-history-item { border-bottom-color: #42413D; }
+            body[data-theme="dark"] .hcd-stat { background: #1a1918; border-color: #42413D; }
+            body[data-theme="dark"] .hcd-stat-val { color: #eee; }
+            body[data-theme="dark"] .hcd-backup-btn { background: #141413; border-color: #42413D; color: #ccc; }
+        `;
+
+        const Platform = {
+            async download(content, fileName, mime) {
+                const fullMime = (mime.startsWith('text/') || mime === 'application/json') ? `${mime};charset=utf-8` : mime;
+                const blob = new Blob([content], { type: fullMime }); const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = fileName; a.style.display = 'none';
+                document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+            }
+        };
+
+        const Clipboard = {
+            isOn() { try { return localStorage.getItem(CONFIG.clipboardKey) === '1'; } catch { return false; } },
+            setOn(v) { try { localStorage.setItem(CONFIG.clipboardKey, v ? '1' : '0'); } catch {} },
+            async copy(text) {
+                try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } return this._fallbackCopy(text); } catch { return this._fallbackCopy(text); }
+            },
+            _fallbackCopy(text) {
+                const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); return true; } catch { return false; } finally { document.body.removeChild(ta); }
+            }
+        };
+
+        const History = {
+            _load() { try { return JSON.parse(localStorage.getItem(CONFIG.historyKey) || '[]'); } catch { return []; } },
+            _save(list) { try { localStorage.setItem(CONFIG.historyKey, JSON.stringify(list)); } catch {} },
+            getAll() { return this._load(); },
+            add(entry) { const list = this._load(); list.unshift({ id: Date.now().toString(36), timestamp: new Date().toISOString(), ...entry }); if (list.length > CONFIG.maxHistoryItems) list.length = CONFIG.maxHistoryItems; this._save(list); },
+            _loadCursors() { try { return JSON.parse(localStorage.getItem(CONFIG.cursorKey) || '{}'); } catch { return {}; } },
+            _saveCursors(obj) { try { localStorage.setItem(CONFIG.cursorKey, JSON.stringify(obj)); } catch {} },
+            getCursor(chatroomId) { return this._loadCursors()[chatroomId] || null; },
+            setCursor(chatroomId, data) { const c = this._loadCursors(); c[chatroomId] = data; this._saveCursors(c); },
+            getGrouped() {
+                const items = this._load(); const groups = new Map();
+                for (const h of items) { const key = h.chatroomId || '_unknown_'; if (!groups.has(key)) groups.set(key, { charName: h.charName || '알 수 없음', chatroomId: key, items: [] }); groups.get(key).items.push(h); }
+                return [...groups.values()];
+            },
+            getIncrFormat() { try { return localStorage.getItem(CONFIG.incrFormatKey) || 'txt'; } catch { return 'txt'; } },
+            setIncrFormat(f) { try { localStorage.setItem(CONFIG.incrFormatKey, f); } catch {} },
+            getStats() {
+                const items = this._load(); const cursors = this._loadCursors(); const cursorEntries = Object.entries(cursors).filter(([k]) => k !== '_full_backup_');
+                let totalMessages = 0; const charNames = new Set();
+                for (const h of items) { totalMessages += h.messageCount || 0; if (h.charName && h.chatroomId !== '_full_backup_') charNames.add(h.charName); }
+                return { totalSaves: items.length, totalMessages, charCount: charNames.size, cursorCount: cursorEntries.length };
+            },
+            getAllCursors() { return Object.entries(this._loadCursors()).filter(([k]) => k !== '_full_backup_').map(([chatroomId, data]) => ({ chatroomId, ...data })); },
+            exportBackup() { return JSON.stringify({ _hcdBackup: true, history: this._load(), cursors: this._loadCursors() }, null, 2); },
+            importBackup(jsonStr, overwrite = false) {
+                const data = JSON.parse(jsonStr); if (!data._hcdBackup) throw new Error('유효한 백업 파일이 아님');
+                if (overwrite) { this._save(data.history || []); this._saveCursors(data.cursors || {}); } 
+                else { const existing = this._load(); const existingIds = new Set(existing.map(h => h.id)); this._save([...existing, ...(data.history||[]).filter(h => !existingIds.has(h.id))]); const eC = this._loadCursors(); for (const [k, v] of Object.entries(data.cursors||{})) { if (!eC[k] || new Date(v.savedAt) > new Date(eC[k].savedAt)) eC[k] = v; } this._saveCursors(eC); }
+                return { historyCount: (data.history || []).length, cursorCount: Object.keys(data.cursors || {}).length };
+            }
+        };
+
+        const API = {
+            getCookie(name) { const v = `; ${document.cookie}`; const p = v.split(`; ${name}=`); return p.length === 2 ? decodeURIComponent(p.pop().split(';').shift()) : null; },
+            getUrlInfo() { const m = window.location.pathname.match(/\/stories\/([a-f0-9]+)\/episodes\/([a-f0-9]+)/); return m ? { characterId: m[1], chatroomId: m[2] } : null; },
+            async request(endpoint) {
+                const token = this.getCookie('access_token'); if (!token) throw new Error('로그인이 필요합니다.');
+                return new Promise((resolve, reject) => { GM_xmlhttpRequest({ method: 'GET', url: `${CONFIG.apiBase}${endpoint}`, headers: { 'Authorization': `Bearer ${token}`, 'platform': 'web' }, onload: (res) => { if (res.status >= 200 && res.status < 300) { try { resolve(JSON.parse(res.responseText)); } catch { reject(new Error('JSON 파싱 실패')); } } else reject(new Error(`API 오류: ${res.status}`)); }, onerror: () => reject(new Error('네트워크 오류')) }); });
+            },
+            async fetchAllMessages(chatroomId, cancelToken, onProgress) {
+                const collected = []; const seen = new Set(); let cursor = null; let chunk = 0;
+                while (true) {
+                    if (cancelToken?.cancelled) throw new Error('USER_CANCELLED');
+                    const data = await this.request(`/chats/${chatroomId}/messages?limit=${CONFIG.chunkSize}${cursor ? `&cursor=${cursor}` : ''}`);
+                    const msgs = data.data?.messages || []; chunk++; if (!msgs.length) break;
+                    for (const m of msgs) { if (!seen.has(m._id)) { seen.add(m._id); collected.push(m); } }
+                    if (onProgress) onProgress(collected.length, chunk);
+                    if (collected.length >= CONFIG.hardLimit) break; cursor = data.data?.nextCursor; if (!cursor) break; await new Promise(r => setTimeout(r, 300));
+                }
+                return collected.reverse();
+            },
+            async fetchDetail(chatroomId) { return (await this.request(`/chats/${chatroomId}`)).data; },
+            async fetchMessagesUntilId(chatroomId, targetId) {
+                const collected = []; const seen = new Set(); let cursor = null; let chunk = 0;
+                while (true) {
+                    const data = await this.request(`/chats/${chatroomId}/messages?limit=${CONFIG.incrChunkSize}${cursor ? `&cursor=${cursor}` : ''}`);
+                    const msgs = data.data?.messages || []; chunk++; if (!msgs.length || chunk > 40) break;
+                    let foundTarget = false;
+                    for (const m of msgs) { if (m._id === targetId) { foundTarget = true; break; } if (!seen.has(m._id)) { seen.add(m._id); collected.push(m); } }
+                    if (foundTarget) break; cursor = data.data?.nextCursor; if (!cursor) break; await new Promise(r => setTimeout(r, 300));
+                }
+                return collected.reverse();
+            },
+            async fetchAllChatrooms() {
+                const rooms = []; let cursor = null, hasMore = true;
+                while (hasMore) { const data = await this.request(`/chats?limit=40${cursor ? `&cursor=${cursor}` : ''}`); const chats = data.data?.chats || []; rooms.push(...chats); cursor = data.data?.nextCursor; hasMore = !!(cursor && chats.length); if (hasMore) await new Promise(r => setTimeout(r, CONFIG.paginationDelay)); }
+                return rooms;
+            }
+        };
+
+        const Generator = {
+            escapeHtml(t) { return (t || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
+            buildHtml(title, messages) {
+                const renderer = new marked.Renderer();
+                const contentHtml = messages.map(msg => { const roleClass = msg.role === 'user' ? 'user' : 'assistant'; const rendered = marked.parse(msg.content.replace(/&&(.+?)&&/g, '<mark>$1</mark>'), { renderer, breaks: true }); return `<div class="msg-wrapper ${roleClass}"><div class="msg-bubble">${rendered}</div></div>`; }).join('');
+                return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${this.escapeHtml(title)}</title><style>body{font-family:sans-serif; background:#f5f5f5;} .container{max-width:800px; margin:0 auto; padding:20px;} .msg-wrapper{display:flex; margin-bottom:10px;} .user{justify-content:flex-end;} .assistant{justify-content:flex-start;} .msg-bubble{max-width:80%; padding:10px 15px; border-radius:12px;} .user .msg-bubble{background:#495057; color:#fff;} .assistant .msg-bubble{background:#fff; border:1px solid #ddd;} mark{background:#ffe066;}</style></head><body><div class="container">${contentHtml}</div></body></html>`;
+            }
+        };
+
+        const UI = {
+            _mergeFiles: [],
+            init() { GM_addStyle(styles); this.attachToolbarBtn(); },
+            attachToolbarBtn() {
+                setInterval(() => {
+                    const btn = document.getElementById('crack-safe-btn');
+                    if (btn && !btn.dataset.hooked) { btn.dataset.hooked = 'true'; btn.onclick = () => this.openPanel(); }
+                }, 1000);
+            },
+            openPanel() {
+                if (document.querySelector('.hcd-panel-overlay')) return;
+                this._cancelToken = null; const info = API.getUrlInfo(); const cursor = info ? History.getCursor(info.chatroomId) : null; const savedFormat = History.getIncrFormat();
+                const overlay = document.createElement('div'); overlay.className = 'hcd-panel-overlay';
+                
+                const incrBlock = cursor ? `<div class="hcd-incr-box"><strong>📌 이어서 저장 가능</strong><br>마지막 저장: ${new Date(cursor.savedAt).toLocaleString()}<br>저장된 메시지: ${cursor.totalSaved}개<div class="hcd-incr-row"><select class="hcd-select" id="hcd-incr-format"><option value="txt"${savedFormat==='txt'?' selected':''}>TXT</option><option value="json"${savedFormat==='json'?' selected':''}>JSON</option><option value="html"${savedFormat==='html'?' selected':''}>HTML</option></select><button class="hcd-incr-btn" id="hcd-incr-save">${ICONS.forward} 이어서 저장</button></div></div>` : '';
+
+                overlay.innerHTML = `
+                    <div class="hcd-panel">
+                        <div class="hcd-header"><h3 class="hcd-title">💾 채팅 기록 보관소</h3><button class="hcd-close-btn">${ICONS.close}</button></div>
+                        <div class="cbm-tabs-container">
+                            <div class="cbm-tabs">
+                                <button class="hcd-tab active" data-tab="current">현재 채팅</button>
+                                <button class="hcd-tab" data-tab="full">전체 백업</button>
+                                <button class="hcd-tab" data-tab="history">저장 기록</button>
+                                <button class="hcd-tab" data-tab="tools">도구</button>
+                            </div>
+                        </div>
+                        <div id="tab-current" class="hcd-content active">
+                            ${incrBlock}
+                            <div class="hcd-label">전체 대화 새로 저장</div>
+                            <div id="hcd-current-actions" class="hcd-actions">
+                                <button class="hcd-btn" data-type="html">${ICONS.play} HTML</button>
+                                <button class="hcd-btn secondary" data-type="txt">${ICONS.play} TXT</button>
+                                <button class="hcd-btn secondary" data-type="json">${ICONS.play} JSON</button>
+                            </div>
+                            <div class="hcd-ctrl-bar" id="hcd-current-ctrl">
+                                <div class="hcd-ctrl-progress"><div class="hcd-ctrl-text" id="hcd-ctrl-text">수집 중...</div><div class="hcd-ctrl-sub" id="hcd-ctrl-sub"></div></div>
+                                <button class="hcd-stop-btn" id="hcd-stop-current" title="중지">${ICONS.stop}</button>
+                            </div>
+                            <label class="hcd-clip-row">
+                                <input type="checkbox" class="hcd-clip-cb" id="hcd-clip-cb"${Clipboard.isOn() ? ' checked' : ''}>
+                                <span class="hcd-clip-label">TXT/JSON 저장 시 클립보드에도 복사 (iOS지원)</span>
+                            </label>
+                        </div>
+                        <div id="tab-full" class="hcd-content">
+                            <div class="hcd-warning">⚠ <strong>주의:</strong> 모든 채팅방을 가져옵니다. 채팅방이 많을 경우 시간이 오래 걸립니다.</div>
+                            <button class="hcd-play-btn danger" id="hcd-start-full">${ICONS.play} 전체 채팅 백업 시작</button>
+                            <div class="hcd-ctrl-bar" id="hcd-full-ctrl">
+                                <div class="hcd-ctrl-progress"><div class="hcd-ctrl-text" id="hcd-full-ctrl-text">스캔 중...</div><div class="hcd-ctrl-sub" id="hcd-full-ctrl-sub"></div></div>
+                                <button class="hcd-stop-btn" id="hcd-stop-full" title="중지">${ICONS.stop}</button>
+                            </div>
+                        </div>
+                        <div id="tab-history" class="hcd-content"><div id="hcd-history-container"></div></div>
+                        <div id="tab-tools" class="hcd-content"><div id="hcd-tools-container"></div></div>
+                        <div class="hcd-status"></div>
+                    </div>`;
+
+                document.body.appendChild(overlay);
+                overlay.querySelector('.hcd-close-btn').onclick = () => overlay.remove();
+                overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+                
+                overlay.querySelectorAll('.hcd-tab').forEach(t => t.onclick = () => {
+                    overlay.querySelectorAll('.hcd-tab').forEach(x => x.classList.remove('active')); overlay.querySelectorAll('.hcd-content').forEach(x => x.classList.remove('active'));
+                    t.classList.add('active'); overlay.querySelector(`#tab-${t.dataset.tab}`).classList.add('active');
+                    if (t.dataset.tab === 'history') this.renderHistory();
+                    if (t.dataset.tab === 'tools') this.renderTools();
+                });
+
+                overlay.querySelectorAll('#tab-current .hcd-btn').forEach(b => b.onclick = () => this.processCurrentChat(b.dataset.type));
+                overlay.querySelector('#hcd-start-full').onclick = () => this.processFullBackup();
+                overlay.querySelector('#hcd-stop-current').onclick = () => { if (this._cancelToken) this._cancelToken.cancelled = true; };
+                overlay.querySelector('#hcd-stop-full').onclick = () => { if (this._cancelToken) this._cancelToken.cancelled = true; };
+                const clipCb = overlay.querySelector('#hcd-clip-cb'); if (clipCb) clipCb.onchange = () => Clipboard.setOn(clipCb.checked);
+                const incrBtn = overlay.querySelector('#hcd-incr-save'); if (incrBtn) incrBtn.onclick = () => this.processIncrementalSave(info.chatroomId, overlay.querySelector('#hcd-incr-format')?.value || 'txt');
+            },
+
+            renderHistory() {
+                const container = document.getElementById('hcd-history-container'); if (!container) return;
+                const groups = History.getGrouped();
+                if (!groups.length) {
+                    container.innerHTML = `<div class="hcd-backup-bar"><button class="hcd-backup-btn import" id="hcd-backup-import">불러오기</button><input type="file" id="hcd-backup-file" accept=".json" style="display:none"></div><div class="hcd-history-empty">저장 기록이 없습니다</div>`;
+                    const btn = container.querySelector('#hcd-backup-import'), inp = container.querySelector('#hcd-backup-file');
+                    btn.onclick = () => inp.click(); inp.onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { History.importBackup(ev.target.result, true); this.renderHistory(); }; r.readAsText(e.target.files[0]); };
+                    return;
+                }
+                const stats = History.getStats(); const cursorsAll = History.getAllCursors();
+                const statsHtml = `<div class="hcd-stats"><div class="hcd-stat"><div class="hcd-stat-val">${stats.totalSaves}</div><div class="hcd-stat-label">총 저장</div></div><div class="hcd-stat"><div class="hcd-stat-val">${stats.totalMessages.toLocaleString()}</div><div class="hcd-stat-label">메시지</div></div><div class="hcd-stat"><div class="hcd-stat-val">${stats.charCount}</div><div class="hcd-stat-label">작품</div></div></div>`;
+                const batchHtml = `<button class="hcd-batch-btn" id="hcd-batch-incr"${cursorsAll.length<2?' disabled':''}>${ICONS.forward} 전체 이어서 저장 (${cursorsAll.length}개 채팅방)</button>`;
+                const groupsHtml = groups.map((g, gi) => {
+                    const cursor = History.getCursor(g.chatroomId); const hasCursor = !!cursor && g.chatroomId !== '_full_backup_';
+                    const itemsHtml = g.items.map(h => `<div class="hcd-history-item"><span class="hcd-history-type ${h.type||'html'}">${h.incremental?'incr':(h.type||'html')}</span><div class="hcd-history-info"><div class="hcd-history-meta">${new Date(h.timestamp).toLocaleString()} · ${h.messageCount}개</div></div></div>`).join('');
+                    return `<div class="hcd-history-group open"><div class="hcd-history-group-header" data-toggle="${gi}"><span class="hcd-history-group-name">${Generator.escapeHtml(g.charName)}</span><span class="hcd-history-group-count">${g.items.length}건</span></div><div class="hcd-history-group-body">${itemsHtml}</div></div>`;
+                }).join('');
+                const backupBar = `<div class="hcd-backup-bar"><button class="hcd-backup-btn" id="hcd-backup-export">내보내기</button><button class="hcd-backup-btn import" id="hcd-backup-import">불러오기</button><input type="file" id="hcd-backup-file" accept=".json" style="display:none"></div>`;
+                
+                container.innerHTML = statsHtml + batchHtml + backupBar + `<div class="hcd-history-list">${groupsHtml}</div>`;
+                
+                container.querySelectorAll('[data-toggle]').forEach(hdr => hdr.onclick = () => hdr.closest('.hcd-history-group').classList.toggle('open'));
+                container.querySelector('#hcd-batch-incr').onclick = () => this.processBatchIncrSave();
+                container.querySelector('#hcd-backup-export').onclick = () => { Platform.download(History.exportBackup(), `크랙다운로더_세이브.json`, 'application/json'); this.updateStatus('내보내기 완료!', 'success'); };
+                const btn = container.querySelector('#hcd-backup-import'), inp = container.querySelector('#hcd-backup-file');
+                btn.onclick = () => inp.click(); inp.onchange = (e) => { const r = new FileReader(); r.onload = (ev) => { History.importBackup(ev.target.result, true); this.renderHistory(); }; r.readAsText(e.target.files[0]); };
+            },
+
+            renderTools() {
+                const container = document.getElementById('hcd-tools-container'); if (!container) return;
+                const files = this._mergeFiles;
+                const fileListHtml = files.length ? files.map((f, i) => `<div class="hcd-history-item"><span class="hcd-history-info">${Generator.escapeHtml(f.name)}</span></div>`).join('') : '';
+                container.innerHTML = `<div class="hcd-label">파일 병합 (TXT / JSON)</div><div class="hcd-merge-zone" id="hcd-merge-zone">파일을 여기에 드롭하거나 클릭<input type="file" id="hcd-merge-input" accept=".txt,.json" multiple style="display:none"></div>${fileListHtml}<div class="hcd-actions"><button class="hcd-btn secondary" id="hcd-merge-clear">초기화</button><button class="hcd-btn" id="hcd-merge-run">병합 다운로드</button></div>`;
+                const zone = container.querySelector('#hcd-merge-zone'), input = container.querySelector('#hcd-merge-input');
+                zone.onclick = () => input.click();
+                zone.ondragover = (e) => { e.preventDefault(); zone.style.borderColor = GLOBAL_ACCENT_COLOR; };
+                zone.ondragleave = () => { zone.style.borderColor = ''; };
+                zone.ondrop = (e) => { e.preventDefault(); zone.style.borderColor = ''; for(const f of e.dataTransfer.files) this._mergeFiles.push(f); this.renderTools(); };
+                input.onchange = (e) => { for(const f of e.target.files) this._mergeFiles.push(f); input.value = ''; this.renderTools(); };
+                container.querySelector('#hcd-merge-clear').onclick = () => { this._mergeFiles = []; this.renderTools(); };
+                container.querySelector('#hcd-merge-run').onclick = async () => {
+                    if (this._mergeFiles.length < 2) return;
+                    this.updateStatus('병합 중...', 'loading');
+                    const contents = []; for (const f of this._mergeFiles) contents.push(await f.text());
+                    const isJson = this._mergeFiles[0].name.endsWith('.json');
+                    const merged = isJson ? JSON.stringify({ messages: contents.map(c => JSON.parse(c).messages||[]).flat() }, null, 2) : contents.join('\n\n===== [파일 구분] =====\n\n');
+                    Platform.download(merged, `병합파일.${isJson?'json':'txt'}`, isJson?'application/json':'text/plain');
+                    this._mergeFiles = []; this.renderTools(); this.updateStatus('병합 완료', 'success');
+                };
+            },
+
+            updateStatus(msg, type = 'info') { const el = document.querySelector('.hcd-status'); if (!el) return; el.innerHTML = type === 'loading' ? `${ICONS.spinner} ${msg}` : msg; el.style.color = type === 'error' ? '#FF4430' : (type === 'success' ? '#16a34a' : '#666'); },
+
+            async processCurrentChat(type) {
+                const info = API.getUrlInfo(); if (!info) return;
+                this._cancelToken = { cancelled: false }; document.getElementById('hcd-current-actions').style.display = 'none'; document.getElementById('hcd-current-ctrl').classList.add('active');
+                try {
+                    const detail = await API.fetchDetail(info.chatroomId); const charName = detail.story?.name || detail.character?.name || 'Unknown';
+                    const messages = await API.fetchAllMessages(info.chatroomId, this._cancelToken, (c, chunk) => this.updateStatus(`수집 중... ${c}개`,'loading'));
+                    if (!messages.length) throw new Error('메시지 없음');
+                    const fileName = `${charName}_${new Date().toISOString().slice(0, 10)}`;
+                    let clipText = null;
+                    if (type === 'html') await Platform.download(Generator.buildHtml(charName, messages), `${fileName}.html`, 'text/html');
+                    else if (type === 'json') { clipText = JSON.stringify({ messages }, null, 2); await Platform.download(clipText, `${fileName}.json`, 'application/json'); }
+                    else { clipText = messages.map(m => `[${m.role === 'user' ? 'User' : charName}]\n${m.content}\n`).join('\n===\n\n'); await Platform.download(clipText, `${fileName}.txt`, 'text/plain'); }
+                    if (clipText && Clipboard.isOn()) Clipboard.copy(clipText);
+                    const lastMsg = messages[messages.length - 1];
+                    History.add({ type, charName, chatroomId: info.chatroomId, messageCount: messages.length, incremental: false, lastMessageId: lastMsg._id });
+                    History.setCursor(info.chatroomId, { lastMessageId: lastMsg._id, totalSaved: messages.length, savedAt: new Date().toISOString(), charName });
+                    this.updateStatus(`저장 완료 (${messages.length}개)`, 'success');
+                } catch(e) { this.updateStatus(e.message, 'error'); }
+                finally { document.getElementById('hcd-current-actions').style.display = 'flex'; document.getElementById('hcd-current-ctrl').classList.remove('active'); }
+            },
+
+            async processIncrementalSave(chatroomId, format) {
+                const cursor = History.getCursor(chatroomId); if (!cursor) return;
+                try {
+                    const newMessages = await API.fetchMessagesUntilId(chatroomId, cursor.lastMessageId);
+                    if (!newMessages.length) { this.updateStatus('새로운 메시지가 없습니다.', 'info'); return; }
+                    const detail = await API.fetchDetail(chatroomId); const charName = detail.story?.name || detail.character?.name || 'Unknown';
+                    const fileName = `${charName}_이어서_${new Date().toISOString().slice(0, 10)}`;
+                    let clipText = null;
+                    if (format === 'html') await Platform.download(Generator.buildHtml(charName, newMessages), `${fileName}.html`, 'text/html');
+                    else if (format === 'json') { clipText = JSON.stringify({ messages: newMessages }, null, 2); await Platform.download(clipText, `${fileName}.json`, 'application/json'); }
+                    else { clipText = newMessages.map(m => `[${m.role === 'user' ? 'User' : charName}]\n${m.content}\n`).join('\n===\n\n'); await Platform.download(clipText, `${fileName}.txt`, 'text/plain'); }
+                    if (clipText && Clipboard.isOn()) Clipboard.copy(clipText);
+                    const lastMsg = newMessages[newMessages.length - 1];
+                    History.add({ type: format, charName, chatroomId, messageCount: newMessages.length, incremental: true, lastMessageId: lastMsg._id });
+                    History.setCursor(chatroomId, { lastMessageId: lastMsg._id, totalSaved: cursor.totalSaved + newMessages.length, savedAt: new Date().toISOString(), charName });
+                    this.updateStatus(`이어서 저장 완료 (${newMessages.length}개)`, 'success');
+                } catch(e) { this.updateStatus(e.message, 'error'); }
+            },
+
+            async processBatchIncrSave() {
+                const cursors = History.getAllCursors(); if (cursors.length < 2) return;
+                if (!confirm(`${cursors.length}개 채팅방 이어서 저장 시작?`)) return;
+                let success = 0;
+                for (let i = 0; i < cursors.length; i++) {
+                    const c = cursors[i]; this.updateStatus(`[${i + 1}/${cursors.length}] 처리 중...`, 'loading');
+                    try {
+                        const newMsgs = await API.fetchMessagesUntilId(c.chatroomId, c.lastMessageId);
+                        if (!newMsgs.length) continue;
+                        const txt = newMsgs.map(m => `[${m.role}]\n${m.content}\n`).join('\n===\n\n');
+                        await Platform.download(txt, `${c.charName}_이어서.txt`, 'text/plain');
+                        const lastMsg = newMsgs[newMsgs.length - 1];
+                        History.setCursor(c.chatroomId, { lastMessageId: lastMsg._id, totalSaved: c.totalSaved + newMsgs.length, savedAt: new Date().toISOString(), charName: c.charName });
+                        success++; await new Promise(r => setTimeout(r, 2000));
+                    } catch(e) {}
+                }
+                this.updateStatus(`일괄 저장 완료 (성공: ${success})`, 'success'); this.renderHistory();
+            },
+
+            async processFullBackup() {
+                this._cancelToken = { cancelled: false }; document.getElementById('hcd-start-full').style.display = 'none'; document.getElementById('hcd-full-ctrl').classList.add('active');
+                try {
+                    const rooms = await API.fetchAllChatrooms(); const allData = [];
+                    for (let i = 0; i < rooms.length; i++) {
+                        if (this._cancelToken.cancelled) throw new Error('CANCELLED');
+                        this.updateStatus(`[${i + 1}/${rooms.length}] 스캔 중...`, 'loading');
+                        try { const msgs = await API.fetchAllMessages(rooms[i]._id, this._cancelToken); allData.push({ info: rooms[i], messages: msgs }); } catch(e){}
+                        await new Promise(r => setTimeout(r, 1500));
+                    }
+                    const compressed = pako.gzip(new TextEncoder().encode(JSON.stringify(allData)));
+                    const base64Data = btoa(String.fromCharCode.apply(null, compressed));
+                    const viewerHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>백업</title></head><body><h1>전체백업데이터</h1><script id="data" type="application/base64">${base64Data}<\/script></body></html>`;
+                    await Platform.download(viewerHtml, `전체채팅백업_${new Date().toISOString().slice(0, 10)}.html`, 'text/html');
+                    this.updateStatus(`전체 백업 완료`, 'success');
+                } catch(e) { this.updateStatus(e.message, 'error'); }
+                finally { document.getElementById('hcd-start-full').style.display = 'block'; document.getElementById('hcd-full-ctrl').classList.remove('active'); }
+            }
+        };
+
+        UI.init();
+    }
+
+    // ==========================================
+    // 통합팩 동시 실행 관리 (안전장치 강화)
+    // ==========================================
+    function startAll() {
+        try { setTimeout(() => { try { initTurnCracker(); } catch (e) { console.error("[ 9in1 통합팩 ] 턴수 크래커 모듈 오류:", e); } }, 100);
+            try { initDoubleClick(); } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 모듈 오류:", e); }
+            try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+            try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
+            try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 모듈 오류:", e); }
+            try { initAutoSaver();   } catch (e) { console.error("[ 9in1 통합팩 ] 임시저장 모듈 오류:", e); }
+            try { initRadiosonde();  } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
+            try { initAutoScroll();  } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
+            try { initCrackSafe();   } catch (e) { console.error("[ 9in1 통합팩 ] 저장(CrackSafe) 모듈 오류:", e); } // [NEW] 새로 추가된 9번째 모듈
+        } catch(e) {
+            console.error("[ 9in1 통합팩 ] 치명적인 시작 오류 발생:", e);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startAll);
+    } else {
+        startAll();
+    }
+
+})();
