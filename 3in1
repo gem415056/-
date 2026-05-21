@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1 - 툴바 복구 및 테두리 적용 버전)
+// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.2.2
-// @description  키워드노트 실시간 동기화 완벽 패치 + 하단 툴바 회색 원형 테두리 버튼 주입 (상단 툴바 복구 및 프롬프트 완벽 복원)
+// @version      4.4.0
+// @description  키워드노트 실시간 동기화 + 8in1 하단 툴바 완벽 밀착 (버튼 주입은 3초 타이머만 사용, 기능 감지기는 보존)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -20,7 +20,7 @@
     const BORDER_COLOR = '#D6D6D0';
     const _w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
-    // 공통 버튼 CSS (하단 빈자리에 들어갈 버튼들의 회색 원형 테두리 및 호버 효과 정의)
+    // 공통 버튼 CSS
     const UNI_BTN_CSS = `
         .crack-uni-btn { 
             display: inline-flex; align-items: center; justify-content: center; 
@@ -35,27 +35,6 @@
         .crack-uni-btn:last-of-type { margin-right: -4px; }
         .crack-uni-btn:hover { background: #f5f5f5 !important; }
         
-        /* 하단 빈자리에 삽입될 북마크/요약 버튼 전용 원형 회색 테두리 스타일 */
-        .crack-ext-bm-btn, .crack-ext-ai-btn {
-            width: 28px !important;
-            height: 28px !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            background: transparent !important;
-            border: 1px solid #E6E6E6 !important;
-            border-radius: 50% !important;
-            cursor: pointer !important;
-            padding: 0 !important;
-            line-height: 1 !important;
-            transition: 0.2s !important;
-            box-sizing: border-box !important;
-        }
-        .crack-ext-bm-btn:hover, .crack-ext-ai-btn:hover {
-            background: rgba(0, 0, 0, 0.05) !important;
-            border-color: #CCCCCC !important;
-        }
-        
         /* 다크모드 대응 */
         body[data-theme="dark"] .crack-uni-btn {
             border-color: #42413D !important;
@@ -63,15 +42,6 @@
         }
         body[data-theme="dark"] .crack-uni-btn:hover {
             background: #333 !important;
-        }
-        body[data-theme="dark"] .crack-ext-bm-btn, 
-        body[data-theme="dark"] .crack-ext-ai-btn {
-            border-color: #42413D !important;
-        }
-        body[data-theme="dark"] .crack-ext-bm-btn:hover, 
-        body[data-theme="dark"] .crack-ext-ai-btn:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border-color: #555552 !important;
         }
     `;
 
@@ -234,8 +204,8 @@
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // 하단 빈자리 1에 회색 테두리 원형 북마크 버튼 주입
-        function injectBookmarkButton() {
+        // [버튼 주입용 3초 타이머 전용 함수] (실시간 감지기 없음)
+        function injectBottomBookmarkButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
 
@@ -248,8 +218,9 @@
             if (slot1.querySelector('.crack-ext-bm-btn')) return; 
 
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-bm-btn'; // CSS에 의해 회색 원형 테두리가 자동으로 그려짐
-            btn.innerHTML = '♥';
+            // 회색 원 테두리 및 마우스오버 효과 (8in1 완벽 동일)
+            btn.className = 'crack-ext-bm-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F5E19A;">♥</span>`;
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -718,16 +689,18 @@
         const targetId = localStorage.getItem('cbm_jump_target');
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
-        // [버튼 주입용 3초 타이머] 3초에 한번씩 가볍게 하단 툴바 체크 및 주입 진행 (렉 최소화)
+        // [버튼 주입용 3초 타이머] 감지기를 쓰지 않고 3초마다 가볍게 버튼을 주입 (렉 방지)
+        setInterval(injectBottomBookmarkButton, 3000);
+
+        // [원본 기능 타이머] 페이지 이동 및 형광펜 렌더링 유지 (기존 원본 코드 100% 복원)
         setInterval(() => {
-            injectBookmarkButton();
             if (currentPath !== window.location.pathname) { 
                 currentPath = window.location.pathname; 
                 setTimeout(applyHighlightsToDOM, 500); 
             }
-        }, 3000);
+        }, 500);
 
-        // [실시간 형광펜 감지기 원본 유지] 신규 출력 대사들에 대해 바로 형광펜 작동 처리
+        // [원본 형광펜용 감지기] 실시간 답변에 즉각 형광펜 칠하기용 (원본 코드 100% 복원)
         const observer = new MutationObserver((mutations) => {
             let shouldApply = false;
             mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
@@ -737,7 +710,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 
+    // 모듈 2: 크랙 키워드 노트 (원본 100% 유지)
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
@@ -1306,6 +1279,8 @@
 
         injectStyles();
         setInterval(setupKW, 1000); 
+        
+        // 메모장 열릴 때 즉각 반응하기 위한 감지기 (원본 100% 복원)
         const obs = new MutationObserver(() => setupKW());
         obs.observe(document.body, { childList: true, subtree: true });
     }
@@ -1317,7 +1292,6 @@
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
         const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
         
-        // [프롬프트 원본 100% 전수 복원] 텍스트 손실로 인한 렌더링 충돌 우려 완벽 방지
         const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
 
 ## 🎯 목적
@@ -1343,7 +1317,7 @@
 - 내용
 
 ### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)
-- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사 (~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
+- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사(~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
 - **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)
 - 제목은 항상 []로 가둘 일 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.
 
@@ -1371,7 +1345,7 @@
 - **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
 - **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.
 - **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.
-- **⭕ 주체 보존\`**: 발단이 누구인지 구분하여 명확히 할 것.`;
+- **⭕ 주체 보존**: 발단이 누구인지 구분하여 명확히 할 것.`;
 
         function getChatId() {
             const m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
@@ -1863,8 +1837,8 @@
             updatePreviewCards();
         }
 
-        // 하단 빈자리 2에 회색 테두리 원형 AI 요약 버튼 주입
-        function injectAiSummaryButton() {
+        // [버튼 주입용 전용 함수] 무거운 감지기를 쓰지 않습니다.
+        function injectBottomAiButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
 
@@ -1877,8 +1851,9 @@
             if (slot2.querySelector('.crack-ext-ai-btn')) return; 
 
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-ai-btn'; // CSS에 의해 회색 원형 테두리가 자동으로 그려짐
-            btn.innerHTML = '♥';
+            // 회색 원 테두리 및 마우스오버 효과 (8in1 완벽 동일)
+            btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F2C0C3;">♥</span>`;
             btn.title = 'AI 요약';
             btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
 
@@ -1886,13 +1861,11 @@
             slot2.appendChild(btn); 
         }
 
-        function inject() { 
-            injectAiStyles(); 
-            injectAiSummaryButton(); 
-        }
-
-        // [버튼 주입용 3초 타이머] 3초 타이머를 통해 하단에 조용히 버튼 주입 실행
-        setInterval(inject, 3000);
+        // 3초 타이머 전용 버튼 주입 동작
+        setInterval(() => {
+            injectAiStyles();
+            injectBottomAiButton();
+        }, 3000);
     }
 
     // ==========================================
