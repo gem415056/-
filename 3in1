@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.4.0
-// @description  키워드노트 실시간 동기화 + 8in1 하단 툴바 완벽 밀착 (버튼 주입은 3초 타이머만 사용, 기능 감지기는 보존)
+// @version      4.5.0
+// @description  키워드노트 실시간 동기화 + 8in1 하단 툴바 완벽 밀착 (버튼 주입은 오직 3초 타이머 독립 실행 / 상단 툴바 증발 버그 완벽 해결)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -204,7 +204,7 @@
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // [버튼 주입용 3초 타이머 전용 함수] (실시간 감지기 없음)
+        // [버튼 주입 로직] 하단 툴바의 '빈자리 1'에 북마크 버튼 정밀 조준 주입
         function injectBottomBookmarkButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
@@ -218,7 +218,7 @@
             if (slot1.querySelector('.crack-ext-bm-btn')) return; 
 
             const btn = document.createElement('button');
-            // 회색 원 테두리 및 마우스오버 효과 (8in1 완벽 동일)
+            // 8in1과 완벽하게 동일한 회색 테두리 CSS 클래스 적용
             btn.className = 'crack-ext-bm-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
             btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F5E19A;">♥</span>`;
             btn.title = '북마크';
@@ -689,18 +689,15 @@
         const targetId = localStorage.getItem('cbm_jump_target');
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
-        // [버튼 주입용 3초 타이머] 감지기를 쓰지 않고 3초마다 가볍게 버튼을 주입 (렉 방지)
-        setInterval(injectBottomBookmarkButton, 3000);
-
-        // [원본 기능 타이머] 페이지 이동 및 형광펜 렌더링 유지 (기존 원본 코드 100% 복원)
+        // [원본 기능 보존] 페이지 이동 시마다 갱신하는 기본 타이머 
         setInterval(() => {
-            if (currentPath !== window.location.pathname) { 
-                currentPath = window.location.pathname; 
-                setTimeout(applyHighlightsToDOM, 500); 
-            }
+            if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
         }, 500);
 
-        // [원본 형광펜용 감지기] 실시간 답변에 즉각 형광펜 칠하기용 (원본 코드 100% 복원)
+        // [중요 수정] 오직 하단 버튼 '위치 주입'만 3초 타이머 독립 실행 (감지기 사용 X)
+        setInterval(injectBottomBookmarkButton, 3000);
+
+        // [원본 감지기 보존] 실시간 답변 생성 시 즉각 반응하는 필수 형광펜 감지기 (버튼 주입과는 무관)
         const observer = new MutationObserver((mutations) => {
             let shouldApply = false;
             mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
@@ -1837,7 +1834,7 @@
             updatePreviewCards();
         }
 
-        // [버튼 주입용 전용 함수] 무거운 감지기를 쓰지 않습니다.
+        // [버튼 주입용 전용 로직] 하단 툴바의 '빈자리 2' 조준
         function injectBottomAiButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
@@ -1851,7 +1848,7 @@
             if (slot2.querySelector('.crack-ext-ai-btn')) return; 
 
             const btn = document.createElement('button');
-            // 회색 원 테두리 및 마우스오버 효과 (8in1 완벽 동일)
+            // 8in1과 완벽하게 동일한 회색 테두리 CSS 클래스 적용
             btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
             btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F2C0C3;">♥</span>`;
             btn.title = 'AI 요약';
@@ -1861,11 +1858,23 @@
             slot2.appendChild(btn); 
         }
 
-        // 3초 타이머 전용 버튼 주입 동작
-        setInterval(() => {
-            injectAiStyles();
-            injectBottomAiButton();
-        }, 3000);
+        function injectStylesOnly() { 
+            injectAiStyles(); 
+        }
+
+        // [원본 감지기 보존] 페이지 내의 다른 기능(모달 창 등)을 캐치하기 위해 원본 그대로 복원
+        let timeout;
+        const obs = new MutationObserver(() => {
+            clearTimeout(timeout);
+            timeout = setTimeout(injectStylesOnly, 150);
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        
+        // [원본 감지기 보존] 기존 기능용 타이머
+        setInterval(injectStylesOnly, 2000);
+
+        // [중요 수정] 오직 하단 버튼 '위치 주입'만 3초 타이머 독립 실행 (감지기 사용 X)
+        setInterval(injectBottomAiButton, 3000);
     }
 
     // ==========================================
