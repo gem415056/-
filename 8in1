@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V11.3.0 - 둥근 정사각형 기호 버튼 및 최종 미세조정)
+// @name         크랙 9 in 1 통합팩 (V11.4.0 - 더블 디바이더 및 빈자리 정밀 설계 완료)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.3.0
-// @description  오리지널 부팅 규격 유지, 둥근 정사각형 기호 단축 버튼 이식, 간격 8px 롤백 최적화 완료
+// @version      11.4.0
+// @description  오리지널 부팅 규격 유지, 툴바 앞뒤 점선 구분선(더블 디바이더) 정밀 배치 최적화 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -487,10 +487,10 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (완성형 최종 미세조정)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (더블 디바이더 정밀 장착 버전)
     // ==========================================
     
-    // 팝업 에디터 수동 고정 좌표 추적기
+    // 팝업 에디터 고성능 좌표 수동 정렬
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -590,9 +590,9 @@
         const headerRow = document.createElement('div');
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
-        // 좌상단 단축기호 배치 (피드백 반영: 버튼 간격을 황금 배율인 8px로 최종 롤백 완료)
+        // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;";
+        leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;"; // 피드백 반영: 버튼 간격 황금배율인 8px로 복원
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -605,7 +605,7 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
-            // 피드백 반영: 원 모양(rounded-full) 대신 테두리가 고우며 둥근 '정사각형(border-radius: 6px)' 디자인 탑재 완료
+            // 피드백 반영: 둥근 정사각형(border-radius: 6px) 및 원형 걷어내기 완벽 이식
             btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0";
             btn.type = "button";
             btn.style.width = '28px';
@@ -745,7 +745,7 @@
         }, 50);
     };
 
-    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 여백 예약 완벽 구현)
+    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 정밀 설계)
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -795,15 +795,15 @@
                     toolWrapper.appendChild(slashBtn);
                 }
 
-                // 3. 점선 구분선
-                const divider = document.createElement('div');
-                divider.className = 'custom-rp-divider'; 
-                divider.style.width = '1px';
-                divider.style.height = '14px';
-                divider.style.borderLeft = '1px dashed currentColor';
-                divider.style.opacity = '0.3';
-                divider.style.margin = '0 4px';
-                toolWrapper.appendChild(divider);
+                // 3. 첫 번째 점선 구분선
+                const divider1 = document.createElement('div');
+                divider1.className = 'custom-rp-divider'; 
+                divider1.style.width = '1px';
+                divider1.style.height = '14px';
+                divider1.style.borderLeft = '1px dashed currentColor';
+                divider1.style.opacity = '0.3';
+                divider1.style.margin = '0 4px';
+                toolWrapper.appendChild(divider1);
 
                 // 4, 5, 6. 빈자리 3칸 예약 처리 (마진 감안하여 28px 너비 빈공간 확보)
                 for (let i = 0; i < 3; i++) {
@@ -814,7 +814,17 @@
                     toolWrapper.appendChild(spacer);
                 }
 
-                // 7. 피드백 반영: 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼 지정 완료
+                // 7. 피드백 반영: 주입 기능 3개와 구분을 위한 두 번째 점선 구분선 추가
+                const divider2 = document.createElement('div');
+                divider2.className = 'custom-rp-divider-2'; 
+                divider2.style.width = '1px';
+                divider2.style.height = '14px';
+                divider2.style.borderLeft = '1px dashed currentColor';
+                divider2.style.opacity = '0.3';
+                divider2.style.margin = '0 4px';
+                toolWrapper.appendChild(divider2);
+
+                // 8. 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼
                 const shortcutBtn = document.createElement('button');
                 shortcutBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 shortcutBtn.type = "button";
