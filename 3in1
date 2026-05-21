@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.1.9
+// @version      5.1
 // @description  키워드노트 실시간 동기화 완벽 패치 (리액트 상태 강제 업데이트 적용) + 헤더 버튼 위치 및 아이콘 변경
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
