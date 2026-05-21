@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V9.1.0 - 한글 조합 및 인라인 수동 동기화 최적화)
+// @name         크랙 9 in 1 통합팩 (V9.2.0 - 우측 동기화 버튼 및 텍스트 줄바꿈 최적화)
 // @namespace    https://crack.wrtn.ai/
-// @version      9.1.0
-// @description  인라인 텍스트 대치형 수동 동기화(☆) 구현, 12pt 폰트 적용 및 최대 7줄 자동 확장 완료
+// @version      9.2.0
+// @description  우측 전송버튼 옆 동기화(▲) 이식, 10pt 폰트 적용, 자동 줄바꿈 및 완전 대체식 동기화 구현 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -510,7 +510,7 @@
     }
 
     // ==========================================
-    // 수동 동기화 핵심 함수 (☆ 버튼 매핑)
+    // 수동 동기화 핵심 함수 (완전 대체식 로직 도입)
     // ==========================================
     function syncToTiptap() {
         const myTextarea = document.getElementById('igx-native-textarea-overlay');
@@ -523,8 +523,20 @@
         window.isSyncingText = true;
 
         tiptap.focus();
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, text);
+
+        // 중복 누적 삽입 방지: TIPTAP 전체 노드를 확실히 잡아 완전 삭제 후 새로 기입
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(tiptap);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            window.getSelection().selectAllChildren(tiptap);
+        }
+
+        document.execCommand('delete', false, null); // 기존값 깨끗이 소거
+        document.execCommand('insertText', false, text); // 신규 텍스트 입력
 
         setTimeout(() => {
             window.allowNativeFocus = false;
@@ -590,20 +602,6 @@
                 if (slashBtn) {
                     toolWrapper.appendChild(slashBtn);
                 }
-
-                // 점선 왼쪽에 수동 동기화용 별(☆) 버튼 부활 및 배치 완료
-                const shortcutBtn = document.createElement('button');
-                shortcutBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
-                shortcutBtn.type = "button";
-                shortcutBtn.style.cursor = 'pointer';
-                shortcutBtn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#FFA600;">☆</span>`;
-                shortcutBtn.title = "텍스트 동기화";
-                shortcutBtn.onmousedown = (e) => e.preventDefault();
-                shortcutBtn.onclick = (e) => {
-                    e.preventDefault();
-                    syncToTiptap();
-                };
-                toolWrapper.appendChild(shortcutBtn);
 
                 // 점선 구분선
                 const divider = document.createElement('div');
@@ -1061,7 +1059,6 @@
         const parent = tiptap.parentElement;
         if (!parent) return;
 
-        // 슬래시 모드가 활성화되어 있다면 원복
         if (window.allowNativeFocus) {
             const existOverlay = document.getElementById('igx-native-textarea-overlay');
             if (existOverlay) existOverlay.style.display = 'none';
@@ -1078,58 +1075,59 @@
             tiptap.style.width = '1px';
             tiptap.style.height = '1px';
 
-            // 새롭게 들어설 네이티브 textarea 박스 생성
             myTextarea = document.createElement('textarea');
             myTextarea.id = 'igx-native-textarea-overlay';
             myTextarea.placeholder = "메시지를 입력하세요...";
             
-            // 크기 12pt 적용 및 최대 7줄까지 위로 깔끔하게 확장되도록 CSS 빌드
+            // 글자 크기 10pt 축소, 사방 패딩 12px 16px 부여, 강제 자동 줄바꿈(좌우 스크롤 차단) CSS 주입
             myTextarea.style.cssText = `
                 width: 100%;
-                height: 36px;
-                min-height: 36px;
+                height: 48px;
+                min-height: 48px;
                 background: transparent;
                 border: none;
                 outline: none;
                 resize: none;
                 font-family: inherit;
-                font-size: 12pt;
-                line-height: 1.5;
-                padding: 6px 8px;
+                font-size: 10pt;
+                line-height: 1.6;
+                padding: 12px 16px;
                 color: inherit;
                 overflow-y: hidden;
+                overflow-x: hidden !important;
+                white-space: pre-wrap !important;
+                word-wrap: break-word !important;
+                word-break: break-all !important;
                 overscroll-behavior: contain;
                 display: block;
+                transition: height 0.1s ease;
             `;
 
-            // 줄바꿈 시 위로 자연스럽게 늘어나게 하는 가변 높이 연산 로직 (최대 7줄)
+            // 자동 줄바꿈 높이 계산 (최대 7줄)
             const adjustHeight = () => {
                 myTextarea.style.height = 'auto';
                 const computed = window.getComputedStyle(myTextarea);
                 const padding = parseInt(computed.paddingTop) + parseInt(computed.paddingBottom);
-                const lineHeight = 24; // 12pt 기준 line-height 1.5 배율 = 약 24px
+                const lineHeight = 20; // 10pt 기준 줄높이
                 const maxHeight = (lineHeight * 7) + padding;
 
                 if (myTextarea.scrollHeight > maxHeight) {
                     myTextarea.style.height = maxHeight + 'px';
-                    myTextarea.style.overflowY = 'auto'; // 7줄 넘어가면 자연스럽게 내부 스크롤 허용
+                    myTextarea.style.overflowY = 'auto';
                 } else {
                     myTextarea.style.height = myTextarea.scrollHeight + 'px';
                     myTextarea.style.overflowY = 'hidden';
                 }
             };
 
-            // 타이핑 칠 때 한글 조합에 절대 간섭하지 않고 높이만 계산
             myTextarea.addEventListener('input', adjustHeight);
 
-            // 모바일 터치 드래그 스크롤 간섭 배제
             const stopScroll = (e) => e.stopPropagation();
             myTextarea.addEventListener('touchstart', stopScroll, { passive: true });
             myTextarea.addEventListener('touchmove', stopScroll, { passive: true });
 
             parent.appendChild(myTextarea);
 
-            // 기존 TIPTAP 텍스트 자동 마이그레이션
             const isEditor = tiptap.tagName !== 'TEXTAREA' && tiptap.isContentEditable;
             myTextarea.value = isEditor ? tiptap.innerText.replace(/\n$/, '') : tiptap.value;
             adjustHeight();
@@ -1138,7 +1136,36 @@
         }
     }
 
-    // 슬래시 명령어 입력 등으로 본래 TIPTAP 내용이 바뀌면 네이티브 텍스트박스로 백동기화
+    // 전송 버튼과 동일한 테마 기반 동기화(▲) 버튼을 우측에 생성
+    function insertSyncButtonNextToSend() {
+        const sendBtn = document.querySelector('button.bg-primary.rounded-full, button[class*="bg-primary"][class*="rounded-full"]');
+        if (!sendBtn) return;
+        
+        let customSync = document.getElementById('igx-custom-sync-btn');
+        if (!customSync) {
+            customSync = document.createElement('button');
+            customSync.id = 'igx-custom-sync-btn';
+            customSync.type = 'button';
+            
+            // 네이티브 전송 버튼의 클래스를 100% 복제하여 UI 완벽 통일
+            customSync.className = sendBtn.className + " igx-keep-btn";
+            customSync.style.marginRight = '8px';
+            customSync.style.flexShrink = '0';
+            // 전송 화살표 크기와 싱크를 맞춘 컴팩트한 ▲ 텍스트 처리
+            customSync.innerHTML = `<span style="font-size: 11px; line-height: 1; transform: translateY(-0.5px); display: inline-block;">▲</span>`;
+            customSync.title = "텍스트 동기화";
+            
+            customSync.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                syncToTiptap();
+            });
+            
+            sendBtn.parentNode.insertBefore(customSync, sendBtn);
+        }
+    }
+
+    // 슬래시 명령어 입력 대응 백동기화
     function handleBiDirectionalSync() {
         const tiptap = getSafeMainInput();
         const myTextarea = document.getElementById('igx-native-textarea-overlay');
@@ -1168,6 +1195,7 @@
         }, 1000);
 
         setInterval(setupInPlaceTextarea, 300);
+        setInterval(insertSyncButtonNextToSend, 300);
         setInterval(handleBiDirectionalSync, 100);
 
         try {
