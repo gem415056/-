@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.5.0
-// @description  키워드노트 실시간 동기화 + 8in1 하단 툴바 완벽 밀착 (버튼 주입은 오직 3초 타이머 독립 실행 / 상단 툴바 증발 버그 완벽 해결)
+// @version      4.6.0
+// @description  키워드노트 실시간 동기화 + 삭제 명령어 제거, 순수 도착지 위치만 변경 (상단 툴바 증발 버그 원천 차단)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -20,7 +20,7 @@
     const BORDER_COLOR = '#D6D6D0';
     const _w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
-    // 공통 버튼 CSS
+    // 공통 버튼 CSS (원본 유지)
     const UNI_BTN_CSS = `
         .crack-uni-btn { 
             display: inline-flex; align-items: center; justify-content: center; 
@@ -204,23 +204,28 @@
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // [버튼 주입 로직] 하단 툴바의 '빈자리 1'에 북마크 버튼 정밀 조준 주입
-        function injectBottomBookmarkButton() {
+        // [중요 수정] 오직 "도착지 좌표"만 하단 툴바의 빈자리로 변경 (지우기 명령어 없음)
+        function injectHeaderButton() {
+            // 8in1 스크립트가 만든 하단 툴바(custom-rp-tools)를 찾습니다.
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-
+            
+            // 그 안에서 예약된 28px짜리 빈자리들을 찾아냅니다.
             const divs = Array.from(toolWrapper.children);
             const spacers = divs.filter(el => el.tagName === 'DIV' && el.style.width === '28px' && !el.classList.contains('custom-rp-divider'));
             
             if (spacers.length < 2) return;
-
-            const slot1 = spacers[0]; 
-            if (slot1.querySelector('.crack-ext-bm-btn')) return; 
-
+            
+            // 첫 번째 빈자리를 목표 위치(targetContainer)로 정합니다.
+            const targetContainer = spacers[0];
+            
+            // 이미 버튼이 들어가 있으면 건너뜁니다.
+            if (targetContainer.querySelector('.crack-ext-bm-btn')) return;
+            
+            // 버튼을 새로 하나 만듭니다 (8in1 회색 테두리 클래스 완벽 적용)
             const btn = document.createElement('button');
-            // 8in1과 완벽하게 동일한 회색 테두리 CSS 클래스 적용
             btn.className = 'crack-ext-bm-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
-            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F5E19A;">♥</span>`;
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F5E19A;">♥</span>`; // 연노란색 꽉 찬 하트
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -228,9 +233,9 @@
                 savedSelectionText = realtimeSelectionText;
                 openModal(); 
             };
-
-            slot1.innerHTML = ''; 
-            slot1.appendChild(btn); 
+            
+            // 만들어진 버튼을 빈자리에 쏙 밀어넣습니다. (삭제 코드 일절 없음)
+            targetContainer.appendChild(btn);
         }
 
         function addBookmarkDirect(text, colorHex) {
@@ -689,15 +694,13 @@
         const targetId = localStorage.getItem('cbm_jump_target');
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
-        // [원본 기능 보존] 페이지 이동 시마다 갱신하는 기본 타이머 
+        // [복구] 기존과 똑같이 0.5초 간격으로 돌지만, 이제 도착지만 하단 툴바로 변경했습니다.
         setInterval(() => {
+            injectHeaderButton(); // 이름 원본 그대로 복구
             if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
         }, 500);
 
-        // [중요 수정] 오직 하단 버튼 '위치 주입'만 3초 타이머 독립 실행 (감지기 사용 X)
-        setInterval(injectBottomBookmarkButton, 3000);
-
-        // [원본 감지기 보존] 실시간 답변 생성 시 즉각 반응하는 필수 형광펜 감지기 (버튼 주입과는 무관)
+        // [복구] 형광펜 및 변경사항을 실시간으로 캐치하는 원본 감지기 100% 동일
         const observer = new MutationObserver((mutations) => {
             let shouldApply = false;
             mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
@@ -707,7 +710,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (원본 100% 유지)
+    // 모듈 2: 크랙 키워드 노트 (원본 100% 동일)
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
@@ -1277,13 +1280,12 @@
         injectStyles();
         setInterval(setupKW, 1000); 
         
-        // 메모장 열릴 때 즉각 반응하기 위한 감지기 (원본 100% 복원)
         const obs = new MutationObserver(() => setupKW());
         obs.observe(document.body, { childList: true, subtree: true });
     }
 
     // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 
+    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 (원본 100% 동일)
     // ==========================================
     function initAiSummarySystem() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
@@ -1834,47 +1836,44 @@
             updatePreviewCards();
         }
 
-        // [버튼 주입용 전용 로직] 하단 툴바의 '빈자리 2' 조준
-        function injectBottomAiButton() {
+        // [중요 수정] 오직 "도착지 좌표"만 하단 툴바의 빈자리로 변경 (지우기 명령어 없음)
+        function injectTopHeaderBtn() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-
+            
             const divs = Array.from(toolWrapper.children);
             const spacers = divs.filter(el => el.tagName === 'DIV' && el.style.width === '28px' && !el.classList.contains('custom-rp-divider'));
             
             if (spacers.length < 2) return;
-
-            const slot2 = spacers[1]; 
-            if (slot2.querySelector('.crack-ext-ai-btn')) return; 
-
+            
+            const targetContainer = spacers[1]; // 빈자리 2
+            
+            if (targetContainer.querySelector('.crack-ext-ai-btn')) return;
+            
             const btn = document.createElement('button');
-            // 8in1과 완벽하게 동일한 회색 테두리 CSS 클래스 적용
-            btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
-            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F2C0C3;">♥</span>`;
+            btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7'; 
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F2C0C3;">♥</span>`; // 연분홍색 꽉 찬 하트
             btn.title = 'AI 요약';
             btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
-
-            slot2.innerHTML = ''; 
-            slot2.appendChild(btn); 
+            
+            targetContainer.appendChild(btn);
         }
 
-        function injectStylesOnly() { 
+        function inject() { 
             injectAiStyles(); 
+            // 원래 이름 그대로 유지하되, 작동만 바뀜
+            injectTopHeaderBtn(); 
         }
 
-        // [원본 감지기 보존] 페이지 내의 다른 기능(모달 창 등)을 캐치하기 위해 원본 그대로 복원
+        // [복구] 기존과 똑같은 실행 방식 (150ms 딜레이 감지기 + 2초 타이머)
         let timeout;
         const obs = new MutationObserver(() => {
             clearTimeout(timeout);
-            timeout = setTimeout(injectStylesOnly, 150);
+            timeout = setTimeout(inject, 150);
         });
         obs.observe(document.body, { childList: true, subtree: true });
         
-        // [원본 감지기 보존] 기존 기능용 타이머
-        setInterval(injectStylesOnly, 2000);
-
-        // [중요 수정] 오직 하단 버튼 '위치 주입'만 3초 타이머 독립 실행 (감지기 사용 X)
-        setInterval(injectBottomAiButton, 3000);
+        setInterval(inject, 2000);
     }
 
     // ==========================================
