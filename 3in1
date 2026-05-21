@@ -1,8 +1,24 @@
+정말 다행입니다! 가장 우려하셨던 렉 문제와 상단 툴바 증발 문제가 말끔히 해결되었다니 저도 기쁩니다. 
+
+말씀하신 색상 변경 요청, **전혀 어렵지 않습니다!**
+오히려 디자인의 통일성을 맞추는 아주 훌륭한 디테일 수정입니다.
+
+요청하신 대로 각 모듈의 강조색(Accent Color)을 독립적으로 분리하여 지정했습니다.
+*   **북마크 모듈:** 모든 강조색(테두리, 버튼 등)을 연노란색(`#F5E19A`)으로 변경했습니다.
+*   **AI 요약 모듈:** '추가하기' 등 메인 버튼 색상을 연분홍색(`#F2C0C3`)으로 변경했습니다.
+*   **키워드 노트 모듈:** (요청에 없었으므로) 기존의 진한 노란색을 그대로 유지했습니다.
+
+💡 **[센스 있는 추가 조치]**
+새로 지정해주신 `#F5E19A`(연노랑)와 `#F2C0C3`(연분홍)은 밝은 파스텔톤 색상입니다. 기존처럼 글씨 색상을 **흰색**으로 두면 밝은 배경에 묻혀서 글씨가 안 보일 수 있습니다. 그래서 이 밝은 버튼들 위에 올라가는 글씨 색상은 잘 보이도록 **진한 흑회색(#333)**으로 센스 있게 맞춰두었습니다!
+
+다른 기능은 100% 동일하게 유지된 최종 스크립트입니다. 바로 복붙해서 사용해주세요!
+
+```javascript
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.6.0
-// @description  키워드노트 실시간 동기화 + 삭제 명령어 제거, 순수 도착지 위치만 변경 (상단 툴바 증발 버그 원천 차단)
+// @version      4.7.0
+// @description  키워드노트 실시간 동기화 + 삭제 명령어 제거 + 모듈별 독립 커스텀 색상(북마크 연노랑, 요약 연분홍) 완벽 적용
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -16,7 +32,6 @@
 (function () {
     'use strict';
 
-    const GLOBAL_ACCENT_COLOR = '#FBA707'; 
     const BORDER_COLOR = '#D6D6D0';
     const _w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
@@ -50,7 +65,7 @@
     // ==========================================
     function initBookmarkSystem() {
         const FIX_COLORS = ['#F6E19A', '#F2C0C3', '#BCD0D8', '#D5C2DE'];
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
+        const ACCENT_COLOR = '#F5E19A'; // 요청하신 연노란색으로 변경
         const DELETE_COLOR = '#FF4433';
         const ICON_EDIT = '✎';
 
@@ -111,11 +126,12 @@
             if (document.getElementById('crack-bm-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-bm-css';
+            // 배경이 밝은 색(연노랑)이므로 글씨색을 #333(흑회색)으로 조정했습니다.
             s.textContent = UNI_BTN_CSS + `
                 mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
                 mark.crack-bm-hl:hover { filter: brightness(0.9); }
                 mark.crack-bm-hl.flash { animation: bmFlash 1.5s ease; }
-                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: white !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(251,167,7,0.5); } }
+                @keyframes bmFlash { 0%, 100% { transform: scale(1); } 50% { background-color: ${ACCENT_COLOR} !important; color: #333 !important; transform: scale(1.05); box-shadow: 0 0 10px rgba(245,225,154,0.5); } }
                 .crack-bm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2147483647; display: flex; align-items: center; justify-content: center; pointer-events: auto !important; }
                 .crack-bm-modal { background: #fff !important; border-radius: 16px; padding: 28px; width: 600px; max-width: 90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.2); pointer-events: auto !important; color: #222 !important; box-sizing: border-box; }
                 .cbm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -135,35 +151,35 @@
                 .cbm-folders::-webkit-scrollbar { height: 4px; }
                 .cbm-folders::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
                 .cbm-ftab { height: 28px; background: #f0f0f0; border: 1px solid #ddd; padding: 0 12px; border-radius: 14px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; box-sizing: border-box; }
-                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 .cbm-fadd { background: none; border: 1px dashed #aaa; border-radius: 50%; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #666; font-weight: bold; box-sizing: border-box; margin: 0; padding: 0; }
                 .cbm-search-row { display: flex; gap: 5px; margin-bottom: 12px; align-items: stretch; }
                 .cbm-search { flex: 1; padding: 8px 12px; min-height: 36px; border: 1px solid #ddd !important; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff !important; color: #222 !important; margin: 0 !important; }
                 .cbm-search:focus { outline: 1px solid ${ACCENT_COLOR}; }
                 #cbm-toggle-move, #cbm-toggle-del { display: flex; align-items: center; justify-content: center; font-size: 18px; border: 1px solid #ddd; border-radius: 8px; min-height: 36px; padding: 0 12px; cursor: pointer; background: #fff;}
-                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 
-                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(251,167,7,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(251,167,7,0.3); min-height: 36px; box-sizing: border-box; }
-                #cbm-move-count { color: ${ACCENT_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
-                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${ACCENT_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+                #cbm-move-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(245,225,154,0.15); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(245,225,154,0.6); min-height: 36px; box-sizing: border-box; }
+                #cbm-move-count { color: #333; font-weight: bold; font-size: 13px; margin-top: 1px; }
+                #cbm-move-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: #333; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
                 #cbm-move-folder-select { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; padding: 3px 6px; background: #fff; color: #333; height: 24px; }
                 
                 #cbm-delete-actions { display: none; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255,68,51,0.08); padding: 0 12px; border-radius: 8px; border: 1px solid rgba(255,68,51,0.3); min-height: 36px; box-sizing: border-box; }
                 #cbm-del-count { color: ${DELETE_COLOR}; font-weight: bold; font-size: 13px; margin-top: 1px; }
                 #cbm-del-select-all { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; margin-right: 6px; color: ${DELETE_COLOR}; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
                 
-                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+                .cbm-action-btn-sm { font-size: 12px; padding: 0 10px; border-radius: 4px; border: none; cursor: pointer; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
                 .cbm-list { flex: 1; overflow-y: auto; padding-right: 4px; }
                 .cbm-item { background: #f9f9f9 !important; border: 1px solid #eee !important; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; position: relative; }
                 .cbm-item:hover { border-color: ${ACCENT_COLOR} !important; }
-                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: rgba(251,167,7,0.05) !important; }
+                .cbm-item.selected-move { border-color: ${ACCENT_COLOR} !important; background: rgba(245,225,154,0.15) !important; }
                 .cbm-item.selected-delete { border-color: ${DELETE_COLOR} !important; background: rgba(255,68,51,0.05) !important; }
                 .cbm-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
                 .cbm-item-title { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; color: #333 !important;}
                 .cbm-item-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
                 .cbm-item-edit { background: none; border: none; font-size: 14px; cursor: pointer; color: #888; padding: 0 4px; }
-                .cbm-item-edit:hover { color: ${ACCENT_COLOR}; }
+                .cbm-item-edit:hover { color: #333; }
                 .cbm-item-folder-tag { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
                 .cbm-item-text { font-size: 12px; color: #666 !important; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 8px; }
                 .cbm-empty { text-align: center; color: #999; margin-top: 40px; font-size: 13px; line-height: 1.6; }
@@ -175,13 +191,13 @@
                 body[data-theme="dark"] .cbm-tabs-container { border-bottom-color: #444; }
                 body[data-theme="dark"] .cbm-pal-btn.active { border-color: #fff; }
                 body[data-theme="dark"] .cbm-ftab { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #fff; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] .cbm-ftab.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 body[data-theme="dark"] .cbm-search { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
                 body[data-theme="dark"] #cbm-toggle-move, body[data-theme="dark"] #cbm-toggle-del { background: #141413; border-color: #42413D; color: #ccc; }
-                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: white; border-color: ${ACCENT_COLOR}; }
+                body[data-theme="dark"] #cbm-toggle-move.active { background: ${ACCENT_COLOR}; color: #333; border-color: ${ACCENT_COLOR}; }
                 body[data-theme="dark"] #cbm-toggle-del.active { background: ${DELETE_COLOR}; color: white; border-color: ${DELETE_COLOR}; }
                 body[data-theme="dark"] .cbm-item { background: #1a1918 !important; border-color: #42413D !important; }
-                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(251,167,7,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
+                body[data-theme="dark"] .cbm-item.selected-move { background: rgba(245,225,154,0.15) !important; border-color: ${ACCENT_COLOR} !important; }
                 body[data-theme="dark"] .cbm-item.selected-delete { background: rgba(255,68,51,0.15) !important; border-color: ${DELETE_COLOR} !important; }
                 body[data-theme="dark"] .cbm-item-title { color: #F0EFEB !important; }
                 body[data-theme="dark"] .cbm-item-text { color: #aaa !important; }
@@ -204,28 +220,23 @@
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // [중요 수정] 오직 "도착지 좌표"만 하단 툴바의 빈자리로 변경 (지우기 명령어 없음)
+        // [중요 수정] 하단 툴바의 빈자리 1에 조준 (명령어 제거 버전 유지)
         function injectHeaderButton() {
-            // 8in1 스크립트가 만든 하단 툴바(custom-rp-tools)를 찾습니다.
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
             
-            // 그 안에서 예약된 28px짜리 빈자리들을 찾아냅니다.
             const divs = Array.from(toolWrapper.children);
             const spacers = divs.filter(el => el.tagName === 'DIV' && el.style.width === '28px' && !el.classList.contains('custom-rp-divider'));
             
             if (spacers.length < 2) return;
             
-            // 첫 번째 빈자리를 목표 위치(targetContainer)로 정합니다.
             const targetContainer = spacers[0];
             
-            // 이미 버튼이 들어가 있으면 건너뜁니다.
             if (targetContainer.querySelector('.crack-ext-bm-btn')) return;
             
-            // 버튼을 새로 하나 만듭니다 (8in1 회색 테두리 클래스 완벽 적용)
             const btn = document.createElement('button');
             btn.className = 'crack-ext-bm-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7';
-            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F5E19A;">♥</span>`; // 연노란색 꽉 찬 하트
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:${ACCENT_COLOR};">♥</span>`; // ACCENT_COLOR(#F5E19A) 적용
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -234,7 +245,6 @@
                 openModal(); 
             };
             
-            // 만들어진 버튼을 빈자리에 쏙 밀어넣습니다. (삭제 코드 일절 없음)
             targetContainer.appendChild(btn);
         }
 
@@ -295,7 +305,7 @@
                         </div>
                         <div style="display:flex; gap:8px; align-items:center;">
                             <select id="cbm-move-folder-select"></select>
-                            <button id="cbm-move-confirm" class="cbm-action-btn-sm" style="background:${ACCENT_COLOR};" title="이동">✔</button>
+                            <button id="cbm-move-confirm" class="cbm-action-btn-sm" style="background:${ACCENT_COLOR}; color:#333;" title="이동">✔</button>
                             <button id="cbm-move-cancel" class="cbm-action-btn-sm" style="background:#888; color:#fff;" title="취소">✘</button>
                         </div>
                     </div>
@@ -670,7 +680,7 @@
             let maxTries = 15, currentTry = 0;
             const loadingToast = document.createElement('div');
             loadingToast.innerHTML = '🔄 북마크 위치 탐색 중...';
-            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#fff; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+            loadingToast.style.cssText = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${ACCENT_COLOR}; color:#333; padding:10px 20px; border-radius:20px; z-index:2147483647; font-size:13px; font-weight:bold; box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
             document.body.appendChild(loadingToast);
 
             const searchLoop = setInterval(() => {
@@ -694,13 +704,12 @@
         const targetId = localStorage.getItem('cbm_jump_target');
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
-        // [복구] 기존과 똑같이 0.5초 간격으로 돌지만, 이제 도착지만 하단 툴바로 변경했습니다.
+        // [복구 완료] 기존과 동일하게 작동하며, "도착지만" 하단 툴바(빈자리1)로 바꾼 안전한 코드입니다.
         setInterval(() => {
-            injectHeaderButton(); // 이름 원본 그대로 복구
+            injectHeaderButton(); 
             if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
         }, 500);
 
-        // [복구] 형광펜 및 변경사항을 실시간으로 캐치하는 원본 감지기 100% 동일
         const observer = new MutationObserver((mutations) => {
             let shouldApply = false;
             mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
@@ -710,12 +719,13 @@
     }
 
     // ==========================================
-    // 모듈 2: 크랙 키워드 노트 (원본 100% 동일)
+    // 모듈 2: 크랙 키워드 노트
     // ==========================================
     function initKeywordNoteSystem() {
         let _capturedToken = '';
         let syncTimer = null;
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
+        // 키워드 노트는 기존 색상(#FBA707) 독립적 유지
+        const ACCENT_COLOR = '#FBA707';
         const BORDER_COLOR = '#D6D6D0';
 
         function getChatId() {
@@ -1285,11 +1295,11 @@
     }
 
     // ==========================================
-    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약 (원본 100% 동일)
+    // 모듈 3: 크랙 요약 메모리 편집 & AI 자동 요약
     // ==========================================
     function initAiSummarySystem() {
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
-        const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
+        const ACCENT_COLOR = '#F2C0C3'; // 요청하신 연분홍색으로 변경
         
         const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
 
@@ -1504,6 +1514,7 @@
             if (document.getElementById('crack-ext-ai-css')) return;
             const s = document.createElement('style');
             s.id = 'crack-ext-ai-css';
+            // 추가하기 버튼(crack-ext-ai-mbtn-p)이 밝은 파스텔 연분홍이므로, 잘 보이게 글씨를 #333로 맞춤
             s.textContent = UNI_BTN_CSS + `
                 .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:2147483647; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; pointer-events:auto !important; }
                 .crack-ext-ai-modal { background:#fff !important; border-radius:16px; padding:28px; width:600px; max-width:90vw; height: calc(66vh - 20px); max-height: calc(66vh - 20px); display: flex; flex-direction: column; box-shadow:0 8px 40px rgba(0,0,0,.2); pointer-events:auto !important; color:#222 !important; box-sizing: border-box; }
@@ -1528,7 +1539,7 @@
 
                 .crack-ext-ai-mbtn { padding:10px 20px; border-radius:8px; border:1px solid #ddd !important; background:#eee !important; color:#333 !important; cursor:pointer; font-size:13px; font-weight:600; transition: background 0.2s;}
                 .crack-ext-ai-mbtn:hover { background: #ddd !important; }
-                .crack-ext-ai-mbtn-p { background:${ACCENT_COLOR} !important; color:#fff !important; border-color:${ACCENT_COLOR} !important; }
+                .crack-ext-ai-mbtn-p { background:${ACCENT_COLOR} !important; color:#333 !important; border-color:${ACCENT_COLOR} !important; }
                 .crack-ext-ai-mbtn-p:hover { filter: brightness(0.9); background: ${ACCENT_COLOR} !important;}
 
                 .crack-flex-ai-row { display:flex; gap:12px; margin-bottom: 12px; }
@@ -1556,7 +1567,7 @@
                 body[data-theme="dark"] .crack-ext-session-content { color: #ccc !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn { background: #333 !important; color: #eee !important; border-color: #42413D !important; }
                 body[data-theme="dark"] .crack-ext-ai-mbtn:hover { background: #444 !important; }
-                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: ${ACCENT_COLOR} !important; color: #fff !important; border-color: ${ACCENT_COLOR} !important; }
+                body[data-theme="dark"] .crack-ext-ai-mbtn-p { background: ${ACCENT_COLOR} !important; color: #333 !important; border-color: ${ACCENT_COLOR} !important; }
                 body[data-theme="dark"] #ce-ai-card-nav button { background: #141413 !important; border-color: #42413D !important; color: #F0EFEB !important; }
             `;
             document.head.appendChild(s);
@@ -1836,7 +1847,6 @@
             updatePreviewCards();
         }
 
-        // [중요 수정] 오직 "도착지 좌표"만 하단 툴바의 빈자리로 변경 (지우기 명령어 없음)
         function injectTopHeaderBtn() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
@@ -1852,7 +1862,7 @@
             
             const btn = document.createElement('button');
             btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7'; 
-            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:#F2C0C3;">♥</span>`; // 연분홍색 꽉 찬 하트
+            btn.innerHTML = `<span style="font-size:15px; font-weight:normal; color:${ACCENT_COLOR};">♥</span>`; // ACCENT_COLOR(#F2C0C3) 적용
             btn.title = 'AI 요약';
             btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
             
@@ -1861,11 +1871,10 @@
 
         function inject() { 
             injectAiStyles(); 
-            // 원래 이름 그대로 유지하되, 작동만 바뀜
             injectTopHeaderBtn(); 
         }
 
-        // [복구] 기존과 똑같은 실행 방식 (150ms 딜레이 감지기 + 2초 타이머)
+        // [원본 감지기 보존] 기존의 실행 방식 유지 (모달 등 타 기능용)
         let timeout;
         const obs = new MutationObserver(() => {
             clearTimeout(timeout);
@@ -1906,3 +1915,4 @@
     }
 
 })();
+```
