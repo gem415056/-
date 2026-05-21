@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      5.1
+// @version      4.1.10
 // @description  키워드노트 실시간 동기화 완벽 패치 (리액트 상태 강제 업데이트 적용) + 헤더 버튼 위치 및 아이콘 변경
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
@@ -56,7 +56,7 @@
 
         let currentPath = window.location.pathname;
         let realtimeSelectionText = "";
-        let savedSelectionText = ""; // 누락되었던 핵심 변수 복구
+        let savedSelectionText = "";
         
         let isModalOpen = false;
         let currentTab = 'current';
@@ -191,32 +191,29 @@
             document.head.appendChild(s);
         }
 
-        // 로컬 변수(savedSelectionText, openModal 등)를 에러 없이 완벽하게 사용할 수 있도록 로컬 스코프 내부 설계 유지
+        // [비파괴형 주입] 기존 DIV를 제거하지 않고 스타일과 속성만 덮어씌워 충돌을 막는 기법
         function injectToolbarBookmarkBtn() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-            if (toolWrapper.querySelector('.crack-ext-bm-btn')) return;
+            if (toolWrapper.querySelector('.crack-ext-bm-btn')) return; // 이미 주입됨
 
             const divider1 = toolWrapper.querySelector('.custom-rp-divider');
             if (!divider1) return;
 
             const target1 = divider1.nextElementSibling;
             if (target1 && target1.tagName === 'DIV' && target1.style.width === '28px') {
-                const btn = document.createElement('button');
-                btn.className = 'crack-ext-bm-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border p-0 size-7';
+                target1.classList.add('crack-ext-bm-btn');
                 
-                // 배경색 #F5E19A, 글자색 흰색, 테두리색을 배경색과 일치시켜 투명하게 연출
-                btn.style.cssText = 'background-color: #F5E19A !important; color: #ffffff !important; border-color: #F5E19A !important; cursor: pointer; width: 28px; height: 28px; font-weight: bold;';
-                btn.innerHTML = '♥';
-                btn.title = '북마크';
+                // 마크업 교체 없이 인라인 스타일만 적용 (흰색 텍스트, 배경색과 동일한 테두리색 지정)
+                target1.style.cssText = 'width: 28px; height: 28px; background-color: #F5E19A !important; color: #ffffff !important; border: 1px solid #F5E19A !important; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;';
+                target1.innerHTML = '♥';
+                target1.title = '북마크';
                 
-                btn.onclick = (e) => { 
+                target1.onclick = (e) => { 
                     e.preventDefault(); e.stopPropagation(); 
                     savedSelectionText = realtimeSelectionText;
                     openModal(); 
                 };
-                
-                target1.replaceWith(btn);
             }
         }
 
@@ -677,7 +674,7 @@
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
         setInterval(() => {
-            injectToolbarBookmarkBtn(); // 툴바 고정 위치 실시간 삽입 구동
+            injectToolbarBookmarkBtn(); // 안정성이 확보된 주입 처리
             if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
         }, 500);
 
@@ -1301,7 +1298,7 @@
 
 ### 2. 내용 규칙
 - **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.
-- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.
+- **형식**: 반드시 \`- \` (하이픈 and 공백)으로 시작하되, 항목은 1개로 유지.
 - **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)
 - **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.
 - **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.
@@ -1815,11 +1812,11 @@
             updatePreviewCards();
         }
 
-        // 로컬 변수 및 함수(showAiSummaryModal 등)를 에러 없이 완벽하게 사용할 수 있도록 로컬 스코프 내부 설계 유지
+        // [비파괴형 주입] 기존 요소를 제거하지 않고 스타일만 입혀 리액트 오류 원천 차단
         function injectToolbarAiSummaryBtn() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-            if (toolWrapper.querySelector('.crack-ext-ai-btn')) return;
+            if (toolWrapper.querySelector('.crack-ext-ai-btn')) return; // 이미 주입됨
 
             const divider1 = toolWrapper.querySelector('.custom-rp-divider');
             if (!divider1) return;
@@ -1827,20 +1824,17 @@
             const target1 = divider1.nextElementSibling;
             const target2 = target1?.nextElementSibling;
             if (target2 && target2.tagName === 'DIV' && target2.style.width === '28px') {
-                const btn = document.createElement('button');
-                btn.className = 'crack-ext-ai-btn relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border p-0 size-7';
+                target2.classList.add('crack-ext-ai-btn');
                 
-                // 텍스트는 하얀색(#ffffff), 테두리는 배경색과 동일하게 지정하여 테두리가 투명하게 연출
-                btn.style.cssText = 'background-color: #F2C0C3 !important; color: #ffffff !important; border-color: #F2C0C3 !important; cursor: pointer; width: 28px; height: 28px; font-weight: bold;';
-                btn.innerHTML = '♥';
-                btn.title = 'AI 요약';
+                // 마크업 교체 없이 인라인 스타일만 적용 (흰색 텍스트, 배경색과 동일한 테두리색 지정)
+                target2.style.cssText = 'width: 28px; height: 28px; background-color: #F2C0C3 !important; color: #ffffff !important; border: 1px solid #F2C0C3 !important; border-radius: 9999px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;';
+                target2.innerHTML = '♥';
+                target2.title = 'AI 요약';
                 
-                btn.addEventListener('click', (e) => { 
+                target2.onclick = (e) => { 
                     e.stopPropagation(); e.preventDefault(); 
                     showAiSummaryModal(); 
-                });
-                
-                target2.replaceWith(btn);
+                };
             }
         }
 
