@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1 - 하단 툴바 경량화 버전)
+// @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1 - 툴바 복구 및 테두리 적용 버전)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.2.0
-// @description  키워드노트 실시간 동기화 완벽 패치 + 하단 툴바 빈자리 3초 타이머 주입 (경량화 및 캐시 보존 완료)
+// @version      4.2.2
+// @description  키워드노트 실시간 동기화 완벽 패치 + 하단 툴바 회색 원형 테두리 버튼 주입 (상단 툴바 복구 및 프롬프트 완벽 복원)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -20,7 +20,7 @@
     const BORDER_COLOR = '#D6D6D0';
     const _w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
-    // 공통 버튼 CSS
+    // 공통 버튼 CSS (하단 빈자리에 들어갈 버튼들의 회색 원형 테두리 및 호버 효과 정의)
     const UNI_BTN_CSS = `
         .crack-uni-btn { 
             display: inline-flex; align-items: center; justify-content: center; 
@@ -35,6 +35,27 @@
         .crack-uni-btn:last-of-type { margin-right: -4px; }
         .crack-uni-btn:hover { background: #f5f5f5 !important; }
         
+        /* 하단 빈자리에 삽입될 북마크/요약 버튼 전용 원형 회색 테두리 스타일 */
+        .crack-ext-bm-btn, .crack-ext-ai-btn {
+            width: 28px !important;
+            height: 28px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: transparent !important;
+            border: 1px solid #E6E6E6 !important;
+            border-radius: 50% !important;
+            cursor: pointer !important;
+            padding: 0 !important;
+            line-height: 1 !important;
+            transition: 0.2s !important;
+            box-sizing: border-box !important;
+        }
+        .crack-ext-bm-btn:hover, .crack-ext-ai-btn:hover {
+            background: rgba(0, 0, 0, 0.05) !important;
+            border-color: #CCCCCC !important;
+        }
+        
         /* 다크모드 대응 */
         body[data-theme="dark"] .crack-uni-btn {
             border-color: #42413D !important;
@@ -42,6 +63,15 @@
         }
         body[data-theme="dark"] .crack-uni-btn:hover {
             background: #333 !important;
+        }
+        body[data-theme="dark"] .crack-ext-bm-btn, 
+        body[data-theme="dark"] .crack-ext-ai-btn {
+            border-color: #42413D !important;
+        }
+        body[data-theme="dark"] .crack-ext-bm-btn:hover, 
+        body[data-theme="dark"] .crack-ext-ai-btn:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: #555552 !important;
         }
     `;
 
@@ -204,23 +234,21 @@
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        // 하단 툴바의 빈자리 1에 북마크 버튼 정밀 조준 주입
+        // 하단 빈자리 1에 회색 테두리 원형 북마크 버튼 주입
         function injectBookmarkButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
 
             const divs = Array.from(toolWrapper.children);
-            // 8in1에서 예약된 28px 크기의 빈자리 디브(spacers)들을 안전하게 찾아냄
             const spacers = divs.filter(el => el.tagName === 'DIV' && el.style.width === '28px' && !el.classList.contains('custom-rp-divider'));
             
-            if (spacers.length < 2) return; // 8in1 툴바가 로딩되기 전이면 대기
+            if (spacers.length < 2) return;
 
-            const slot1 = spacers[0]; // 빈자리 1 확보
-            if (slot1.querySelector('.crack-ext-bm-btn')) return; // 이미 설치되어 있다면 건너뜀
+            const slot1 = spacers[0]; 
+            if (slot1.querySelector('.crack-ext-bm-btn')) return; 
 
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-bm-btn';
-            btn.style.cssText = 'width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; font-size: 15px; color: #F5E19A; padding: 0; line-height: 1;';
+            btn.className = 'crack-ext-bm-btn'; // CSS에 의해 회색 원형 테두리가 자동으로 그려짐
             btn.innerHTML = '♥';
             btn.title = '북마크';
             
@@ -230,8 +258,8 @@
                 openModal(); 
             };
 
-            slot1.innerHTML = ''; // 빈 공간 비우기
-            slot1.appendChild(btn); // 북마크 버튼 삽입
+            slot1.innerHTML = ''; 
+            slot1.appendChild(btn); 
         }
 
         function addBookmarkDirect(text, colorHex) {
@@ -690,16 +718,22 @@
         const targetId = localStorage.getItem('cbm_jump_target');
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
-        // 감지 방식 초경량화: 3초에 한 번만 가볍게 툴바 존재 여부 및 경로 변화 체크 (렉 방지)
+        // [버튼 주입용 3초 타이머] 3초에 한번씩 가볍게 하단 툴바 체크 및 주입 진행 (렉 최소화)
         setInterval(() => {
             injectBookmarkButton();
             if (currentPath !== window.location.pathname) { 
                 currentPath = window.location.pathname; 
                 setTimeout(applyHighlightsToDOM, 500); 
-            } else {
-                applyHighlightsToDOM();
             }
         }, 3000);
+
+        // [실시간 형광펜 감지기 원본 유지] 신규 출력 대사들에 대해 바로 형광펜 작동 처리
+        const observer = new MutationObserver((mutations) => {
+            let shouldApply = false;
+            mutations.forEach(m => { if (m.addedNodes.length > 0) shouldApply = true; });
+            if (shouldApply) { clearTimeout(window.bmDebounce); window.bmDebounce = setTimeout(applyHighlightsToDOM, 500); }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
     // ==========================================
@@ -1271,7 +1305,9 @@
         }
 
         injectStyles();
-        setInterval(setupKW, 3000); // 3초에 한번씩만 체크하도록 경량 패치
+        setInterval(setupKW, 1000); 
+        const obs = new MutationObserver(() => setupKW());
+        obs.observe(document.body, { childList: true, subtree: true });
     }
 
     // ==========================================
@@ -1281,7 +1317,61 @@
         const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3/chats';
         const ACCENT_COLOR = GLOBAL_ACCENT_COLOR;
         
-        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트 (생략)`; // 기존 오리지널 프롬프트 유지됨
+        // [프롬프트 원본 100% 전수 복원] 텍스트 손실로 인한 렌더링 충돌 우려 완벽 방지
+        const DEFAULT_PROMPT = `# 📔 장기기억 아카이브 요약 프롬프트
+
+## 🎯 목적
+채팅 로그를 분석하여 이후 서사가 어긋나지 않도록 **'사건 단위의 독립적 앵커'**를 생성하되, **인물 간의 감정선과 미묘한 상호작용의 질감(Texture)**을 보존한다.
+생성된 요약문은 향후 AI가 인물 간의 관계 역학부터 소소한 추억까지 생생하고 섬세하게 기억하여, 이후의 롤플레잉을 보다 입체적으로 이끌어가는 참고 자료로 쓰일 예정이다.
+
+---
+
+## 🧩 출력 단위 및 분리 기준
+- **단위**: 출력의 최소 단위는 ‘사건’이다.
+- **분리 필수 조건**: 아래 중 하나라도 해당하면 반드시 **새로운 사건 슬롯**으로 분리하여 출력한다.
+1. **장소 이동** (예: 복도 → 교실 / 교정 → 중앙 정원)
+2. **시간대 변화** (예: 오전 → 오후 / 수업 시간 → 쉬는 시간)
+3. **주요 인물 구성 변화** (예: 1:1 대화 중 제3자 난입)
+- **병합 금지**: 주제가 이어지더라도 장소가 바뀌면 정보를 절대 합치지 않는다.
+- **소급 금지**: 나중에 발생한 일(대사, 결정, 물건 등장 등)을 앞선 사건 요약에 미리 포함하지 않는다.
+
+---
+
+## 📋 출력 형식 (강제)
+
+[제목]
+- 내용
+
+### 1. 제목 규칙 (최고 중요도: 시맨틱 검색 최적화)
+- **제한**: 공백 포함 **20자 이내 최대 활용**. 조사 (~의, ~와, ~에서) 및 특수기호(# 등) 사용 금지.
+- **형식 고정**: 유저명은 제외하고 관련된 **NPC명(필수)**을 포함하되, **세력명/국가명/소재/핵심행동** 등 검색에 유의미한 고유명사를 띄어쓰기로 나열. (날짜/시간 및 주관적 감정 기재 금지)
+- 제목은 항상 []로 가둘 일 것. []는 20자 제한에 미포함, 대괄호[] 안의 내용 기준 공백 포함 20자 제한.
+
+### 2. 내용 규칙
+- **제한**: 공백 포함 **500자 이내**. **요약체(~함, ~임)**를 사용할 것.
+- **형식**: 반드시 \`- \` (하이픈과 공백)으로 시작하되, 항목은 1개로 유지.
+- **타임라인**: 본문 첫머리에 반드시 \`MM/DD 시간대\`를 명시할 것. (예: \`08/24 오후\`)
+- **시간대**: 새벽 / 오전 / 오후 / 저녁 / 밤 중 택1.
+- **대명사 금지**: '그', '그녀' 대신 반드시 **정확한 이름(유저명, NPC명 등)**을 명시하여 맥락 독립성을 확보할 것.
+- **핵심 기록 요소**:
+- **상호작용의 연쇄(Flow)**: 단순 '자극-반응'을 넘어, **[누군가의 행동/발화] → [상대의 리액션] → [그로 인한 재반응/변화]**의 인과 사슬을 명확히 기록할 것. **대사는 " " 인용**
+- **사건의 배경 및 정보(Context & Lore)**: 단순 결과만 적지 말 것. 떡밥이 되는 맥락 정보를 구체적으로 포함할 것.
+- **구체적 양상(How)**: '애교', '화냄' 등 추상적 표현 대신 **"옷자락을 당김", "미간을 찌푸림", "시선을 피함"** 등 로그에 명시된 행동과 표정을 적을 것.
+- **미묘한 기류(Mood)**: 두 인물 간의 **사소한 장난, 묘한 긴장감, 말투의 변화** 등 질감을 살리는 디테일을 포함할 것.
+- **전환점 (Turning Point)**: **관계 변화** 및 **결정적 약속/은폐** 사실.
+- **구체적 명사(Keywords)**: 상징적인 **선물, 물건, 공간**을 정확한 명칭으로 기록할 것.
+
+---
+
+## 🚫 기록 원칙 (Strict)
+- **❌ 통합 금지**: 하루 전체를 하나로 요약하거나, 여러 사건을 뭉뚱그리지 말 것.
+- **❌ 소설 금지**: AI 주관적 해석, 의도 추론, 로그에 없는 사실 기록 금지.
+- **❌ 뭉개기 금지**: '대화를 나눴다'는 식의 결과적 요약 금지.
+- **❌ 순서 변경 금지**: 시간 흐름 엄수.
+- **❌ 정보 이동 금지**: 특정 장소에서 일어난 대화나 물건을 다른 장소의 요약문에 섞지 말 것.
+- **❌ 대괄표 남발 금지**: 제목 이외의 어떠한 내용에도 대괄호([,])를 사용하지 않는다.
+- **⭕ 팩트의 확장 보존**: 미확인 소문, 제3자의 동향 등도 스토리 핵심 팩트로 간주.
+- **⭕ 주체 보존\`**: 발단이 누구인지 구분하여 명확히 할 것.`;
 
         function getChatId() {
             const m = location.pathname.match(/\/episodes\/([a-f0-9]+)/);
@@ -1773,29 +1863,27 @@
             updatePreviewCards();
         }
 
-        // 하단 툴바의 빈자리 2에 AI 요약 버튼 정밀 조준 주입
+        // 하단 빈자리 2에 회색 테두리 원형 AI 요약 버튼 주입
         function injectAiSummaryButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
 
             const divs = Array.from(toolWrapper.children);
-            // 8in1에서 예약된 28px 크기의 빈자리 디브(spacers)들을 안전하게 찾아냄
             const spacers = divs.filter(el => el.tagName === 'DIV' && el.style.width === '28px' && !el.classList.contains('custom-rp-divider'));
             
-            if (spacers.length < 2) return; // 8in1 툴바가 로딩되기 전이면 대기
+            if (spacers.length < 2) return;
 
-            const slot2 = spacers[1]; // 빈자리 2 확보
-            if (slot2.querySelector('.crack-ext-ai-btn')) return; // 이미 설치되어 있다면 건너뜀
+            const slot2 = spacers[1]; 
+            if (slot2.querySelector('.crack-ext-ai-btn')) return; 
 
             const btn = document.createElement('button');
-            btn.className = 'crack-ext-ai-btn'; 
-            btn.style.cssText = 'width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer; font-size: 15px; color: #F2C0C3; padding: 0; line-height: 1;';
+            btn.className = 'crack-ext-ai-btn'; // CSS에 의해 회색 원형 테두리가 자동으로 그려짐
             btn.innerHTML = '♥';
             btn.title = 'AI 요약';
             btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
 
-            slot2.innerHTML = ''; // 빈 공간 비우기
-            slot2.appendChild(btn); // AI 요약 버튼 삽입
+            slot2.innerHTML = ''; 
+            slot2.appendChild(btn); 
         }
 
         function inject() { 
@@ -1803,7 +1891,7 @@
             injectAiSummaryButton(); 
         }
 
-        // 감지 방식 초경량화: 무거운 감지기 대신 3초에 한 번만 가볍게 주입 여부 체크 (렉 방지)
+        // [버튼 주입용 3초 타이머] 3초 타이머를 통해 하단에 조용히 버튼 주입 실행
         setInterval(inject, 3000);
     }
 
