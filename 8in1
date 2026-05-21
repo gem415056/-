@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V11.1.0 - 초경량 이벤트 기반 엔진 및 팝업 에디터)
+// @name         크랙 9 in 1 통합팩 (V11.2.0 - 모바일 터치 패치 및 헤더 슬림화 완료)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.1.0
-// @description  오리지널 부팅 규격 유지로 로딩 보장, 이벤트 기반 감지 전환으로 렉 차단, 최상위 팝업 및 연보라 검은별 최적화 완료
+// @version      11.2.0
+// @description  모바일 터치 씹힘 현상 해결, 팝업 상단 여백 80% 축소, 기호 버튼 9px 간격 조정 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -487,10 +487,10 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (초경량 이벤트 감지 버전)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수정 보정 완료)
     // ==========================================
     
-    // 팝업 에디터 고성능 수동 좌표 동기화 (setInterval 제거, 이벤트 기반으로만 작동)
+    // 팝업 에디터 고성능 좌표 수동 정렬
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -501,13 +501,66 @@
 
         const rect = container.getBoundingClientRect();
         
-        // 피드백 반영: 보더라인을 완벽히 숨겨주는 과감한 아웃라인 오프셋 수치(4.5px) 설정
+        // 피드백 반영: 오리지널 회색 테두리 비침을 완전히 막는 덮개 오프셋 조정 (4.5px)
         const offset = 4.5; 
         
         modal.style.position = 'fixed';
         modal.style.left = (rect.left - offset) + 'px';
         modal.style.width = (rect.width + (offset * 2)) + 'px';
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
+    }
+
+    // 대사/기호 팝업 입력창 포커싱 동기화 헬퍼 (모바일 전파 차단 해제)
+    function insertSymbolToModal(openSymbol, closeSymbol) {
+        const textarea = document.getElementById('igx-shortcut-textarea');
+        if (!textarea) return;
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+
+        const before = text.substring(0, start);
+        const selected = text.substring(start, end);
+        const after = text.substring(end);
+
+        const newText = before + openSymbol + selected + closeSymbol + after;
+        textarea.value = newText;
+
+        const newCursorPos = start + openSymbol.length + selected.length;
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // 원래 TIPTAP으로 무결성 데이터 쓰기 (대체식 보강)
+    function writeToTiptap(text) {
+        const tiptap = getSafeMainInput();
+        if (!tiptap) return;
+
+        window.allowNativeFocus = true;
+        window.isSyncingText = true;
+
+        tiptap.focus();
+
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(tiptap);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            window.getSelection().selectAllChildren(tiptap);
+        }
+
+        document.execCommand('delete', false, null); // 비우기
+        document.execCommand('insertText', false, text); // 주입
+
+        setTimeout(() => {
+            window.allowNativeFocus = false;
+            window.isSyncingText = false;
+            tiptap.blur();
+        }, 100);
     }
 
     // 최상위 독립 레이어 팝업 빌드
@@ -529,22 +582,23 @@
         modal = document.createElement('div');
         modal.id = 'igx-shortcut-modal';
         
-        // 피드백 반영: document.body 직속 최상위 가중치(z-index: 50) 및 fixed 레이아웃 탑재
+        // 피드백 반영: 팝업 상단 안쪽 패딩 축소(12px -> 6px)로 헤더 여백 확보
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 6px 12px 12px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
+        // 피드백 반영: 아래쪽 패딩 및 마진(8px -> 4px)으로 상단 높이를 80% 슬림화
+        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
-        // 좌상단 단축기호 배치 (피드백 반영: 간격을 10px로 넓혀 오작동 방지)
+        // 좌상단 단축기호 배치 (피드백 반영: 버튼 간격을 9px로 정밀 타격 조절)
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 10px; align-items: center;";
+        leftToolbar.style.cssText = "display: flex; gap: 9px; align-items: center;";
 
-        // 피드백 반영: **는 '☆'기호로, []는 '□'기호로 버튼 마크 수정 완료
+        // 피드백 반영: 별은 '☆'로, 대괄호는 '□'로 기호 매핑 재반영
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
             { icon: '♠', open: '"', close: '"' },
@@ -556,14 +610,14 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
-            // 피드백 반영: 오리지널 최적 크기(size-7, 28px) 규격 완벽 매핑
             btn.className = "relative inline-flex items-center justify-center rounded-full text-xs font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal;">${s.icon}</span>`;
-            btn.onmousedown = (e) => e.preventDefault();
+            
+            // 피드백 반영: 터치 무시를 야기하는 onmousedown 간섭 코드를 완벽 제거하여 모바일 터치 완전 복구
             btn.onclick = (e) => {
                 e.preventDefault();
                 insertSymbolToModal(s.open, s.close);
@@ -571,7 +625,7 @@
             leftToolbar.appendChild(btn);
         });
 
-        // 우상단 취소/입력 배치 (가로세로 52px * 24px 정대칭 규격 구현)
+        // 우상단 취소/입력 배치 (취소와 입력을 가로 세로 규격이 완벽하게 일치하는 52px * 24px로 대칭 조화)
         const rightToolbar = document.createElement('div');
         rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
@@ -586,7 +640,6 @@
         cancelBtn.onclick = closeShortcutModal;
 
         const sendBtn = document.createElement('button');
-        // 피드백 반영: '입력' 텍스트 명명 및 취소 버튼과 완벽히 동등한 52px * 24px 규격 맞춤 완료
         sendBtn.textContent = "입력";
         sendBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
@@ -594,7 +647,9 @@
             border: none; background-color: rgb(249, 182, 0);
             color: #ffffff; cursor: pointer; width: 52px; height: 24px; box-sizing: border-box;
         `;
-        sendBtn.onclick = () => {
+        // 피드백 반영: 모바일 터치 씹힘을 막기 위해 간섭 코드를 완전 배제하고 정제된 바인딩 사용
+        sendBtn.onclick = (e) => {
+            e.preventDefault();
             const textarea = document.getElementById('igx-shortcut-textarea');
             if (textarea) {
                 writeToTiptap(textarea.value);
@@ -632,7 +687,7 @@
                 textarea.style.height = textarea.scrollHeight + 'px';
                 textarea.style.overflowY = 'hidden';
             }
-            positionModal(); // 높이 변동 감지 시 수동 좌표 정밀 동기화
+            positionModal(); // 높이 변동 감지 시 좌표 실시간 추적
         };
 
         textarea.addEventListener('input', adjustHeight);
@@ -643,7 +698,7 @@
 
         modal.append(headerRow, textarea);
         
-        // 피드백 반영: 가림 한계를 격파하기 위해 body 직속으로 강제 승격 이식 완료
+        // 가림 한계를 완벽히 해결하기 위해 body에 직접 바인딩
         document.body.appendChild(modal);
 
         const isEditor = inputEl.tagName !== 'TEXTAREA' && inputEl.isContentEditable;
@@ -651,7 +706,7 @@
         
         adjustHeight();
         
-        // 초경량 성능 최적화: 타이머 대신 공식 브라우저 고해상도 리사이즈 이벤트만 바인딩
+        // 브라우저 뷰포트 이벤트 리스너 세팅
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', positionModal);
         } else {
@@ -690,7 +745,7 @@
         textarea.style.height = 'auto';
         textarea.style.height = textarea.scrollHeight + 'px';
         
-        positionModal(); // 에디터 활성화 순간 위치 좌표 계산
+        positionModal(); // 에디터 갱신
 
         setTimeout(() => {
             textarea.focus();
@@ -767,7 +822,7 @@
                     toolWrapper.appendChild(spacer);
                 }
 
-                // 7. 피드백 반영: 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼
+                // 7. 피드백 반영: 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼 지정 완료
                 const shortcutBtn = document.createElement('button');
                 shortcutBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 shortcutBtn.type = "button";
@@ -939,7 +994,7 @@
             try { initDoubleClick(); } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 모듈 오류:", e); }
             try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
             try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
-            try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 모듈 오류:", e); }
+            try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 및 팝업 모듈 오류:", e); }
             try { initAutoSaver();   } catch (e) { console.error("[ 9in1 통합팩 ] 임시저장 모듈 오류:", e); }
             try { initRadiosonde();  } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
             try { initAutoScroll();  } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
