@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.4.0
+// @version      4.5.0
 // @description  키워드노트 실시간 동기화 완벽 패치 (리액트 상태 강제 업데이트 적용) + 헤더 버튼 위치 및 아이콘 변경
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
@@ -113,7 +113,7 @@
             s.id = 'crack-bm-css';
             s.textContent = UNI_BTN_CSS + `
                 #custom-rp-tools { position: relative !important; }
-                .crack-rp-bm-btn {
+                .crack-ext-bm-btn {
                     position: absolute !important;
                     left: 74px !important;
                     top: 0px !important;
@@ -130,15 +130,16 @@
                     font-weight: bold !important;
                     color: #F5E19A !important;
                     transition: 0.2s !important;
+                    margin: 0 !important;
                     z-index: 50 !important;
                 }
-                body[data-theme="dark"] .crack-rp-bm-btn {
+                body[data-theme="dark"] .crack-ext-bm-btn {
                     border-color: #42413D !important;
                 }
-                .crack-rp-bm-btn:hover {
+                .crack-ext-bm-btn:hover {
                     background: rgba(0, 0, 0, 0.05) !important;
                 }
-                body[data-theme="dark"] .crack-rp-bm-btn:hover {
+                body[data-theme="dark"] .crack-ext-bm-btn:hover {
                     background: rgba(255, 255, 255, 0.1) !important;
                 }
                 mark.crack-bm-hl { color: inherit; border-radius: 3px; padding: 2px 0; transition: background-color 0.3s; cursor: pointer; }
@@ -220,14 +221,14 @@
             document.head.appendChild(s);
         }
 
-        function injectBookmarkButton() {
+        function injectHeaderButton() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-            if (toolWrapper.querySelector('.crack-rp-bm-btn')) return;
+            if (toolWrapper.querySelector('.crack-ext-bm-btn')) return;
             
             const btn = document.createElement('button');
-            btn.className = 'crack-rp-bm-btn igx-keep-btn';
-            btn.innerHTML = '♥';
+            btn.className = 'crack-ext-bm-btn crack-uni-btn igx-keep-btn';
+            btn.innerHTML = `♥`; 
             btn.title = '북마크';
             
             btn.onclick = (e) => { 
@@ -696,7 +697,7 @@
         if (targetId) { localStorage.removeItem('cbm_jump_target'); setTimeout(() => jumpToHighlight(targetId, getChatId(), getStoryId()), 1500); }
 
         setInterval(() => {
-            injectBookmarkButton();
+            injectHeaderButton();
             if (currentPath !== window.location.pathname) { currentPath = window.location.pathname; setTimeout(applyHighlightsToDOM, 500); }
         }, 500);
 
@@ -1506,7 +1507,7 @@
             s.id = 'crack-ext-ai-css';
             s.textContent = UNI_BTN_CSS + `
                 #custom-rp-tools { position: relative !important; }
-                .crack-rp-ai-btn {
+                .crack-ext-ai-btn {
                     position: absolute !important;
                     left: 106px !important;
                     top: 0px !important;
@@ -1523,15 +1524,16 @@
                     font-weight: bold !important;
                     color: #F2C0C3 !important;
                     transition: 0.2s !important;
+                    margin: 0 !important;
                     z-index: 50 !important;
                 }
-                body[data-theme="dark"] .crack-rp-ai-btn {
+                body[data-theme="dark"] .crack-ext-ai-btn {
                     border-color: #42413D !important;
                 }
-                .crack-rp-ai-btn:hover {
+                .crack-ext-ai-btn:hover {
                     background: rgba(0, 0, 0, 0.05) !important;
                 }
-                body[data-theme="dark"] .crack-rp-ai-btn:hover {
+                body[data-theme="dark"] .crack-ext-ai-btn:hover {
                     background: rgba(255, 255, 255, 0.1) !important;
                 }
                 .crack-ext-ai-overlay { background:rgba(0,0,0,.5); z-index:2147483647; display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; pointer-events:auto !important; }
@@ -1591,303 +1593,23 @@
             document.head.appendChild(s);
         }
 
-        function showToast(message) {
-            var old = document.getElementById('crack-ext-toast');
-            if (old) old.remove();
-            var toast = document.createElement('div');
-            toast.id = 'crack-ext-toast';
-            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-10px);z-index:999999999;background:#1a1a1a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,0.25);transition:opacity 0.3s,transform 0.3s;';
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(-50%) translateY(0)'; });
-            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(-50%) translateY(-10px)'; setTimeout(() => toast.remove(), 300); }, 3000);
-        }
-
-        function refreshCurrentTab(dialog) {
-            var btns = dialog.querySelectorAll('button'), activeBtn = null, otherBtn = null;
-            for (var i = 0; i < btns.length; i++) {
-                var txt = btns[i].textContent.trim();
-                if (txt === '단기 기억' || txt === '장기 기억') {
-                    var bg = getComputedStyle(btns[i]).backgroundColor;
-                    var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)\)/);
-                    if (m && (parseInt(m[1]) + parseInt(m[2]) + parseInt(m[3])) / 3 < 128) activeBtn = btns[i];
-                    else if (txt === '장기 기억') otherBtn = btns[i];
-                }
-            }
-            if (!activeBtn) return;
-            if (otherBtn) { otherBtn.click(); setTimeout(() => { activeBtn.click(); }, 150); }
-            else { activeBtn.click(); }
-        }
-
-        function showAiSummaryModal() {
-            var overlay = document.createElement('div');
-            overlay.className = 'crack-ext-ai-overlay';
-
-            const savedApiKey = localStorage.getItem('crack_ext_gemini_key') || '';
-            const savedModel = localStorage.getItem('crack_ext_gemini_model') || 'gemini-3.1-pro-preview';
-            const savedTurnCount = localStorage.getItem('crack_ext_turn_count') || '15';
-            const savedProvider = localStorage.getItem('crack_ext_api_provider') || 'google';
-            const savedFirebaseScript = localStorage.getItem('crack_ext_firebase_script') || '';
-
-            let parsedCards = [], currentCardIndex = 0;
-
-            var html = `
-            <div class="crack-ext-ai-modal">
-                <div class="crack-ext-ai-modal-header">
-                    <h3>✨ AI 요약 / 장기 기억 추가</h3>
-                    <button id="ce-ai-close-btn" class="ce-ai-close-btn">✕</button>
-                </div>
-                
-                <div class="ce-ai-body">
-                    <!-- 메인 뷰 -->
-                    <div id="ce-ai-main-view" style="display:flex; flex-direction:column; flex:1; min-height:0;">
-                        <div id="ce-ai-preview-container">
-                            <div id="ce-ai-preview-cards"></div>
-                            <div id="ce-ai-card-nav" style="display:none;">
-                                <button id="ce-ai-card-prev">◀</button>
-                                <span id="ce-ai-card-page">1 / 1</span>
-                                <button id="ce-ai-card-next">▶</button>
-                            </div>
-                        </div>
-                        <textarea id="ce-ai-result" class="ce-ai-ta" placeholder="이곳에서 결과를 편집할 수 있습니다. (수동 편집 가능)"></textarea>
-                    </div>
-                    
-                    <!-- 설정 뷰 -->
-                    <div id="ce-ai-settings-view" style="display:none; flex-direction:column; flex:1;">
-                        <div class="crack-flex-ai-row">
-                            <div class="fg" style="flex: 1.2;">
-                                <label>API</label>
-                                <select id="ce-ai-provider" class="ce-ai-select">
-                                    <option value="google" ${savedProvider==='google'?'selected':''}>Google</option>
-                                    <option value="firebase" ${savedProvider==='firebase'?'selected':''}>Firebase</option>
-                                </select>
-                            </div>
-                            <div class="fg" id="ce-ai-key-container" style="${savedProvider==='google'?'':'display:none;'}">
-                                <label>API Key</label>
-                                <input type="password" id="ce-ai-key" class="ce-ai-input" value="${escapeHtml(savedApiKey)}">
-                            </div>
-                            <div class="fg" style="flex: 1.5;">
-                                <label>모델</label>
-                                <select id="ce-ai-model" class="ce-ai-select">
-                                    <option value="gemini-3.1-pro-preview" ${savedModel==='gemini-3.1-pro-preview'?'selected':''}>3.1 Pro Preview</option>
-                                    <option value="gemini-3-flash-preview" ${savedModel==='gemini-3-flash-preview'?'selected':''}>3 Flash Preview</option>
-                                    <option value="gemini-3.1-flash-lite-preview" ${savedModel==='gemini-3.1-flash-lite-preview'?'selected':''}>3.1 Flash-Lite</option>
-                                    <option value="gemini-2.5-pro" ${savedModel==='gemini-2.5-pro'?'selected':''}>2.5 Pro</option>
-                                    <option value="gemini-2.5-flash" ${savedModel==='gemini-2.5-flash'?'selected':''}>2.5 Flash</option>
-                                    <option value="gemini-2.5-flash-lite" ${savedModel==='gemini-2.5-flash-lite'?'selected':''}>2.5 Flash-Lite</option>
-                                </select>
-                            </div>
-                            <div class="fg" style="flex: 0.8;">
-                                <label>턴 수</label>
-                                <input type="number" id="ce-ai-turns" class="ce-ai-input" value="${escapeHtml(savedTurnCount)}" min="0">
-                            </div>
-                        </div>
-                        
-                        <div class="crack-flex-ai-row" id="ce-ai-firebase-container" style="${savedProvider==='firebase'?'':'display:none;'}">
-                            <div class="fg">
-                                <label>Firebase 스크립트</label>
-                                <textarea id="ce-ai-firebase-script" class="ce-ai-ta" style="flex: 0 0 60px; height:60px;">${escapeHtml(savedFirebaseScript)}</textarea>
-                            </div>
-                        </div>
-                        
-                        <div style="flex:1; display:flex; flex-direction:column; margin-top:4px;">
-                            <label>프롬프트</label>
-                            <textarea id="ce-ai-prompt" class="ce-ai-ta"></textarea>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="ce-ai-footer">
-                    <div>
-                         <button class="crack-ext-ai-mbtn" id="ce-ai-settings-btn">요약 설정</button>
-                    </div>
-                    <div class="ce-ai-footer-right" id="ce-ai-footer-right">
-                        <button class="crack-ext-ai-mbtn" id="ce-ai-generate">요약 생성</button>
-                        <button class="crack-ext-ai-mbtn crack-ext-ai-mbtn-p" id="ce-ai-save">추가하기</button>
-                    </div>
-                </div>
-            </div>`;
-
-            overlay.innerHTML = html;
-            document.body.appendChild(overlay);
-
-            overlay.querySelector('#ce-ai-close-btn').onclick = e => { e.stopPropagation(); overlay.remove(); };
-            overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
-
-            const mainView = overlay.querySelector('#ce-ai-main-view');
-            const settingsView = overlay.querySelector('#ce-ai-settings-view');
-            const txtResult = overlay.querySelector('#ce-ai-result');
-            const txtPrompt = overlay.querySelector('#ce-ai-prompt');
-            const btnSettings = overlay.querySelector('#ce-ai-settings-btn');
-            const footerRight = overlay.querySelector('#ce-ai-footer-right');
-            
-            const previewCards = overlay.querySelector('#ce-ai-preview-cards');
-            const cardNav = overlay.querySelector('#ce-ai-card-nav');
-            const spanCardPage = overlay.querySelector('#ce-ai-card-page');
-            
-            const selProvider = overlay.querySelector('#ce-ai-provider');
-            const contKey = overlay.querySelector('#ce-ai-key-container');
-            const contFirebase = overlay.querySelector('#ce-ai-firebase-container');
-
-            selProvider.onchange = () => {
-                if(selProvider.value === 'google') { contKey.style.display = 'block'; contFirebase.style.display = 'none'; } 
-                else { contKey.style.display = 'none'; contFirebase.style.display = 'flex'; }
-            };
-
-            btnSettings.onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                if (mainView.style.display === 'none') {
-                    // 메인 화면으로 돌아가기
-                    localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
-                    settingsView.style.display = 'none';
-                    mainView.style.display = 'flex';
-                    footerRight.style.display = 'flex';
-                    btnSettings.textContent = '요약 설정';
-                } else {
-                    // 설정 화면으로 진입
-                    mainView.style.display = 'none';
-                    settingsView.style.display = 'flex';
-                    footerRight.style.display = 'none';
-                    btnSettings.textContent = '돌아가기';
-                    txtPrompt.value = localStorage.getItem('crack_ext_custom_prompt') || DEFAULT_PROMPT;
-                }
-            };
-
-            function updatePreviewCards() {
-                const content = txtResult.value.trim();
-                
-                // 빈 결과 또는 요약/오류 중일 때 처리
-                if(!content || content === "요약 중..." || content.startsWith("오류:")) { 
-                    previewCards.innerHTML = `<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">${content === "요약 중..." ? "🔄 요약 중..." : (content.startsWith("오류:") ? escapeHtml(content) : "이곳에 결과가 표시됩니다.")}</div></div>`;
-                    cardNav.style.display = 'none'; 
-                    parsedCards = []; 
-                    return; 
-                }
-
-                const blocks = content.split(/\[(.*?)\]/);
-                parsedCards = [];
-                for (let i = 1; i < blocks.length; i += 2) {
-                    let title = blocks[i].trim(), summary = blocks[i+1] ? blocks[i+1].replace(/^[\s\n]*[-*]?\s*/, '').trim() : '';
-                    if (title || summary) parsedCards.push({ title, summary });
-                }
-                
-                if (parsedCards.length === 0) {
-                    previewCards.innerHTML = '<div class="crack-ext-session-card" style="justify-content:center; align-items:center;"><div style="color:#999; font-size:13px; font-weight:bold;">이곳에 결과가 표시됩니다.</div></div>';
-                    cardNav.style.display = 'none'; 
-                    return; 
-                }
-                
-                if (currentCardIndex >= parsedCards.length) currentCardIndex = parsedCards.length - 1;
-                if (currentCardIndex < 0) currentCardIndex = 0;
-
-                cardNav.style.display = parsedCards.length > 1 ? 'flex' : 'none';
-                spanCardPage.textContent = `${currentCardIndex + 1} / ${parsedCards.length}`;
-
-                let mem = parsedCards[currentCardIndex];
-                let tColor = mem.title.length > 20 ? 'color:#FF4433; font-weight:bold;' : 'color:inherit; font-weight:normal;';
-                let sColor = mem.summary.length > 300 ? 'color:#FF4433; font-weight:bold;' : 'color:inherit; font-weight:normal;';
-
-                previewCards.innerHTML = `
-                    <div class="crack-ext-session-card">
-                        <div class="crack-ext-session-title">
-                            <div>
-                                <span style="color:#888;">[ </span>
-                                <span style="font-weight:bold; color:inherit;">${escapeHtml(mem.title)}</span>
-                                <span style="color:#888;"> ]</span>
-                            </div>
-                            <span class="crack-ext-char-count">
-                                ( <span style="${tColor}">${mem.title.length}자</span> / 20자 )
-                            </span>
-                        </div>
-                        <div class="crack-ext-session-content">${escapeHtml(mem.summary)}</div>
-                        <div style="text-align:right; margin-top:8px; flex-shrink:0;">
-                            <span class="crack-ext-char-count">
-                                ( <span style="${sColor}">${mem.summary.length}자</span> / 300자 )
-                            </span>
-                        </div>
-                    </div>`;
-            }
-
-            txtResult.addEventListener('input', updatePreviewCards);
-            overlay.querySelector('#ce-ai-card-prev').onclick = (e) => { e.preventDefault(); if (currentCardIndex > 0) { currentCardIndex--; updatePreviewCards(); } };
-            overlay.querySelector('#ce-ai-card-next').onclick = (e) => { e.preventDefault(); if (currentCardIndex < parsedCards.length - 1) { currentCardIndex++; updatePreviewCards(); } };
-
-            const btnGen = overlay.querySelector('#ce-ai-generate');
-            const btnSave = overlay.querySelector('#ce-ai-save');
-
-            btnGen.onclick = async (e) => {
-                e.stopPropagation();
-                // 요약 설정 화면에 있을 때 클릭 시 자동 전환용 방어 코드 (버튼은 숨겨져 있지만 안전을 위해 유지)
-                if (settingsView.style.display === 'flex') {
-                    localStorage.setItem('crack_ext_custom_prompt', txtPrompt.value.trim());
-                    settingsView.style.display = 'none';
-                    mainView.style.display = 'flex';
-                    footerRight.style.display = 'flex';
-                    btnSettings.textContent = '요약 설정';
-                }
-
-                const apiKey = overlay.querySelector('#ce-ai-key').value.trim(), model = overlay.querySelector('#ce-ai-model').value, turns = parseInt(overlay.querySelector('#ce-ai-turns').value, 10) || 15;
-                const firebaseScript = overlay.querySelector('#ce-ai-firebase-script').value.trim();
-                if (selProvider.value === 'google' && !apiKey) return alert("API Key를 입력해주세요.");
-                
-                localStorage.setItem('crack_ext_api_provider', selProvider.value);
-                localStorage.setItem('crack_ext_gemini_key', apiKey);
-                localStorage.setItem('crack_ext_firebase_script', firebaseScript);
-                localStorage.setItem('crack_ext_gemini_model', model);
-                localStorage.setItem('crack_ext_turn_count', turns.toString());
-
-                btnGen.disabled = true; btnSave.disabled = true; txtResult.value = "요약 중..."; currentCardIndex = 0; updatePreviewCards();
-                try {
-                    const chatLog = await fetchRecentMessages(turns);
-                    if (!chatLog) throw new Error("내역을 불러올 수 없습니다.");
-                    txtResult.value = (selProvider.value === 'google') ? await callGeminiApi(apiKey, model, chatLog) : await callFirebaseApi(firebaseScript, model, chatLog);
-                } catch (err) { txtResult.value = "오류: " + err.message; } 
-                finally { btnGen.disabled = false; btnSave.disabled = false; btnGen.textContent = "재생성 (리롤)"; updatePreviewCards(); }
-            };
-
-            btnSave.onclick = async (e) => {
-                e.stopPropagation();
-                if (!txtResult.value.trim()) return alert("결과가 비어있습니다.");
-                let errorIndex = parsedCards.findIndex(c => c.title.length > 20 || c.summary.length > 300);
-                if (errorIndex !== -1) { currentCardIndex = errorIndex; updatePreviewCards(); return alert("글자 수 제한 초과 항목이 있습니다."); }
-
-                btnSave.disabled = true;
-                let successCount = 0;
-                for (let i = 0; i < parsedCards.length; i++) {
-                    btnSave.textContent = `추가 중... (${i + 1}/${parsedCards.length})`;
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    if (await apiCall('POST', '/summaries', { type: 'shortTerm', title: parsedCards[i].title, summary: parsedCards[i].summary })) successCount++;
-                }
-                if (successCount > 0) {
-                    showToast(`✅ ${successCount}개의 요약이 장기 기억에 추가되었습니다.`);
-                    overlay.remove();
-                    var dialogEl = document.querySelector('[role="dialog"]');
-                    if (dialogEl) refreshCurrentTab(dialogEl);
-                } else { btnSave.textContent = "추가하기"; btnSave.disabled = false; }
-            };
-
-            // 처음 열었을 때 안내창 미리 띄우기
-            updatePreviewCards();
-        }
-
-        function injectAiSummaryButton() {
+        function injectTopHeaderBtn() {
             const toolWrapper = document.getElementById('custom-rp-tools');
             if (!toolWrapper) return;
-            if (toolWrapper.querySelector('.crack-rp-ai-btn')) return;
+            if (toolWrapper.querySelector('.crack-ext-ai-btn')) return;
             
             const btn = document.createElement('button');
-            btn.className = 'crack-rp-ai-btn igx-keep-btn';
+            btn.className = 'crack-ext-ai-btn crack-uni-btn igx-keep-btn'; 
             btn.innerHTML = '♥';
             btn.title = 'AI 요약';
-            
-            btn.onclick = (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); };
+            btn.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); showAiSummaryModal(); });
             
             toolWrapper.appendChild(btn);
         }
 
         function inject() { 
             injectAiStyles(); 
-            injectAiSummaryButton(); 
+            injectTopHeaderBtn(); 
         }
 
         let timeout;
