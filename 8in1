@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V11.4.0 - 더블 디바이더 및 빈자리 정밀 설계 완료)
+// @name         크랙 9 in 1 통합팩 (V11.5.0 - 파스텔 라벤더 에디션)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.4.0
-// @description  오리지널 부팅 규격 유지, 툴바 앞뒤 점선 구분선(더블 디바이더) 정밀 배치 최적화 완료
+// @version      11.5.0
+// @description  오리지널 규격 완벽 유지, 팝업 버튼 라벤더 연보라 파스텔 테마 및 화이트 텍스트 마감 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -487,10 +487,10 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (더블 디바이더 정밀 장착 버전)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (연보라 뷰티 테마 세팅)
     // ==========================================
     
-    // 팝업 에디터 고성능 좌표 수동 정렬
+    // 팝업 에디터 수동 고정 좌표 추적기
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -590,9 +590,9 @@
         const headerRow = document.createElement('div');
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
-        // 좌상단 단축기호 배치
+        // 좌상단 단축기호 배치 (피드백 반영: 최적 8px 버튼 간격 복원 적용)
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;"; // 피드백 반영: 버튼 간격 황금배율인 8px로 복원
+        leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;";
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -605,15 +605,22 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
-            // 피드백 반영: 둥근 정사각형(border-radius: 6px) 및 원형 걷어내기 완벽 이식
-            btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0";
+            // 피드백 반영: 테두리 회색을 전격 삭제(border: none)하고 연보라색(#D5C2DE) 배경에 화이트(#ffffff) 기호가 피어나도록 최종 디자인 개편
+            btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-opacity p-0";
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
             btn.style.borderRadius = '6px'; // 정사각형 둥근 코너
+            btn.style.border = 'none'; // 테두리 회색 전격 제거
+            btn.style.backgroundColor = '#D5C2DE'; // 라벤더 배경색
+            btn.style.color = '#ffffff'; // 하얀색 기호 텍스트
             btn.style.cursor = 'pointer';
-            btn.innerHTML = `<span style="font-size:14px; font-weight:normal;">${s.icon}</span>`;
+            btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#ffffff !important;">${s.icon}</span>`;
             
+            // 파스텔 단추에 기분 좋은 터치/마우스오버 불투명도 전환 효과 주입
+            btn.onmouseenter = () => btn.style.opacity = '0.85';
+            btn.onmouseleave = () => btn.style.opacity = '1';
+
             btn.onclick = (e) => {
                 e.preventDefault();
                 insertSymbolToModal(s.open, s.close);
@@ -637,12 +644,17 @@
 
         const sendBtn = document.createElement('button');
         sendBtn.textContent = "입력";
+        // 피드백 반영: 입력 버튼 역시 파스텔 테마와 일체감을 가지도록 배경 연보라(#D5C2DE) 및 텍스트 흰색(#ffffff) 조화
         sendBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
             border-radius: 6px; font-size: 11px; font-weight: 600;
-            border: none; background-color: rgb(249, 182, 0);
+            border: none; background-color: #D5C2DE;
             color: #ffffff; cursor: pointer; width: 52px; height: 24px; box-sizing: border-box;
+            transition: opacity 0.15s ease;
         `;
+        sendBtn.onmouseenter = () => sendBtn.style.opacity = '0.85';
+        sendBtn.onmouseleave = () => sendBtn.style.opacity = '1';
+
         sendBtn.onclick = (e) => {
             e.preventDefault();
             const textarea = document.getElementById('igx-shortcut-textarea');
@@ -745,7 +757,7 @@
         }, 50);
     };
 
-    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 정밀 설계)
+    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 여백 예약 완벽 구현)
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -814,7 +826,7 @@
                     toolWrapper.appendChild(spacer);
                 }
 
-                // 7. 피드백 반영: 주입 기능 3개와 구분을 위한 두 번째 점선 구분선 추가
+                // 7. 파티션 및 기획 구분용 두 번째 점선 구분선
                 const divider2 = document.createElement('div');
                 divider2.className = 'custom-rp-divider-2'; 
                 divider2.style.width = '1px';
