@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V12.0.0 - 최종 마스터피스: 비대칭 팝업 비율 & 6px 간격 완벽 복원)
+// @name         크랙 9 in 1 통합팩 (V12.1.0 - 최종 마스터피스: 임시저장 엔진 폴링 최적화)
 // @namespace    https://crack.wrtn.ai/
-// @version      12.0.0
-// @description  비대칭 상단 여백(12px) 및 하단 동일 대칭 복구, 단축키 6px 간격 통일 등 최종 디자인 픽스 완료
+// @version      12.1.0
+// @description  타 모듈 100% 락(Lock) 보존, 모듈 6(임시저장) 이벤트 의존성 제거 및 1초 폴링 백업 엔진 탑재 완결
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -31,7 +31,7 @@
     }
 
     // ==========================================
-    // 모듈 1: 더블클릭 수정 기능 (순수 원본)
+    // 모듈 1: 더블클릭 수정 기능 (순수 원본 - Lock)
     // ==========================================
     function initDoubleClick() {
         function findMessageContainer(target) {
@@ -95,7 +95,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 리롤 길게 누르기 기능 (순수 원본)
+    // 모듈 2: 리롤 길게 누르기 기능 (순수 원본 - Lock)
     // ==========================================
     function initRerollHold() {
         const HOLD_MS = 600;
@@ -189,7 +189,7 @@
     }
 
     // ==========================================
-    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (순수 원본)
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (순수 원본 - Lock)
     // ==========================================
     function initSendHold() {
         const HOLD_MS = 600;
@@ -294,7 +294,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀 이식)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (순수 원본 - Lock)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -487,10 +487,8 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수직 대칭/6px 최적화 완결)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (순수 원본 - Lock)
     // ==========================================
-    
-    // 팝업 에디터 수동 고정 좌표 추적기
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -508,7 +506,6 @@
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
     }
 
-    // 대사/기호 팝업 내 텍스트 삽입 헬퍼
     function insertSymbolToModal(openSymbol, closeSymbol) {
         const textarea = document.getElementById('igx-shortcut-textarea');
         if (!textarea) return;
@@ -531,7 +528,6 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    // TIPTAP으로 교체 주입 실행기
     function writeToTiptap(text) {
         const tiptap = getSafeMainInput();
         if (!tiptap) return;
@@ -561,7 +557,6 @@
         }, 100);
     }
 
-    // 최상위 팝업 조립실
     function createShortcutModal() {
         const inputEl = getSafeMainInput();
         if (!inputEl) return;
@@ -580,21 +575,17 @@
         modal = document.createElement('div');
         modal.id = 'igx-shortcut-modal';
         
-        // 피드백 반영: 상단(12px)과 하단(12px)의 패딩을 완전히 똑같이 맞추어 물리적 정대칭 확보 완료!
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 12px 12px 12px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        // 피드백 반영: 하단 여백 및 실선 거리를 8px로 설정하여, 12px 상단 패딩과 어우러지는 특유의 비대칭 안정감(가운데 정렬 아님)을 완벽히 복원
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
 
-        // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        // 피드백 반영: 우측(취소-입력)의 6px 간격과 동일하게 맞추어 달라는 지시에 따라 간격 6px로 세팅 완료
         leftToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
         const symbols = [
@@ -612,10 +603,10 @@
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
-            btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
-            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 복원
-            btn.style.backgroundColor = '#ffffff'; // 완벽한 하얀색 배경
-            btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
+            btn.style.borderRadius = '6px'; 
+            btn.style.border = '1px solid rgba(128,128,128,0.3)'; 
+            btn.style.backgroundColor = '#ffffff'; 
+            btn.style.color = '#7A7297'; 
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#7A7297 !important;">${s.icon}</span>`;
             
@@ -629,7 +620,6 @@
             leftToolbar.appendChild(btn);
         });
 
-        // 우상단 조작부 (취소/입력 6px 간격 유지)
         const rightToolbar = document.createElement('div');
         rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
@@ -667,7 +657,6 @@
         rightToolbar.append(cancelBtn, sendBtn);
         headerRow.append(leftToolbar, rightToolbar);
 
-        // 가변 텍스트 에어리어
         const textarea = document.createElement('textarea');
         textarea.id = 'igx-shortcut-textarea';
         textarea.placeholder = "여기에 메시지를 입력하세요...";
@@ -757,7 +746,6 @@
         }, 50);
     };
 
-    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 여백 예약 완벽 구현)
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -795,19 +783,16 @@
                 toolWrapper.id = 'custom-rp-tools';
                 toolWrapper.className = 'flex items-center gap-1';
 
-                // 1. 오토스크롤 세모
                 const autoScrollBtn = document.createElement('button');
                 autoScrollBtn.id = 'turbo-scroll-btn';
                 autoScrollBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
-                // 2. 슬래시(/)
                 if (slashBtn) {
                     toolWrapper.appendChild(slashBtn);
                 }
 
-                // 3. 첫 번째 점선 구분선
                 const divider1 = document.createElement('div');
                 divider1.className = 'custom-rp-divider'; 
                 divider1.style.width = '1px';
@@ -817,7 +802,6 @@
                 divider1.style.margin = '0 4px';
                 toolWrapper.appendChild(divider1);
 
-                // 4, 5, 6. 빈자리 3칸 예약 처리 (마진 감안하여 28px 너비 빈공간 확보)
                 for (let i = 0; i < 3; i++) {
                     const spacer = document.createElement('div');
                     spacer.style.width = '28px';
@@ -826,7 +810,6 @@
                     toolWrapper.appendChild(spacer);
                 }
 
-                // 7. 파티션 및 기획 구분용 두 번째 점선 구분선
                 const divider2 = document.createElement('div');
                 divider2.className = 'custom-rp-divider-2'; 
                 divider2.style.width = '1px';
@@ -836,7 +819,6 @@
                 divider2.style.margin = '0 4px';
                 toolWrapper.appendChild(divider2);
 
-                // 8. 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼
                 const shortcutBtn = document.createElement('button');
                 shortcutBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 shortcutBtn.type = "button";
@@ -869,7 +851,82 @@
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (부모 프레임 오버플로우 가드 제거 패치)
+    // 모듈 6: 입력창 자동 임시저장 (안정형 폴링 엔진 신설 적용 완료)
+    // ==========================================
+    function initAutoSaver() {
+        function getRoomId() {
+            const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
+            return match ? match[1] : 'global_room';
+        }
+
+        function getDraftKey() {
+            return 'crack_typing_draft_' + getRoomId();
+        }
+
+        let isRestoredForCurrentRoom = false;
+        let currentRoomId = '';
+        let lastSavedText = null; 
+
+        function setNativeValue(element, value) {
+            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+            const prototype = Object.getPrototypeOf(element);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+
+            if (valueSetter && valueSetter !== prototypeValueSetter) {
+                prototypeValueSetter.call(element, value);
+            } else {
+                valueSetter.call(element, value);
+            }
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function processAutoSave() {
+            const inputEl = document.querySelector('textarea.__chat_input_textarea, textarea[placeholder*="메시지"], div.__chat_input_textarea[contenteditable="true"], .tiptap.ProseMirror');
+            if (!inputEl) return;
+
+            const isEditor = inputEl.tagName !== 'TEXTAREA' && inputEl.isContentEditable;
+            const newRoomId = getRoomId();
+            
+            if (currentRoomId !== newRoomId) {
+                currentRoomId = newRoomId;
+                isRestoredForCurrentRoom = false;
+                lastSavedText = null; 
+            }
+
+            const DRAFT_KEY = getDraftKey();
+            const currentText = isEditor ? (inputEl.innerText || '').replace(/\n$/, '') : (inputEl.value || '');
+
+            if (!isRestoredForCurrentRoom) {
+                const savedDraft = localStorage.getItem(DRAFT_KEY);
+                let textAfterRestore = currentText;
+
+                if (savedDraft && currentText.trim() === '') {
+                    if (isEditor) {
+                        inputEl.focus();
+                        document.execCommand("insertText", false, savedDraft);
+                    } else {
+                        setNativeValue(inputEl, savedDraft);
+                    }
+                    textAfterRestore = savedDraft;
+                }
+                isRestoredForCurrentRoom = true;
+                lastSavedText = textAfterRestore;
+            } else {
+                if (currentText !== lastSavedText) {
+                    if (currentText.trim() === '') {
+                        localStorage.removeItem(DRAFT_KEY);
+                    } else {
+                        localStorage.setItem(DRAFT_KEY, currentText);
+                    }
+                    lastSavedText = currentText;
+                }
+            }
+        }
+        setInterval(processAutoSave, 1000);
+    }
+
+    // ==========================================
+    // 모듈 7: 라디오존데 (순수 원본 - Lock)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -885,7 +942,6 @@
         const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
 
         GM_addStyle(`
-            /* 입력창 보더의 overflow 제한을 개방하여 라디오존데와 크래커가 바깥으로 얹혀지도록 방어가드 설계 */
             .flex.w-full.flex-col.rounded-lg {
                 overflow: visible !important;
             }
@@ -1078,7 +1134,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 채팅방 자동 스크롤 (순수 원본)
+    // 모듈 8: 채팅방 자동 스크롤 (순수 원본 - Lock)
     // ==========================================
     function initAutoScroll() {
         const WAIT_TIME = 500;
