@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V12.1.0 - 오리지널 임시저장 완벽 락 & 팝업 동기화 패치)
+// @name         크랙 7 in 1 통합팩 (V13.0.0 - 오토세이브 삭제 및 복사(⌘) 버튼 탑재)
 // @namespace    https://crack.wrtn.ai/
-// @version      12.1.0
-// @description  임시저장 모듈(모듈 6) 100% 원본 락 보존, TIPTAP 파괴 버그 완벽 수정 및 정대칭 12px/7px 간격 최종 완료
+// @version      13.0.0
+// @description  임시저장 모듈 전격 삭제, 팝업창 복사(⌘) 정사각형 버튼 신설 및 기존 비율 100% 락 보존 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -294,7 +294,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (순수 원본)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀 이식)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -487,7 +487,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수직 대칭/7px/복사버튼 추가)
     // ==========================================
     
     // 팝업 에디터 수동 고정 좌표 추적기
@@ -531,7 +531,7 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    // TIPTAP으로 교체 주입 실행기 (버그 해결: delete 파괴 삭제 -> selectAll 덮어쓰기)
+    // TIPTAP으로 교체 주입 실행기
     function writeToTiptap(text) {
         const tiptap = getSafeMainInput();
         if (!tiptap) return;
@@ -541,8 +541,17 @@
 
         tiptap.focus();
 
-        // TIPTAP의 뼈대 DOM 노드를 부수지 않고 가장 안전하게 텍스트만 전체 덮어씌우는 완벽 교체 로직
-        document.execCommand('selectAll', false, null);
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(tiptap);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            window.getSelection().selectAllChildren(tiptap);
+        }
+
+        document.execCommand('delete', false, null);
         document.execCommand('insertText', false, text);
 
         setTimeout(() => {
@@ -574,15 +583,16 @@
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 12px 12px 12px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 6px 12px 4px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
+        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
+        // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;"; // 7px 간격 조율
+        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;"; // 7px 간격
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -600,7 +610,7 @@
             btn.style.width = '28px';
             btn.style.height = '28px';
             btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
-            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 복원
+            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리
             btn.style.backgroundColor = '#ffffff'; // 하얀색 배경
             btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
             btn.style.cursor = 'pointer';
@@ -616,9 +626,37 @@
             leftToolbar.appendChild(btn);
         });
 
-        // 우상단 조작부 (취소/입력 대칭화)
+        // 우상단 조작부 (복사/취소/입력 배치)
         const rightToolbar = document.createElement('div');
         rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
+
+        // 신규 추가: 팝업 내용 전체 복사 (⌘) 버튼
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = "⌘";
+        copyBtn.title = "내용 전체 복사";
+        copyBtn.style.cssText = `
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 6px; font-size: 13px; font-weight: 500;
+            border: 1px solid rgba(128,128,128,0.2); background: transparent;
+            color: inherit; cursor: pointer; width: 24px; height: 24px; box-sizing: border-box;
+            transition: background-color 0.2s ease;
+        `;
+        copyBtn.onclick = (e) => {
+            e.preventDefault();
+            const textarea = document.getElementById('igx-shortcut-textarea');
+            if (textarea && textarea.value) {
+                // 클립보드에 텍스트 복사 실행
+                navigator.clipboard.writeText(textarea.value).then(() => {
+                    copyBtn.style.backgroundColor = 'rgba(128,128,128,0.2)';
+                    setTimeout(() => copyBtn.style.backgroundColor = 'transparent', 200);
+                }).catch(() => {
+                    // 클립보드 API 실패 시 예비 수단
+                    textarea.select();
+                    document.execCommand('copy');
+                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                });
+            }
+        };
 
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = "취소";
@@ -651,7 +689,8 @@
             closeShortcutModal();
         };
 
-        rightToolbar.append(cancelBtn, sendBtn);
+        // 배치 순서: 복사(⌘) -> 취소 -> 입력
+        rightToolbar.append(copyBtn, cancelBtn, sendBtn);
         headerRow.append(leftToolbar, rightToolbar);
 
         // 가변 텍스트 에어리어
@@ -744,7 +783,7 @@
         }, 50);
     };
 
-    // 모듈 5: 메인 툴바 셋업 함수
+    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 예약 툴바 구현)
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -782,16 +821,19 @@
                 toolWrapper.id = 'custom-rp-tools';
                 toolWrapper.className = 'flex items-center gap-1';
 
+                // 1. 오토스크롤 세모
                 const autoScrollBtn = document.createElement('button');
                 autoScrollBtn.id = 'turbo-scroll-btn';
                 autoScrollBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 autoScrollBtn.innerHTML = `<span style="font-size:15px;">△</span>`;
                 toolWrapper.appendChild(autoScrollBtn);
 
+                // 2. 슬래시(/)
                 if (slashBtn) {
                     toolWrapper.appendChild(slashBtn);
                 }
 
+                // 3. 첫 번째 점선 구분선
                 const divider1 = document.createElement('div');
                 divider1.className = 'custom-rp-divider'; 
                 divider1.style.width = '1px';
@@ -801,6 +843,7 @@
                 divider1.style.margin = '0 4px';
                 toolWrapper.appendChild(divider1);
 
+                // 4, 5, 6. 빈자리 3칸 예약 처리 (마진 감안하여 28px 너비 빈공간 확보)
                 for (let i = 0; i < 3; i++) {
                     const spacer = document.createElement('div');
                     spacer.style.width = '28px';
@@ -809,6 +852,7 @@
                     toolWrapper.appendChild(spacer);
                 }
 
+                // 7. 파티션 및 기획 구분용 두 번째 점선 구분선
                 const divider2 = document.createElement('div');
                 divider2.className = 'custom-rp-divider-2'; 
                 divider2.style.width = '1px';
@@ -818,6 +862,7 @@
                 divider2.style.margin = '0 4px';
                 toolWrapper.appendChild(divider2);
 
+                // 8. 연보라색(#D5C2DE) 검은별(★) 팝업 호출 버튼
                 const shortcutBtn = document.createElement('button');
                 shortcutBtn.className = "relative inline-flex items-center justify-center rounded-full text-sm font-medium transition-colors border border-border bg-card text-line-gray-1 hover:bg-secondary p-0 size-7";
                 shortcutBtn.type = "button";
@@ -850,80 +895,6 @@
     }
 
     // ==========================================
-    // 모듈 6: 입력창 자동 임시저장 (순수 원본 로직 100% Lock)
-    // ==========================================
-    function initAutoSaver() {
-        function getRoomId() {
-            const match = location.pathname.match(/\/stories\/[^/]+\/episodes\/([^/]+)/);
-            return match ? match[1] : 'global_room';
-        }
-
-        function getDraftKey() {
-            return 'crack_typing_draft_' + getRoomId();
-        }
-
-        let isRestoredForCurrentRoom = false;
-        let currentRoomId = '';
-
-        function setNativeValue(element, value) {
-            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
-            const prototype = Object.getPrototypeOf(element);
-            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
-
-            if (valueSetter && valueSetter !== prototypeValueSetter) {
-                prototypeValueSetter.call(element, value);
-            } else {
-                valueSetter.call(element, value);
-            }
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-
-        function processAutoSave() {
-            const inputEl = document.querySelector('textarea.__chat_input_textarea, textarea[placeholder*="메시지"], div.__chat_input_textarea[contenteditable="true"], .tiptap.ProseMirror');
-            if (!inputEl) return;
-
-            const isEditor = inputEl.tagName !== 'TEXTAREA' && inputEl.isContentEditable;
-
-            const newRoomId = getRoomId();
-            if (currentRoomId !== newRoomId) {
-                currentRoomId = newRoomId;
-                isRestoredForCurrentRoom = false;
-                inputEl.dataset.draftHooked = 'false';
-            }
-
-            const DRAFT_KEY = getDraftKey();
-
-            if (!isRestoredForCurrentRoom) {
-                const savedDraft = localStorage.getItem(DRAFT_KEY);
-                const currentText = isEditor ? (inputEl.innerText || '') : (inputEl.value || '');
-                
-                if (savedDraft && currentText.trim() === '') {
-                    if (isEditor) {
-                        inputEl.focus();
-                        document.execCommand("insertText", false, savedDraft);
-                    } else {
-                        setNativeValue(inputEl, savedDraft);
-                    }
-                }
-                isRestoredForCurrentRoom = true;
-            }
-
-            if (inputEl.dataset.draftHooked !== 'true') {
-                inputEl.dataset.draftHooked = 'true';
-                inputEl.addEventListener('input', (e) => {
-                    const text = isEditor ? e.target.innerText : e.target.value;
-                    if (text.trim() === '') {
-                        localStorage.removeItem(getDraftKey());
-                    } else {
-                        localStorage.setItem(getDraftKey(), text);
-                    }
-                });
-            }
-        }
-        setInterval(processAutoSave, 1000);
-    }
-
-    // ==========================================
     // 모듈 7: 라디오존데 (부모 프레임 오버플로우 가드 제거 패치)
     // ==========================================
     function initRadiosonde() {
@@ -940,6 +911,7 @@
         const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
 
         GM_addStyle(`
+            /* 입력창 보더의 overflow 제한을 개방하여 라디오존데와 크래커가 바깥으로 얹혀지도록 방어가드 설계 */
             .flex.w-full.flex-col.rounded-lg {
                 overflow: visible !important;
             }
@@ -1269,7 +1241,6 @@
             try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
             try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
             try { initRPToolbar();   } catch (e) { console.error("[ 9in1 통합팩 ] 대사 툴바 및 팝업 모듈 오류:", e); }
-            try { initAutoSaver();   } catch (e) { console.error("[ 9in1 통합팩 ] 임시저장 모듈 오류:", e); }
             try { initRadiosonde();  } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
             try { initAutoScroll();  } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
         } catch(e) {
