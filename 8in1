@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V12.1.0 - 최종 마스터피스: 임시저장 엔진 폴링 최적화)
+// @name         크랙 9 in 1 통합팩 (V12.1.0 - 오리지널 임시저장 완벽 락 & 팝업 동기화 패치)
 // @namespace    https://crack.wrtn.ai/
 // @version      12.1.0
-// @description  타 모듈 100% 락(Lock) 보존, 모듈 6(임시저장) 이벤트 의존성 제거 및 1초 폴링 백업 엔진 탑재 완결
+// @description  임시저장 모듈(모듈 6) 100% 원본 락 보존, TIPTAP 파괴 버그 완벽 수정 및 정대칭 12px/7px 간격 최종 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -31,7 +31,7 @@
     }
 
     // ==========================================
-    // 모듈 1: 더블클릭 수정 기능 (순수 원본 - Lock)
+    // 모듈 1: 더블클릭 수정 기능 (순수 원본)
     // ==========================================
     function initDoubleClick() {
         function findMessageContainer(target) {
@@ -95,7 +95,7 @@
     }
 
     // ==========================================
-    // 모듈 2: 리롤 길게 누르기 기능 (순수 원본 - Lock)
+    // 모듈 2: 리롤 길게 누르기 기능 (순수 원본)
     // ==========================================
     function initRerollHold() {
         const HOLD_MS = 600;
@@ -189,7 +189,7 @@
     }
 
     // ==========================================
-    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (순수 원본 - Lock)
+    // 모듈 3: 전송/이어서 생성 길게 누르기 기능 (순수 원본)
     // ==========================================
     function initSendHold() {
         const HOLD_MS = 600;
@@ -294,7 +294,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (순수 원본 - Lock)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (순수 원본)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -487,8 +487,10 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (순수 원본 - Lock)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터
     // ==========================================
+    
+    // 팝업 에디터 수동 고정 좌표 추적기
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -506,6 +508,7 @@
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
     }
 
+    // 대사/기호 팝업 내 텍스트 삽입 헬퍼
     function insertSymbolToModal(openSymbol, closeSymbol) {
         const textarea = document.getElementById('igx-shortcut-textarea');
         if (!textarea) return;
@@ -528,6 +531,7 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    // TIPTAP으로 교체 주입 실행기 (버그 해결: delete 파괴 삭제 -> selectAll 덮어쓰기)
     function writeToTiptap(text) {
         const tiptap = getSafeMainInput();
         if (!tiptap) return;
@@ -537,17 +541,8 @@
 
         tiptap.focus();
 
-        try {
-            const range = document.createRange();
-            range.selectNodeContents(tiptap);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-        } catch (e) {
-            window.getSelection().selectAllChildren(tiptap);
-        }
-
-        document.execCommand('delete', false, null);
+        // TIPTAP의 뼈대 DOM 노드를 부수지 않고 가장 안전하게 텍스트만 전체 덮어씌우는 완벽 교체 로직
+        document.execCommand('selectAll', false, null);
         document.execCommand('insertText', false, text);
 
         setTimeout(() => {
@@ -557,6 +552,7 @@
         }, 100);
     }
 
+    // 최상위 팝업 조립실
     function createShortcutModal() {
         const inputEl = getSafeMainInput();
         if (!inputEl) return;
@@ -586,7 +582,7 @@
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
 
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
+        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;"; // 7px 간격 조율
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -603,10 +599,10 @@
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
-            btn.style.borderRadius = '6px'; 
-            btn.style.border = '1px solid rgba(128,128,128,0.3)'; 
-            btn.style.backgroundColor = '#ffffff'; 
-            btn.style.color = '#7A7297'; 
+            btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
+            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 복원
+            btn.style.backgroundColor = '#ffffff'; // 하얀색 배경
+            btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#7A7297 !important;">${s.icon}</span>`;
             
@@ -620,6 +616,7 @@
             leftToolbar.appendChild(btn);
         });
 
+        // 우상단 조작부 (취소/입력 대칭화)
         const rightToolbar = document.createElement('div');
         rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
@@ -657,6 +654,7 @@
         rightToolbar.append(cancelBtn, sendBtn);
         headerRow.append(leftToolbar, rightToolbar);
 
+        // 가변 텍스트 에어리어
         const textarea = document.createElement('textarea');
         textarea.id = 'igx-shortcut-textarea';
         textarea.placeholder = "여기에 메시지를 입력하세요...";
@@ -746,6 +744,7 @@
         }, 50);
     };
 
+    // 모듈 5: 메인 툴바 셋업 함수
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -851,7 +850,7 @@
     }
 
     // ==========================================
-    // 모듈 6: 입력창 자동 임시저장 (안정형 폴링 엔진 신설 적용 완료)
+    // 모듈 6: 입력창 자동 임시저장 (순수 원본 로직 100% Lock)
     // ==========================================
     function initAutoSaver() {
         function getRoomId() {
@@ -865,7 +864,6 @@
 
         let isRestoredForCurrentRoom = false;
         let currentRoomId = '';
-        let lastSavedText = null; 
 
         function setNativeValue(element, value) {
             const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
@@ -885,21 +883,20 @@
             if (!inputEl) return;
 
             const isEditor = inputEl.tagName !== 'TEXTAREA' && inputEl.isContentEditable;
+
             const newRoomId = getRoomId();
-            
             if (currentRoomId !== newRoomId) {
                 currentRoomId = newRoomId;
                 isRestoredForCurrentRoom = false;
-                lastSavedText = null; 
+                inputEl.dataset.draftHooked = 'false';
             }
 
             const DRAFT_KEY = getDraftKey();
-            const currentText = isEditor ? (inputEl.innerText || '').replace(/\n$/, '') : (inputEl.value || '');
 
             if (!isRestoredForCurrentRoom) {
                 const savedDraft = localStorage.getItem(DRAFT_KEY);
-                let textAfterRestore = currentText;
-
+                const currentText = isEditor ? (inputEl.innerText || '') : (inputEl.value || '');
+                
                 if (savedDraft && currentText.trim() === '') {
                     if (isEditor) {
                         inputEl.focus();
@@ -907,26 +904,27 @@
                     } else {
                         setNativeValue(inputEl, savedDraft);
                     }
-                    textAfterRestore = savedDraft;
                 }
                 isRestoredForCurrentRoom = true;
-                lastSavedText = textAfterRestore;
-            } else {
-                if (currentText !== lastSavedText) {
-                    if (currentText.trim() === '') {
-                        localStorage.removeItem(DRAFT_KEY);
+            }
+
+            if (inputEl.dataset.draftHooked !== 'true') {
+                inputEl.dataset.draftHooked = 'true';
+                inputEl.addEventListener('input', (e) => {
+                    const text = isEditor ? e.target.innerText : e.target.value;
+                    if (text.trim() === '') {
+                        localStorage.removeItem(getDraftKey());
                     } else {
-                        localStorage.setItem(DRAFT_KEY, currentText);
+                        localStorage.setItem(getDraftKey(), text);
                     }
-                    lastSavedText = currentText;
-                }
+                });
             }
         }
         setInterval(processAutoSave, 1000);
     }
 
     // ==========================================
-    // 모듈 7: 라디오존데 (순수 원본 - Lock)
+    // 모듈 7: 라디오존데 (부모 프레임 오버플로우 가드 제거 패치)
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -1134,7 +1132,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 채팅방 자동 스크롤 (순수 원본 - Lock)
+    // 모듈 8: 채팅방 자동 스크롤 (순수 원본)
     // ==========================================
     function initAutoScroll() {
         const WAIT_TIME = 500;
