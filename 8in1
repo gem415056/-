@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V11.7.0 - 라벤더 & 화이트 노블 에디션)
+// @name         크랙 8 in 1 통합팩 (V11.8.0 - 오버플로우 가드 제거 및 고해상도 크래커 탑재)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.7.0
-// @description  오리지널 부팅 규격 유지, 팝업 기호 단추 화이트/더스티 라벤더 최적화 및 입력 단추 검정 글씨 적용 완료
+// @version      11.8.0
+// @description  입력창 부모 프레임 오버플로우 클리핑 해제로 라디오존데 정상화, 애플 형상화 뜯은 크래커 기호 완벽 이식 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -294,18 +294,20 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (순수 원본)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀 이식)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
             messageGroup: 'div[data-message-group-id]'
         };
 
-        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02-.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61(1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05-.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.1.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+        // 피드백 반영: 전송해주신 고해상도 디테일형 크래커 패스 완벽 적용
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02-.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05-.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.1.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
 
+        // 기획 변경: 15px 크기 유지, 총크래커 황골색(#FFA600) 유지 및 방금사용한크래커의 우상향 한입 베어문 애플로고 마스킹 구현 완벽화
         const ICON = {
-            cracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; opacity:1;"><path fill="currentColor" d="${CRACKER_PATH}"></path></svg>`,
-            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px; color:#ff9b9b;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="currentColor" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
+            cracker: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" width="15px" height="15px" style="margin-right:4px; opacity:1;"><path fill="#FFA600" d="${CRACKER_PATH}"></path></svg>`,
+            bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="#ff9b9b" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
         };
 
         let counterBadge, textSpan, currentInput;
@@ -487,7 +489,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수정 반영 라인업)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터
     // ==========================================
     
     // 팝업 에디터 수동 고정 좌표 추적기
@@ -590,7 +592,7 @@
         const headerRow = document.createElement('div');
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
-        // 좌상단 단축기호 배치
+        // 좌상단 단축기호 배치 (간격 8px 롤백)
         const leftToolbar = document.createElement('div');
         leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;";
 
@@ -605,14 +607,14 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
-            // 피드백 반영: 깔끔한 정돈을 위해 회색 보더 부활, 화이트(#ffffff) 배경, 더스티 라벤더(#7A7297) 글씨색 조합 이식
+            // 피드백 반영: 대사입력도우미 버튼 회색 테두리 복원(rgba(128,128,128,0.3)), 하얀색 배경(#ffffff) 지정, 글자색 연보라(#7A7297) 조율 완비
             btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-opacity p-0";
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
             btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
-            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 부활
-            btn.style.backgroundColor = '#ffffff'; // 하얀색 배경
+            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 복원
+            btn.style.backgroundColor = '#ffffff'; // 완벽한 하얀색 배경
             btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#7A7297 !important;">${s.icon}</span>`;
@@ -868,6 +870,215 @@
     }
 
     // ==========================================
+    // 모듈 7: 라디오존데 (부모 프레임 오버플로우 가드 제거 패치)
+    // ==========================================
+    function initRadiosonde() {
+        const MODELS = [
+            { slug: "claude-opus-4.7", label: "Claude 4.7 Opus", short: "O4.7" },
+            { slug: "claude-opus-4.6", label: "Claude 4.6 Opus", short: "O4.6" },
+            { slug: "claude-sonnet-4.6", label: "Claude 4.6 Sonnet", short: "S4.6" },
+            { slug: "gemini-3-1-pro", label: "Gemini 3.1 Pro", short: "G3.1" },
+            { slug: "gemini-2.5-pro", label: "Gemini 2.5 Pro", short: "G2.5" },
+        ];
+
+        const API_BASE = "https://rs.igx.kr/api/simple/";
+        const POLL_MS = 60 * 1000;
+        const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
+
+        GM_addStyle(`
+            /* 피드백 반영: 오버플로우에 따른 잘림 방지를 위해 메인 에디터 컨테이너 오버플로우를 강제 전역 개방 */
+            .flex.w-full.flex-col.rounded-lg {
+                overflow: visible !important;
+            }
+
+            #igx-rs-inline-host {
+                position: absolute; display: flex; align-items: center; gap: 4px;
+                z-index: 1; pointer-events: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial;
+                font-size: 11px; font-weight: 500;
+            }
+            #igx-rs-inline-host * { pointer-events: auto; }
+            
+            .igx-rs-btn { 
+                width: 18px; height: 18px; min-width: 18px; padding: 0; 
+                background: transparent; border: none; color: inherit; cursor: pointer; 
+                opacity: 0.65; border-radius: 4px; display: flex; justify-content: center; align-items: center; 
+            }
+            .igx-rs-btn:hover { background: rgba(128,128,128,0.15); opacity: 1; }
+
+            .igx-rs-barline { display: flex; gap: 4px; align-items: center; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+            .igx-rs-barline::-webkit-scrollbar { display: none; }
+            
+            .igx-rs-item { 
+                display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px; 
+                border-radius: 999px; background: transparent; border: none; cursor: default; 
+            }
+            .igx-rs-item:hover { background: rgba(128,128,128,0.1); }
+            
+            .igx-rs-dot { width: 6px; height: 6px; border-radius: 50%; }
+            .rs-active { background: #3ddc84; } .rs-degraded { background: #ffd54a; }
+            .rs-impacted { background: #ff5c5c; } .rs-unknown { background: #9aa0a6; }
+            
+            .rs-name { opacity: 1; font-weight: 700; line-height: 1; }
+            .rs-score { font-weight: 900; line-height: 1; }
+            .rs-lat { opacity: 0.75; color: var(--rs-text-name); line-height: 1; }
+
+            #igx-rs-settings {
+                display: none; 
+                position: fixed; 
+                z-index: 100001; 
+                border-radius: 8px; padding: 10px; width: 160px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                flex-direction: column; gap: 6px; border: 1px solid var(--rs-border, #444);
+                background: var(--rs-bg, #242424); color: var(--rs-text, #eee);
+            }
+            
+            .igx-rs-set-row { display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
+            .igx-rs-set-chk { margin: 0; accent-color: #3ddc84; cursor: pointer; }
+
+            @media (max-width: 600px) {
+                #igx-rs-inline-host { font-size: 11px; }
+            }
+        `);
+
+        let visibility = {};
+        try { visibility = JSON.parse(localStorage.getItem(STORE_KEY_VISIBILITY)) || {}; } catch {}
+        MODELS.forEach(m => { if (visibility[m.slug] === undefined) visibility[m.slug] = true; });
+
+        const host = document.createElement("div"); host.id = "igx-rs-inline-host";
+        
+        const btnSettings = document.createElement("button"); btnSettings.className = "igx-rs-btn"; 
+        btnSettings.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M2 12h4l2.25-11.25a.5.5 0 0 1 .98 0l4.54 22.5a.5.5 0 0 0 .98 0L17 12h5"/></svg>`;
+        
+        const barline = document.createElement("div"); barline.className = "igx-rs-barline"; barline.textContent = "불러오는 중…";
+
+        const btnRefresh = document.createElement("button"); btnRefresh.className = "igx-rs-btn"; btnRefresh.textContent = "↻"; btnRefresh.style.fontSize = "13px";
+
+        const settings = document.createElement("div"); settings.id = "igx-rs-settings";
+        settings.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; font-size:12px; border-bottom:1px solid rgba(128,128,128,0.2); padding-bottom:4px;">모델 표시 설정</div>`;
+        
+        for (const m of MODELS) {
+            const label = document.createElement("label"); label.className = "igx-rs-set-row";
+            const chk = document.createElement("input"); chk.type = "checkbox"; chk.className = "igx-rs-set-chk"; chk.checked = visibility[m.slug];
+            chk.addEventListener("change", (e) => {
+                visibility[m.slug] = e.target.checked;
+                localStorage.setItem(STORE_KEY_VISIBILITY, JSON.stringify(visibility));
+                renderBarline();
+            });
+            label.append(chk, document.createTextNode(m.label)); settings.appendChild(label);
+        }
+
+        document.body.appendChild(settings);
+        host.append(btnSettings, barline, btnRefresh);
+
+        btnSettings.addEventListener("click", e => {
+            e.stopPropagation();
+            if (settings.style.display === 'flex') {
+                settings.style.display = 'none';
+            } else {
+                const rect = btnSettings.getBoundingClientRect();
+                settings.style.right = `${window.innerWidth - rect.right}px`;
+                settings.style.bottom = `${window.innerHeight - rect.top + 4}px`; 
+                settings.style.display = 'flex';
+            }
+        });
+        
+        btnRefresh.addEventListener("click", e => { e.stopPropagation(); refreshAll(); });
+
+        document.addEventListener("click", e => {
+            if (settings.style.display === 'flex' && !settings.contains(e.target) && !btnSettings.contains(e.target)) {
+                 settings.style.display = 'none';
+            }
+        });
+
+        const last = new Map();
+        function renderBarline() {
+            const parts = MODELS.filter(m => visibility[m.slug]).map((m) => {
+                const d = last.get(m.slug) || { status: "unknown", score: "—", lat: "—" };
+                const c = "rs-" + d.status;
+                return `<div class="igx-rs-item" title="${m.label}">
+                    <div class="igx-rs-dot ${c}"></div>
+                    <span class="rs-name">${m.short}</span>
+                    <span class="rs-score">${d.score}</span>
+                    <span class="rs-lat">${d.lat}s</span>
+                </div>`;
+            }).join("");
+            barline.innerHTML = parts || "<span style='opacity:0.6; font-size:11px; padding-left:4px;'>선택 안됨</span>";
+        }
+
+        async function refreshAll() {
+            const results = await Promise.allSettled(MODELS.map(m => new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "GET", url: API_BASE + m.slug, timeout: 6000, headers: { Accept: "application/json" },
+                    onload: res => { try { resolve(JSON.parse(res.responseText)); } catch(e){ reject(e); } },
+                    onerror: reject, ontimeout: () => reject(new Error("timeout"))
+                });
+            })));
+
+            results.forEach((res, i) => {
+                const m = MODELS[i];
+                if (res.status === "fulfilled" && res.value?.success) {
+                    const d = res.value.data;
+                    const status = d.status || "unknown";
+                    const lat = Number.isFinite(Number(d.latency)) ? (d.latency >= 50 ? d.latency/1000 : d.latency).toFixed(2) : "—";
+                    const score = Number.isFinite(Number(d.score)) ? Math.round(d.score).toString() : "—";
+                    last.set(m.slug, { status, score, lat });
+                } else {
+                    last.set(m.slug, { status: "unknown", score: "—", lat: "—" });
+                }
+            });
+            renderBarline();
+        }
+
+        function getThemeColors(el) {
+            let bg = '#212121', current = el;
+            while (current && current !== document.body) {
+                const cBg = getComputedStyle(current).backgroundColor;
+                if (cBg && cBg !== 'rgba(0, 0, 0, 0)' && cBg !== 'transparent') { bg = cBg; break; }
+                current = current.parentElement;
+            }
+            const match = bg.match(/\d+/g);
+            const isDark = match && match.length >= 3 ? (0.2126 * (+match[0]) + 0.7152 * (+match[1]) + 0.0722 * (+match[2])) < 128 : true;
+            return { 
+                text: isDark ? '#888' : '#777',
+                textName: isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.88)',
+                setBg: isDark ? '#282828' : '#fff',
+                setBorder: isDark ? '#444' : '#e5e5e5',
+                setText: isDark ? '#ccc' : '#444'
+            };
+        }
+
+        function ensureAttached() {
+            const inputEl = getSafeMainInput();
+            if (!inputEl) {
+                if (host.parentElement) host.remove();
+                return;
+            }
+            
+            const container = inputEl.closest(".flex.w-full.flex-col.rounded-lg") || inputEl.closest(".flex.w-full.flex-col") || inputEl.parentElement;
+            if (!container) return;
+
+            if (host.parentElement !== container) {
+                container.appendChild(host);
+                container.style.position = 'relative'; 
+            }
+
+            host.style.position = 'absolute';
+            host.style.top = '-26px';
+            host.style.right = '4px';
+
+            const theme = getThemeColors(inputEl);
+            host.style.color = theme.text;
+            host.style.setProperty('--rs-text-name', theme.textName);
+            settings.style.setProperty('--rs-bg', theme.setBg);
+            settings.style.setProperty('--rs-border', theme.setBorder);
+            settings.style.setProperty('--rs-text', theme.setText);
+        }
+
+        setInterval(ensureAttached, 1000);
+        setInterval(refreshAll, POLL_MS);
+        setTimeout(refreshAll, 500);
+    }
+
+    // ==========================================
     // 모듈 8: 채팅방 자동 스크롤 (순수 원본)
     // ==========================================
     function initAutoScroll() {
@@ -1000,10 +1211,7 @@
         }, 1000);
 
         try {
-            setTimeout(() => {
-                try { initTurnCracker(); } catch (e) { console.error("[ 9in1 통합팩 ] 크래커 모듈 오류:", e); }
-            }, 100);
-
+            try { initTurnCracker(); } catch (e) { console.error("[ 9in1 통합팩 ] 크래커 모듈 오류:", e); }
             try { initDoubleClick(); } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 모듈 오류:", e); }
             try { initRerollHold();  } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
             try { initSendHold();    } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
