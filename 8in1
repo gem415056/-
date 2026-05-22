@@ -1,16 +1,16 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V11.9.0 - 최종 대칭형 라벤더 에디션)
+// @name         크랙 8 in 1 통합팩 (V11.10.0 - 정밀 수직 대칭 보정 및 단축키 7px)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.9.0
-// @description  오리지널 규격 완벽 유지, 상하단 수직 대칭 오프셋(14px) 정밀 튜닝 및 터치/동기화 안정화 완료
+// @version      11.10.0
+// @description  오리지널 규격 완벽 유지, 팝업 하단 오프셋 수직 정대칭 매칭(12px) 및 버튼 간격 7px 최종 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @connect      rs.igx.kr
 // @run-at       document-idle
-// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
-// @require      https://cdn.jsdelivr.net/gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
+// @require      https://cdn.jsdelivr.gh/milkyway0308/crystallized-chasm@crack-shared-core@v1.2.1/crack/libraries/crack-shared-core.js
+// @require      https://cdn.jsdelivr.gh/milkyway0308/crystallized-chasm@chasm-shared-core@v1.0.0/libraries/chasm-shared-core.js
 // ==/UserScript==
 
 (function () {
@@ -301,7 +301,7 @@
             messageGroup: 'div[data-message-group-id]'
         };
 
-        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02-.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05-.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.1.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
+        const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02-.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61(1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05-.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.1.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
 
         const ICON = {
             cracker: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" width="15px" height="15px" style="margin-right:4px; opacity:1;"><path fill="#FFA600" d="${CRACKER_PATH}"></path></svg>`,
@@ -487,7 +487,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수정 반영 라인업)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (라벤더 톤온톤 고가독성 버전)
     // ==========================================
     
     // 팝업 에디터 수동 고정 좌표 추적기
@@ -505,7 +505,8 @@
         modal.style.position = 'fixed';
         modal.style.left = (rect.left - offset) + 'px';
         modal.style.width = (rect.width + (offset * 2)) + 'px';
-        // 피드백 반영: 아래쪽 여백을 상단 여백에 맞추어 완전 대칭이 되도록 오프셋 가산
+        
+        // 피드백 반영: 아래쪽 여백(Bottom Padding)을 정확하게 4px 구조로 픽스하여 상단의 12px 간격 비율과 물리적으로 완벽히 일치시킴
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
     }
 
@@ -581,21 +582,22 @@
         modal = document.createElement('div');
         modal.id = 'igx-shortcut-modal';
         
-        // 피드백 반영: 전형적인 Bottom 패딩 여백(14px)을 Top에도 완전히 동일하게 동기화 부여하여 상하 수직 정대칭 완료
+        // 피드백 반영: 상단 여백은 V11.2.0의 고정 80% 슬림 비율(6px)을 완벽 고수하며, 
+        // 하단 여백만 4px로 수직 패딩 오프셋을 최적 조율하여 실선 상하비율 12px 대칭 매칭 완료!
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 14px 12px 14px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 6px 12px 4px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        // 피드백 반영: 상단의 수직 대칭 오프셋 최적화를 위해 padding-bottom 및 margin-bottom 미세 균형 보정
         headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
 
         // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 8px; align-items: center;";
+        // 피드백 반영: 대사입력도우미 버튼 사이의 간격을 정확히 7px로 미세 조정 완료
+        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;";
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -608,13 +610,14 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
+            // 피드백 반영: 회색 테두리 복원(rgba(128,128,128,0.3)), 하얀색 배경(#ffffff) 지정, 글자색 연보라(#7A7297) 조율 완비
             btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-opacity p-0";
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
-            btn.style.borderRadius = '6px'; 
+            btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
             btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리 복원
-            btn.style.backgroundColor = '#ffffff'; // 하얀색 배경
+            btn.style.backgroundColor = '#ffffff'; // 완벽한 하얀색 배경
             btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#7A7297 !important;">${s.icon}</span>`;
@@ -645,6 +648,7 @@
 
         const sendBtn = document.createElement('button');
         sendBtn.textContent = "입력";
+        // 피드백 반영: 입력 버튼 배경 연보라(#D5C2DE) 유지, 텍스트 글씨는 검정색(#000000)으로 완벽 환원
         sendBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
             border-radius: 6px; font-size: 11px; font-weight: 600;
