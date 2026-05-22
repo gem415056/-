@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 7 in 1 통합팩 (V13.0.0 - 오토세이브 삭제 및 복사(⌘) 버튼 탑재)
+// @name         크랙 9 in 1 통합팩 (V13.1.0 - 팝업 크기 완벽 복구 및 버튼 콤팩트화)
 // @namespace    https://crack.wrtn.ai/
-// @version      13.0.0
-// @description  임시저장 모듈 전격 삭제, 팝업창 복사(⌘) 정사각형 버튼 신설 및 기존 비율 100% 락 보존 완료
+// @version      13.1.0
+// @description  오리지널 대칭형 팝업 사이즈(12px) 롤백, 버튼 간격 2px씩 축소(5px, 4px) 정밀 튜닝 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -294,7 +294,7 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀 이식)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -487,10 +487,9 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수직 대칭/7px/복사버튼 추가)
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수직 대칭/버튼 콤팩트 완결)
     // ==========================================
     
-    // 팝업 에디터 수동 고정 좌표 추적기
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
         const inputEl = getSafeMainInput();
@@ -508,7 +507,6 @@
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
     }
 
-    // 대사/기호 팝업 내 텍스트 삽입 헬퍼
     function insertSymbolToModal(openSymbol, closeSymbol) {
         const textarea = document.getElementById('igx-shortcut-textarea');
         if (!textarea) return;
@@ -531,7 +529,6 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    // TIPTAP으로 교체 주입 실행기
     function writeToTiptap(text) {
         const tiptap = getSafeMainInput();
         if (!tiptap) return;
@@ -561,7 +558,6 @@
         }, 100);
     }
 
-    // 최상위 팝업 조립실
     function createShortcutModal() {
         const inputEl = getSafeMainInput();
         if (!inputEl) return;
@@ -580,19 +576,20 @@
         modal = document.createElement('div');
         modal.id = 'igx-shortcut-modal';
         
+        // 피드백 반영: 마음에 드셨던 V12.0.0 사이즈인 완벽한 상하 12px 대칭 패딩 복원 완료
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 6px 12px 4px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
+        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
 
-        // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;"; // 7px 간격
+        // 피드백 반영: 대사 도우미 버튼 사이 간격을 2px 정밀하게 축소 (7px -> 5px)
+        leftToolbar.style.cssText = "display: flex; gap: 5px; align-items: center;";
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -609,10 +606,10 @@
             btn.type = "button";
             btn.style.width = '28px';
             btn.style.height = '28px';
-            btn.style.borderRadius = '6px'; // 둥근 사각형 코너 유지
-            btn.style.border = '1px solid rgba(128,128,128,0.3)'; // 부드러운 회색 테두리
-            btn.style.backgroundColor = '#ffffff'; // 하얀색 배경
-            btn.style.color = '#7A7297'; // 더스티 라벤더 텍스트 색상
+            btn.style.borderRadius = '6px';
+            btn.style.border = '1px solid rgba(128,128,128,0.3)';
+            btn.style.backgroundColor = '#ffffff';
+            btn.style.color = '#7A7297';
             btn.style.cursor = 'pointer';
             btn.innerHTML = `<span style="font-size:14px; font-weight:normal; color:#7A7297 !important;">${s.icon}</span>`;
             
@@ -626,11 +623,10 @@
             leftToolbar.appendChild(btn);
         });
 
-        // 우상단 조작부 (복사/취소/입력 배치)
         const rightToolbar = document.createElement('div');
-        rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
+        // 피드백 반영: 우상단 버튼 사이 간격을 2px 정밀하게 축소 (6px -> 4px)
+        rightToolbar.style.cssText = "display: flex; gap: 4px; align-items: center;";
 
-        // 신규 추가: 팝업 내용 전체 복사 (⌘) 버튼
         const copyBtn = document.createElement('button');
         copyBtn.textContent = "⌘";
         copyBtn.title = "내용 전체 복사";
@@ -645,12 +641,10 @@
             e.preventDefault();
             const textarea = document.getElementById('igx-shortcut-textarea');
             if (textarea && textarea.value) {
-                // 클립보드에 텍스트 복사 실행
                 navigator.clipboard.writeText(textarea.value).then(() => {
                     copyBtn.style.backgroundColor = 'rgba(128,128,128,0.2)';
                     setTimeout(() => copyBtn.style.backgroundColor = 'transparent', 200);
                 }).catch(() => {
-                    // 클립보드 API 실패 시 예비 수단
                     textarea.select();
                     document.execCommand('copy');
                     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
@@ -689,11 +683,9 @@
             closeShortcutModal();
         };
 
-        // 배치 순서: 복사(⌘) -> 취소 -> 입력
         rightToolbar.append(copyBtn, cancelBtn, sendBtn);
         headerRow.append(leftToolbar, rightToolbar);
 
-        // 가변 텍스트 에어리어
         const textarea = document.createElement('textarea');
         textarea.id = 'igx-shortcut-textarea';
         textarea.placeholder = "여기에 메시지를 입력하세요...";
@@ -783,7 +775,7 @@
         }, 50);
     };
 
-    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 예약 툴바 구현)
+    // 모듈 5: 메인 툴바 셋업 함수 (연보라색 검은별 및 빈자리 예약 완벽 구현)
     function initRPToolbar() {
         if (!document.getElementById('hide-native-rp-btns')) {
             const style = document.createElement('style');
@@ -911,7 +903,6 @@
         const STORE_KEY_VISIBILITY = "igx_rs_inline_vis";
 
         GM_addStyle(`
-            /* 입력창 보더의 overflow 제한을 개방하여 라디오존데와 크래커가 바깥으로 얹혀지도록 방어가드 설계 */
             .flex.w-full.flex-col.rounded-lg {
                 overflow: visible !important;
             }
