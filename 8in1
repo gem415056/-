@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V11.11.0 - 크래커 복구 및 팝업 패딩 정밀 피팅 완료)
+// @name         크랙 8 in 1 통합팩 (V12.0.0 - 최종 마스터피스: 비대칭 팝업 비율 & 6px 간격 완벽 복원)
 // @namespace    https://crack.wrtn.ai/
-// @version      11.11.0
-// @description  수정사항 외 절대 보존 가드 가동, 크래커 고해상도 패스 오타 복구, 상단 6px 잠금 및 하단 12px 대칭 픽스 완료
+// @version      12.0.0
+// @description  비대칭 상단 여백(12px) 및 하단 동일 대칭 복구, 단축키 6px 간격 통일 등 최종 디자인 픽스 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -294,17 +294,15 @@
     }
 
     // ==========================================
-    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 패스 완전 고정)
+    // 모듈 4: 외부 좌측 배치 크래커 표시기 (고해상도 커스텀 이식)
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
             messageGroup: 'div[data-message-group-id]'
         };
 
-        // 피드백 반영: 오타가 완전히 제거된 정밀 격자형 총 크래커 SVG 패스 완전 보존
         const CRACKER_PATH = "M21.17 12.01c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21l.17-.21q0-.01.02-.02l.14-.21q0-.02.03-.05.06-.1.1-.2l.05-.08.09-.2q.01-.05.04-.11l.06-.18q0-.08.04-.14.01-.07.04-.16l.03-.19q0-.06.02-.13v-.33a3.37 3.37 0 0 0-3.36-3.37l-.33.01q-.06 0-.12.02-.1 0-.2.03-.07 0-.15.04l-.14.04-.18.06-.11.04-.2.09-.07.04-.2.11q-.03 0-.05.03l-.21.14-.02.02-.21.17a3.4 3.4 0 0 0-4.42 0 3.3 3.3 0 0 0-2.21-.83c-.85 0-1.62.31-2.21.83l-.21-.17-.02-.02-.21-.14q-.02 0-.05-.03l-.2-.11-.08-.04-.2-.09-.11-.04-.18-.06-.14-.04-.16-.04-.2-.03-.12-.02-.33-.01a3.37 3.37 0 0 0-3.34 3.82q0 .1.03.19 0 .07.04.16 0 .08.04.14l.06.18q0 .05.04.11.03.1.09.19l.04.08.1.2q.01.02.04.05l.16.23q.07.1.17.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21a3.3 3.3 0 0 0-.83 2.21c0 .85.3 1.62.83 2.21l-.17.21-.02-.02-.14.21q0 .02-.03.05l-.11.2-.04.08-.1.2-.03.11-.06.18-.04.14-.04.16-.03.19-.02.13-.01.33A3.4 3.4 0 0 0 3.02 21c.6.61 1.45.99 2.38.99l.33-.01q.06 0 .12-.02.1 0 .19-.03.07 0 .16-.04l.14-.04.18-.06.1-.04.2-.09.08-.04.2-.11q.03 0 .05-.03l.2-.14.03-.02.2-.17a3.4 3.4 0 0 0 4.43 0 3.32 3.32 0 0 0 4.42 0 3 3 0 0 0 .44.33q.03 0 .05.03l.2.11.08.04.2.09.1.04.19.06.14.04.16.04.19.03.13.02.33.01c.92 0 1.75-.37 2.36-.97l.02-.02c.6-.61.99-1.45.99-2.38l-.01-.33q0-.06-.02-.12 0-.1-.03-.19 0-.07-.04-.16l-.04-.14-.06-.18-.04-.11-.1-.19-.03-.08-.11-.2q0-.02-.03-.05l-.14-.21-.02-.02-.17-.21c.52-.59.83-1.36.83-2.21s-.31-1.62-.83-2.21M7.5 13.5 6 12l1.5-1.5L9 12zM12 6l1.5 1.5L12 9l-1.5-1.5zm0 12-1.5-1.5L12 15l1.5 1.5zm4.5-4.5L15 12l1.5-1.5L18 12z";
 
-        // 기획 변경: 15px 크기 유지, 총크래커 황골색(#FFA600) 유지 및 방금사용한크래커의 우상향 한입 베어문 애플로고 마스킹 구현 완벽화
         const ICON = {
             cracker: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" width="15px" height="15px" style="margin-right:4px; opacity:1;"><path fill="#FFA600" d="${CRACKER_PATH}"></path></svg>`,
             bittenCracker: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="margin-right:4px;"><defs><mask id="wrtn-crack-bite-mask"><rect width="24" height="24" fill="#ffffff" style="fill:#ffffff !important;" /><circle cx="24" cy="0" r="12" fill="#000000" style="fill:#000000 !important;" /></mask></defs><path fill="#ff9b9b" mask="url(#wrtn-crack-bite-mask)" d="${CRACKER_PATH}"></path></svg>`
@@ -489,7 +487,7 @@
     }
 
     // ==========================================
-    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터
+    // 모듈 5: 정밀 밀착형 대사 도우미 및 통합 팝업 에디터 (수직 대칭/6px 최적화 완결)
     // ==========================================
     
     // 팝업 에디터 수동 고정 좌표 추적기
@@ -507,8 +505,6 @@
         modal.style.position = 'fixed';
         modal.style.left = (rect.left - offset) + 'px';
         modal.style.width = (rect.width + (offset * 2)) + 'px';
-        
-        // 피드백 반영: 아래쪽 수직 대치 비율을 상단의 12px 간격 공식에 맞추어 완전 대칭화
         modal.style.bottom = (window.innerHeight - rect.bottom - offset) + 'px';
     }
 
@@ -584,22 +580,22 @@
         modal = document.createElement('div');
         modal.id = 'igx-shortcut-modal';
         
-        // 피드백 반영: 오독으로 인해 무너졌던 수치를 V11.2.0의 고정 80% 상단 여백 비율(6px)로 완벽 고정
-        // 아래 패딩만 전술해 드린 공식(4px)으로 적용하여 상단 회색 실선과 동일한 12px 간격을 이룹니다.
+        // 피드백 반영: 상단(12px)과 하단(12px)의 패딩을 완전히 똑같이 맞추어 물리적 정대칭 확보 완료!
         modal.style.cssText = `
             display: none; position: fixed; box-sizing: border-box;
             background: ${bg}; border: 1px solid ${border}; border-radius: ${borderRadius}; 
-            padding: 6px 12px 4px 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+            padding: 12px; z-index: 50 !important; box-shadow: 0 4px 25px rgba(0,0,0,0.4);
             font-family: 'Pretendard', sans-serif; height: auto; max-height: 80vh;
         `;
 
         const headerRow = document.createElement('div');
-        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 4px;";
+        // 피드백 반영: 하단 여백 및 실선 거리를 8px로 설정하여, 12px 상단 패딩과 어우러지는 특유의 비대칭 안정감(가운데 정렬 아님)을 완벽히 복원
+        headerRow.style.cssText = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(128,128,128,0.15); padding-bottom: 8px;";
 
         // 좌상단 단축기호 배치
         const leftToolbar = document.createElement('div');
-        // 피드백 반영: 단축어 기호 버튼 사이의 간격을 정확히 7px로 미세 정교화 완료
-        leftToolbar.style.cssText = "display: flex; gap: 7px; align-items: center;";
+        // 피드백 반영: 우측(취소-입력)의 6px 간격과 동일하게 맞추어 달라는 지시에 따라 간격 6px로 세팅 완료
+        leftToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
         const symbols = [
             { icon: '☆', open: '*', close: '*' }, 
@@ -612,7 +608,6 @@
 
         symbols.forEach(s => {
             const btn = document.createElement('button');
-            // 피드백 반영: 대사도우미 버튼 회색 테두리 복원(rgba(128,128,128,0.3)), 하얀색 배경(#ffffff) 지정, 글자색 연보라(#7A7297) 조율 완비
             btn.className = "relative inline-flex items-center justify-center text-xs font-medium transition-opacity p-0";
             btn.type = "button";
             btn.style.width = '28px';
@@ -634,7 +629,7 @@
             leftToolbar.appendChild(btn);
         });
 
-        // 우상단 조작부 (취소/입력 대칭화)
+        // 우상단 조작부 (취소/입력 6px 간격 유지)
         const rightToolbar = document.createElement('div');
         rightToolbar.style.cssText = "display: flex; gap: 6px; align-items: center;";
 
@@ -650,7 +645,6 @@
 
         const sendBtn = document.createElement('button');
         sendBtn.textContent = "입력";
-        // 피드백 반영: 입력 버튼 배경 연보라(#D5C2DE) 유지, 텍스트 글씨는 검정색(#000000)으로 완벽 환원
         sendBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
             border-radius: 6px; font-size: 11px; font-weight: 600;
