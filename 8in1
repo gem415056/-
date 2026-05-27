@@ -793,8 +793,28 @@
             }
         }
 
-        function processGroup(group) {
+        async function processGroup(group) {
             if (!group || !group.matches?.(MESSAGE_SELECTOR)) return;
+
+            const domId = getGroupMessageId(group);
+            if (!domId) return;
+
+            // 내 메시지(User)인 경우 시간 배지를 생성하지 않고 기존 배지가 있다면 제거
+            try {
+                const { idMap } = await fetchAllMessagesOnce();
+                const msg = idMap.get(domId);
+                if (msg && !isAssistantMessage(msg)) {
+                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
+                    return;
+                }
+            } catch (e) {
+                // API 로딩 지연/실패 시 차선책: AI 전용 기능 버튼 유무로 1차 필터링
+                const hasAiIndicator = group.querySelector('button[aria-label="좋아요"], button[aria-label="싫어요"]') || findRerollButtonAnchor(group) || findCompareButtonInGroup(group);
+                if (!hasAiIndicator) {
+                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
+                    return;
+                }
+            }
 
             const key = makeCacheKey(group);
             if (!key) return;
