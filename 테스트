@@ -690,6 +690,59 @@
             return optionButton.closest('.dropdown-button') || optionButton;
         }
 
+        function isAssistantMessageByReactOrApi(group) {
+            if (!group) return false;
+
+            // 1. React 내부 속성(Fiber/Props)에서 역할(role) 직접 파싱 시도 (UI 정렬과 관계없이 정확히 작동)
+            try {
+                const key = Object.keys(group).find(k => k.startsWith('__reactProps') || k.startsWith('__reactFiber'));
+                if (key) {
+                    const props = group[key];
+                    if (props) {
+                        let role = props.role || props.message?.role || props.turn?.role || props.messageGroup?.role;
+                        if (role) return String(role).toLowerCase() === 'assistant';
+
+                        const mProps = props.memoizedProps || props.pendingProps;
+                        if (mProps) {
+                            role = mProps.role || mProps.message?.role || mProps.turn?.role || mProps.messageGroup?.role;
+                            if (role) return String(role).toLowerCase() === 'assistant';
+                        }
+
+                        if (props.children) {
+                            const children = Array.isArray(props.children) ? props.children : [props.children];
+                            for (const child of children) {
+                                if (child?.props) {
+                                    role = child.props.role || child.props.message?.role || child.props.turn?.role;
+                                    if (role) return String(role).toLowerCase() === 'assistant';
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                // React Props 검사 실패 시 백업 로직으로 진행
+            }
+
+            // 2. 로컬 API 캐시가 로드되어 있는 경우 매칭 시도
+            try {
+                const domId = getGroupMessageId(group);
+                if (apiCache && domId) {
+                    const msg = apiCache.idMap.get(domId);
+                    if (msg) {
+                        return isAssistantMessage(msg);
+                    }
+                }
+            } catch (e) {
+                // API 캐시 대조 실패 시 백업 로직으로 진행
+            }
+
+            // 3. 차선책: AI 아바타 영역(img 태그)의 존재 유무 또는 리롤/비교 표시물 흔적으로 판별
+            const hasAvatar = !!group.querySelector('img');
+            const hasReroll = !!group.querySelector('[id="exp-reroll-btn"]') || group.innerHTML.includes('M3.8 12');
+
+            return hasAvatar || hasReroll;
+        }
+
         function findRerollButtonAnchor(group) {
             if (!group) return null;
 
@@ -808,24 +861,8 @@
         const domId = getGroupMessageId(group);
         if (!domId) return;
 
-        let isAssistant = false;
-        let apiResolved = false;
-
-        try {
-            const { idMap } = await fetchAllMessagesOnce();
-            const msg = idMap.get(domId);
-            if (msg) {
-                apiResolved = true;
-                isAssistant = isAssistantMessage(msg);
-            }
-        } catch (e) {
-            // API 로드 실패
-        }
-
-        // API로 확인되지 않은 경우, 리롤 버튼의 유무로 어시스턴트 메시지 여부 판단
-        if (!apiResolved) {
-            isAssistant = !!findRerollButtonAnchor(group);
-        }
+        // 1. React 내부 데이터(Props) 및 API 캐시 정보로 즉시 AI 메시지 판별 (Novel/Script 등 정렬 무관하게 작동)
+        const isAssistant = isAssistantMessageByReactOrApi(group);
 
         // 어시스턴트(AI) 메시지가 아니라고 판단되면 배지를 제거하고 처리 종료 (내 메시지 예외 처리)
         if (!isAssistant) {
