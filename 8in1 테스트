@@ -2281,7 +2281,7 @@
                 border: none !important;
                 border-radius: 0 !important;
                 font-size: 14px;
-                font-weight: 600 !important;
+                font-weight: 500 !important;
                 color: var(--rrm-muted) !important;
                 padding: 0 4px 10px 4px !important;
                 cursor: pointer;
@@ -2294,7 +2294,7 @@
             .${SCRIPT_NS}-mobile-tabs button.is-active {
                 color: var(--rrm-strong) !important;
                 border-color: var(--rrm-primary) !important;
-                font-weight: 600 !important;
+                font-weight: 500 !important;
             }
 
                 .${SCRIPT_NS}-modal-body {
