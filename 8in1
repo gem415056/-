@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V13.2.0 - 모듈 최적화 배치 및 시간 배지 탑재)
+// @name         크랙 8 in 1 통합팩 (V13.2.0 - 모듈 최적화 배치 및 시간 배지 맨 왼쪽 배치)
 // @namespace    https://crack.wrtn.ai/
 // @version      13.2.0
-// @description  모듈 배치 최적화(가벼운 순 정렬) 및 메시지 시간 표기 모듈(모듈 5) 추가 완료
+// @description  가벼운 모듈 순 최적화 배치 및 시간 배지 맨 왼쪽 무충돌 정렬 탑재 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -751,15 +751,17 @@
 
             if (!badge) {
                 badge = document.createElement('span');
-                badge.className = `${BADGE_CLASS} relative inline-flex items-center justify-center overflow-hidden whitespace-nowrap font-medium transition-colors duration-200 h-6 rounded px-2 py-1 text-xs bg-transparent text-line-gray-2`;
+                badge.className = `${BADGE_CLASS}`;
                 badge.setAttribute('aria-label', '메시지 생성 시각');
             }
 
             const { anchor, placement } = findSmartAnchor(group);
 
             if (anchor?.parentElement) {
-                if (badge.parentElement !== anchor.parentElement || badge.nextElementSibling !== anchor) {
-                    anchor.parentElement.insertBefore(badge, anchor);
+                const parent = anchor.parentElement;
+                // 안전성 극대화: 시간 배지를 항상 버튼 묶음의 맨 첫 자식(맨 왼쪽)으로 삽입
+                if (badge.parentElement !== parent || parent.firstChild !== badge) {
+                    parent.insertBefore(badge, parent.firstChild);
                 }
                 badge.dataset.placement = placement;
             } else if (badge.parentElement !== group) {
@@ -869,7 +871,9 @@
                     max-width: 100%;
                     height: 1.5rem;
                     min-height: 1.5rem;
-                    margin: 0;
+                    margin: 0 !important;
+                    margin-right: auto !important; /* 배지를 맨 왼쪽으로 보내고 다른 버튼들을 오른쪽 끝으로 정렬 */
+                    margin-left: 0 !important;
                     padding: .25rem .5rem;
                     border: 0 !important;
                     border-radius: 4px;
@@ -890,10 +894,13 @@
                     transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
                     transition-timing-function: cubic-bezier(.4,0,.2,1);
                     transition-duration: .2s;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    position: relative !important;
                 }
 
                 .${BADGE_CLASS}[data-placement="fallback"] {
-                    margin: 4px 10px 0 auto;
+                    margin: 4px 10px 0 auto !important;
                 }
 
                 .${BADGE_CLASS}[data-placement="compare-left"],
@@ -925,7 +932,7 @@
                     }
 
                     .${BADGE_CLASS}[data-placement="fallback"] {
-                        margin: 4px 8px 0 auto;
+                        margin: 4px 8px 0 auto !important;
                     }
                 }
             `);
