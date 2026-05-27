@@ -2,7 +2,7 @@
 // @name         크랙 8 in 1 통합팩 (V13.2.0 - 모듈 최적화 배치 및 시간 배지 맨 왼쪽 배치)
 // @namespace    https://crack.wrtn.ai/
 // @version      13.2.0
-// @description  가벼운 모듈 순 최적화 배치 및 시간 배지 맨 왼쪽 무충돌 정렬 탑재 완료
+// @description  시간 표시 모듈 줄의 맨 왼쪽 왼쪽정렬 최적화 및 안정성 극대화 버전
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -761,7 +761,7 @@
                 const buttonGroup = anchor.parentElement;
                 const outerRow = buttonGroup.parentElement;
                 if (outerRow) {
-                    // 시간 배지를 버튼 바구니 내부가 아니라, 바깥쪽 최외각 줄(outerRow)에서 바구니 왼쪽에 배치
+                    // 시간 배지를 우측 버튼 바구니 내부가 아닌, 최외각 줄(outerRow)에서 바구니 왼쪽에 배치
                     if (badge.parentElement !== outerRow || badge.nextElementSibling !== buttonGroup) {
                         outerRow.insertBefore(badge, buttonGroup);
                     }
