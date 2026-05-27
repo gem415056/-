@@ -2266,28 +2266,36 @@
                     color: var(--rrm-text);
                 }
 
-                .${SCRIPT_NS}-mobile-tabs {
-                    display: none;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 6px;
-                    padding: 10px 12px 0;
-                    background: var(--rrm-bg);
-                }
+            .${SCRIPT_NS}-mobile-tabs {
+                display: none;
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 18px 0;
+                border-bottom: 1px solid var(--rrm-border);
+                background: var(--rrm-bg);
+            }
 
-                .${SCRIPT_NS}-mobile-tabs button {
-                    min-height: 34px;
-                    border: 1px solid var(--rrm-border);
-                    border-radius: 999px;
-                    background: var(--rrm-soft);
-                    color: var(--rrm-muted);
-                    font-weight: 900;
-                }
+            .${SCRIPT_NS}-mobile-tabs button {
+                background: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                font-size: 14px;
+                font-weight: 600 !important;
+                color: var(--rrm-muted) !important;
+                padding: 0 4px 10px 4px !important;
+                cursor: pointer;
+                border-bottom: 2px solid transparent !important;
+                transition: color 0.2s, border-color 0.2s;
+                height: auto !important;
+                min-height: 0 !important;
+            }
 
-                .${SCRIPT_NS}-mobile-tabs button.is-active {
-                    background: var(--rrm-primary);
-                    color: var(--rrm-primary-text);
-                    border-color: transparent;
-                }
+            .${SCRIPT_NS}-mobile-tabs button.is-active {
+                color: var(--rrm-strong) !important;
+                border-color: var(--rrm-primary) !important;
+                font-weight: 600 !important;
+            }
 
                 .${SCRIPT_NS}-modal-body {
                     flex: 1;
