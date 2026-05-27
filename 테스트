@@ -861,41 +861,63 @@
         const domId = getGroupMessageId(group);
         if (!domId) return;
 
-        // 1. React 내부 데이터(Props) 및 API 캐시 정보로 즉시 AI 메시지 판별 (Novel/Script 등 정렬 무관하게 작동)
-        const isAssistant = isAssistantMessageByReactOrApi(group);
+        // 1. API 캐시가 아직 확보되지 않았다면, 비동기로 우선 데이터를 호출하여 준비한 뒤 다시 화면 재스캔을 유도합니다.
+        if (!apiCache) {
+            try {
+                await fetchAllMessagesOnce();
+                scanAllVisibleGroups();
+                return;
+            } catch (e) {
+                // API 장애 발생 시에는 기존 폴백 감지 과정을 진행합니다.
+            }
+        }
 
-        // 어시스턴트(AI) 메시지가 아니라고 판단되면 배지를 제거하고 처리 종료 (내 메시지 예외 처리)
-        if (!isAssistant) {
-            group.querySelector(`.${BADGE_CLASS}`)?.remove();
+        // 2. 캐시 데이터가 정상 동기화된 상태라면, 역할(role)이 어시스턴트(AI)인지 대조하여 내 메시지는 원천 제외합니다.
+        if (apiCache) {
+            const msg = apiCache.idMap.get(domId);
+            // 사용자 메시지(User)인 경우 생성되어 있는 시간 배지를 삭제하고 프로세스를 끝냅니다.
+            if (msg && !isAssistantMessage(msg)) {
+                group.querySelector(`.${BADGE_CLASS}`)?.remove();
+                return;
+            }
+        } else {
+            // 정전 등의 사유로 끝까지 API 캐시 획득에 실패한 경우 차선책 (리롤/비교 버튼 흔적을 통해 내 메시지 임시 차단)
+            const hasReroll = !!findRerollButtonAnchor(group);
+            const hasCompare = !!findCompareButtonInGroup(group);
+            if (!hasReroll && !hasCompare) {
+                group.querySelector(`.${BADGE_CLASS}`)?.remove();
+                return;
+            }
+        }
+
+        // 3. AI 메시지임이 완벽하게 증명된 카드에 한해서만 기존 오리지널의 시간 렌더링 과정을 그대로 수행합니다.
+        const key = makeCacheKey(group);
+        if (!key) return;
+
+        const cached = resultCache.get(key);
+
+        if (cached) {
+            setBadge(group, cached);
             return;
         }
 
-        const key = makeCacheKey(group);
-            if (!key) return;
-
-            const cached = resultCache.get(key);
-
-            if (cached) {
-                setBadge(group, cached);
-                return;
-            }
-
-            const fallback = resolveByDomId(group);
-            if (fallback.date) {
-                setBadge(group, fallback);
-            }
-
-            const compare = parseCompareButton(group);
-
-            if (RESOLVE_COMPARE_BY_API && compare && compare.total > 1) {
-                resolveCurrentMessageTime(group).then(resolved => {
-                    resultCache.set(key, resolved);
-                    setBadge(group, resolved);
-                });
-            } else {
-                resultCache.set(key, fallback);
-            }
+        const fallback = resolveByDomId(group);
+        if (fallback.date) {
+            // API 보정 전에도 바로 보이게 가볍게 붙입니다.
+            setBadge(group, fallback);
         }
+
+        const compare = parseCompareButton(group);
+
+        if (RESOLVE_COMPARE_BY_API && compare && compare.total > 1) {
+            resolveCurrentMessageTime(group).then(resolved => {
+                resultCache.set(key, resolved);
+                setBadge(group, resolved);
+            });
+        } else {
+            resultCache.set(key, fallback);
+        }
+    }
 
         function injectStyles() {
             GM_addStyle(`
