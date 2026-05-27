@@ -693,13 +693,22 @@
         function findRerollButtonAnchor(group) {
             if (!group) return null;
 
-            const buttons = Array.from(group.querySelectorAll('button'));
+            // 모듈 2(리롤 홀드)의 대상 엘리먼트 수집 범위와 동일하게 확장
+            const buttons = Array.from(group.querySelectorAll('button, [id="exp-reroll-btn"]'));
             const compareButton = findCompareButtonInGroup(group);
             const optionButton = group.querySelector('button[aria-label="메시지 옵션"]');
 
             return buttons.find(btn => {
                 if (!btn || btn === compareButton || btn === optionButton) return false;
                 if (btn.closest('.dropdown-button')) return false;
+
+                // 모듈 2와 동일한 ID 감지 규칙
+                if (btn.id === 'exp-reroll-btn') return true;
+
+                // 모듈 2와 동일한 SVG Path 감지 규칙
+                const path = btn.querySelector('svg path');
+                const d = path?.getAttribute('d') || '';
+                if (d.startsWith('M3.8 12a8.2')) return true;
 
                 const text = normalizeText(btn.textContent || '');
                 if (/답변\s*비교\s*\d+\s*\/\s*\d+/.test(text)) return false;
