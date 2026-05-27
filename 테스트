@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         크랙 9 in 1 통합팩 (V14.0.0 - 리롤 믹서 추가 및 모듈 최적화 배치)
+// @name         크랙 9 in 1 통합팩 (V14.1.0 - 리롤 믹서 추가 및 모듈 최적화 배치)
 // @namespace    https://crack.wrtn.ai/
-// @version      14.0.0
+// @version      14.1.0
 // @description  리롤 믹서가 추가된 9 in 1 통합 최적화 및 안정성 극대화 버전
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
@@ -793,30 +793,38 @@
             }
         }
 
-        async function processGroup(group) {
-            if (!group || !group.matches?.(MESSAGE_SELECTOR)) return;
+    async function processGroup(group) {
+        if (!group || !group.matches?.(MESSAGE_SELECTOR)) return;
 
-            const domId = getGroupMessageId(group);
-            if (!domId) return;
+        const domId = getGroupMessageId(group);
+        if (!domId) return;
 
-            // 내 메시지(User)인 경우 시간 배지를 생성하지 않고 기존 배지가 있다면 제거
-            try {
-                const { idMap } = await fetchAllMessagesOnce();
-                const msg = idMap.get(domId);
-                if (msg && !isAssistantMessage(msg)) {
-                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
-                    return;
-                }
-            } catch (e) {
-                // API 로딩 지연/실패 시 차선책: AI 전용 기능 버튼 유무로 1차 필터링
-                const hasAiIndicator = group.querySelector('button[aria-label="좋아요"], button[aria-label="싫어요"]') || findRerollButtonAnchor(group) || findCompareButtonInGroup(group);
-                if (!hasAiIndicator) {
-                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
-                    return;
-                }
+        let isAssistant = false;
+        let apiResolved = false;
+
+        try {
+            const { idMap } = await fetchAllMessagesOnce();
+            const msg = idMap.get(domId);
+            if (msg) {
+                apiResolved = true;
+                isAssistant = isAssistantMessage(msg);
             }
+        } catch (e) {
+            // API 로드 실패
+        }
 
-            const key = makeCacheKey(group);
+        // API로 확인되지 않은 경우, 리롤 버튼의 유무로 어시스턴트 메시지 여부 판단
+        if (!apiResolved) {
+            isAssistant = !!findRerollButtonAnchor(group);
+        }
+
+        // 어시스턴트(AI) 메시지가 아니라고 판단되면 배지를 제거하고 처리 종료 (내 메시지 예외 처리)
+        if (!isAssistant) {
+            group.querySelector(`.${BADGE_CLASS}`)?.remove();
+            return;
+        }
+
+        const key = makeCacheKey(group);
             if (!key) return;
 
             const cached = resultCache.get(key);
@@ -841,49 +849,6 @@
             } else {
                 resultCache.set(key, fallback);
             }
-        }
-
-        function collectGroupsFromNode(node) {
-            if (!node || node.nodeType !== Node.ELEMENT_NODE) return [];
-
-            const el = node;
-            const groups = [];
-
-            if (el.matches?.(MESSAGE_SELECTOR)) groups.push(el);
-            el.querySelectorAll?.(MESSAGE_SELECTOR).forEach(group => groups.push(group));
-
-            return groups;
-        }
-
-        function scanAllVisibleGroups() {
-            resetPageCacheIfNeeded();
-            document.querySelectorAll(MESSAGE_SELECTOR).forEach(processGroup);
-        }
-
-        function scheduleScan(nodes = []) {
-            clearTimeout(scanTimer);
-
-            scanTimer = setTimeout(() => {
-                resetPageCacheIfNeeded();
-
-                if (!nodes.length) {
-                    scanAllVisibleGroups();
-                    return;
-                }
-
-                const groups = new Set();
-
-                nodes.forEach(node => {
-                    collectGroupsFromNode(node).forEach(group => groups.add(group));
-                });
-
-                if (!groups.size) {
-                    scanAllVisibleGroups();
-                    return;
-                }
-
-                groups.forEach(processGroup);
-            }, 120);
         }
 
         function injectStyles() {
@@ -965,53 +930,11 @@
 
         if (document.body) {
             scanAllVisibleGroups();
-
-            const observer = new MutationObserver(mutations => {
-                const nodes = [];
-
-                for (const mutation of mutations) {
-                    mutation.addedNodes?.forEach(node => nodes.push(node));
-
-                    if (mutation.type === 'characterData' && mutation.target?.parentElement) {
-                        nodes.push(mutation.target.parentElement);
-                    }
-                }
-
-                scheduleScan(nodes);
-            });
-
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-                characterData: true
-            });
-
-            setInterval(scanAllVisibleGroups, 3500);
+            setInterval(scanAllVisibleGroups, 10000);
         } else {
             document.addEventListener('DOMContentLoaded', () => {
                 scanAllVisibleGroups();
-
-                const observer = new MutationObserver(mutations => {
-                    const nodes = [];
-
-                    for (const mutation of mutations) {
-                        mutation.addedNodes?.forEach(node => nodes.push(node));
-
-                        if (mutation.type === 'characterData' && mutation.target?.parentElement) {
-                            nodes.push(mutation.target.parentElement);
-                        }
-                    }
-
-                    scheduleScan(nodes);
-                });
-
-                observer.observe(document.body, {
-                    childList: true,
-                    subtree: true,
-                    characterData: true
-                });
-
-                setInterval(scanAllVisibleGroups, 3500);
+                setInterval(scanAllVisibleGroups, 10000);
             }, { once: true });
         }
     }
