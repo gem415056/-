@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 9 in 1 통합팩 (V14.0.0 - 리롤 믹서 추가 및 모듈 최적화 배치)
 // @namespace    https://crack.wrtn.ai/
-// @version      14.0.0
-// @description  리롤 믹서가 추가된 9 in 1 통합 최적화 및 안정성 극대화 버전
+// @version      14.1.0
+// @description  초경량 메시지 시간 표기 모듈 탑재 완료
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -411,162 +411,16 @@
         }, 1000);
     }
 
-    // ==========================================
-    // 모듈 5: 메시지 시간 표기
+// ==========================================
+    // 모듈 5: 메시지 시간 표기 (초경량·무네트워크·내 입력 제외 완결판)
     // ==========================================
     function initMessageTimeBadge() {
-        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
         const SCRIPT_NS = 'crack-message-time-badge';
         const BADGE_CLASS = `${SCRIPT_NS}-badge`;
         const MESSAGE_SELECTOR = 'div[data-message-group-id]';
-        const MESSAGE_LIMIT = 200;
-
-        const RESOLVE_COMPARE_BY_API = true;
-
-        let lastUrlKey = getUrlKey();
-        let scanTimer = null;
-        let apiCache = null;
-        let apiPromise = null;
-        const resultCache = new Map();
-
-        function getUrlKey() {
-            return location.origin + location.pathname + location.search;
-        }
-
-        function resetPageCacheIfNeeded() {
-            const key = getUrlKey();
-            if (key === lastUrlKey) return;
-
-            lastUrlKey = key;
-            apiCache = null;
-            apiPromise = null;
-            resultCache.clear();
-        }
 
         function normalizeText(text = '') {
             return String(text || '').replace(/\s+/g, ' ').trim();
-        }
-
-        function getCookie(name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)'));
-            return match ? decodeURIComponent(match[1]) : null;
-        }
-
-        function getAccessToken() {
-            return getCookie('access_token');
-        }
-
-        function getCommonHeaders() {
-            const token = getAccessToken();
-            const headers = {
-                accept: 'application/json, text/plain, */*',
-                platform: 'web',
-                'wrtn-locale': 'ko-KR'
-            };
-
-            if (token) headers.authorization = `Bearer ${token}`;
-
-            const wrtnId = getCookie('__w_id');
-            if (wrtnId) headers['x-wrtn-id'] = wrtnId;
-
-            const mixpanelId = getCookie('Mixpanel-Distinct-Id');
-            if (mixpanelId) headers['mixpanel-distinct-id'] = mixpanelId;
-
-            return headers;
-        }
-
-        function extractChatIdFromUrl(url = location.href) {
-            const str = String(url || '');
-            const patterns = [
-                /\/episodes\/([a-f0-9]{24})(?:[/?#]|$)/i,
-                /\/chats\/([a-f0-9]{24})(?:[/?#]|$)/i,
-                /"chatId":"([a-f0-9]{24})"/i
-            ];
-
-            for (const pattern of patterns) {
-                const match = str.match(pattern);
-                if (match) return match[1];
-            }
-
-            return null;
-        }
-
-        function findChatId() {
-            const fromUrl = extractChatIdFromUrl();
-            if (fromUrl) return fromUrl;
-
-            try {
-                return extractChatIdFromUrl(document.documentElement.innerHTML);
-            } catch (e) {
-                return null;
-            }
-        }
-
-        async function fetchAllMessagesOnce() {
-            if (apiCache) return apiCache;
-            if (apiPromise) return apiPromise;
-
-            const chatId = findChatId();
-            if (!chatId) throw new Error('chatId not found');
-
-            apiPromise = fetch(`${API_BASE}/chats/${chatId}/messages?limit=${MESSAGE_LIMIT}`, {
-                method: 'GET',
-                credentials: 'include',
-                headers: getCommonHeaders()
-            })
-                .then(async res => {
-                    if (!res.ok) throw new Error(`messages fetch failed: ${res.status}`);
-                    const json = await res.json();
-                    const messages = json?.data?.messages || json?.messages || [];
-                    const list = Array.isArray(messages) ? messages : [];
-                    apiCache = buildApiCache(list);
-                    return apiCache;
-                })
-                .catch(err => {
-                    console.warn('[Crack Message Time Badge] API resolve failed:', err);
-                    apiCache = null;
-                    throw err;
-                })
-                .finally(() => {
-                    apiPromise = null;
-                });
-
-            return apiPromise;
-        }
-
-        function buildApiCache(messages) {
-            const idMap = new Map();
-            const apiIndexMap = new Map();
-
-            messages.forEach((msg, index) => {
-                const id = messageIdOf(msg);
-                if (!id) return;
-                idMap.set(id, msg);
-                apiIndexMap.set(id, index);
-            });
-
-            return { messages, idMap, apiIndexMap };
-        }
-
-        function messageIdOf(msg) {
-            return msg?._id || msg?.id || '';
-        }
-
-        function isAssistantMessage(msg) {
-            return String(msg?.role || '').toLowerCase() === 'assistant';
-        }
-
-        function sortVariantsUiOrder(variants, apiIndexMap) {
-            return [...variants].sort((a, b) => {
-                const ai = apiIndexMap.get(messageIdOf(a)) ?? 0;
-                const bi = apiIndexMap.get(messageIdOf(b)) ?? 0;
-                return bi - ai;
-            });
-        }
-
-        function getGroupMessageId(group) {
-            return group?.getAttribute?.('data-message-group-id') || '';
         }
 
         function isObjectId(value = '') {
@@ -575,124 +429,30 @@
 
         function objectIdToDate(objectId = '') {
             if (!isObjectId(objectId)) return null;
-
             const seconds = parseInt(String(objectId).slice(0, 8), 16);
             if (!Number.isFinite(seconds) || seconds <= 0) return null;
-
             const date = new Date(seconds * 1000);
-            if (Number.isNaN(date.getTime())) return null;
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
 
-            return date;
+        function getGroupMessageId(group) {
+            return group?.getAttribute?.('data-message-group-id') || '';
         }
 
         function findCompareButtonInGroup(group) {
             if (!group) return null;
-
             const buttons = Array.from(group.querySelectorAll('button'));
             return buttons.find(btn => /답변\s*비교\s*\d+\s*\/\s*\d+/.test(normalizeText(btn.textContent || ''))) || null;
         }
 
-        function parseCompareButton(group) {
-            const btn = findCompareButtonInGroup(group);
-            if (!btn) return null;
-
-            const text = normalizeText(btn.textContent || '');
-            const match = text.match(/답변\s*비교\s*(\d+)\s*\/\s*(\d+)/);
-            if (!match) return null;
-
-            return {
-                text,
-                current: Number(match[1]),
-                total: Number(match[2])
-            };
-        }
-
-        function makeCacheKey(group) {
-            const id = getGroupMessageId(group);
-            const compare = parseCompareButton(group);
-            return compare ? `${id}:${compare.current}/${compare.total}` : id;
-        }
-
-        function resolveByDomId(group) {
-            const domId = getGroupMessageId(group);
-            const date = objectIdToDate(domId);
-
-            return {
-                messageId: domId,
-                date,
-                source: 'dom',
-                note: date ? 'DOM messageId 기준 생성 시각' : 'ObjectId 형식이 아니어서 시간 계산 불가'
-            };
-        }
-
-        async function resolveCurrentMessageTime(group) {
-            const fallback = resolveByDomId(group);
-            const compare = parseCompareButton(group);
-
-            if (!RESOLVE_COMPARE_BY_API || !compare || compare.total <= 1) return fallback;
-            if (!fallback.messageId || !isObjectId(fallback.messageId)) return fallback;
-
-            try {
-                const { messages, idMap, apiIndexMap } = await fetchAllMessagesOnce();
-                const anchor = idMap.get(fallback.messageId);
-
-                if (!anchor || !isAssistantMessage(anchor) || !anchor.parentTurnId) return fallback;
-
-                const variants = messages.filter(msg =>
-                    isAssistantMessage(msg) &&
-                    msg.parentTurnId &&
-                    msg.parentTurnId === anchor.parentTurnId &&
-                    messageIdOf(msg)
-                );
-
-                if (variants.length !== compare.total) return fallback;
-
-                const ordered = sortVariantsUiOrder(variants, apiIndexMap);
-                const currentMsg = ordered[compare.current - 1];
-                const currentId = messageIdOf(currentMsg);
-                const date = objectIdToDate(currentId);
-
-                if (!date) return fallback;
-
-                return {
-                    messageId: currentId,
-                    date,
-                    source: 'api-current-reroll',
-                    note: `답변 비교 ${compare.current}/${compare.total} 현재 답변 기준 생성 시각`
-                };
-            } catch (e) {
-                return fallback;
-            }
-        }
-
-        function pad2(n) {
-            return String(n).padStart(2, '0');
-        }
-
-        function formatBadgeDate(date) {
-            if (!date) return '';
-            return `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())}. ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-        }
-
-        function formatFullDate(date) {
-            if (!date) return '';
-
-            return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
-                `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
-        }
-
         function findMessageOptionAnchor(group) {
             if (!group) return null;
-
             const optionButton = group.querySelector('button[aria-label="메시지 옵션"]');
-            if (!optionButton) return null;
-
-            return optionButton.closest('.dropdown-button') || optionButton;
+            return optionButton?.closest('.dropdown-button') || optionButton || null;
         }
 
         function findRerollButtonAnchor(group) {
             if (!group) return null;
-
             const buttons = Array.from(group.querySelectorAll('button'));
             const compareButton = findCompareButtonInGroup(group);
             const optionButton = group.querySelector('button[aria-label="메시지 옵션"]');
@@ -700,10 +460,8 @@
             return buttons.find(btn => {
                 if (!btn || btn === compareButton || btn === optionButton) return false;
                 if (btn.closest('.dropdown-button')) return false;
-
                 const text = normalizeText(btn.textContent || '');
                 if (/답변\s*비교\s*\d+\s*\/\s*\d+/.test(text)) return false;
-
                 const html = btn.innerHTML || '';
                 return (
                     html.includes('M3.8 12a8.2') ||
@@ -717,38 +475,29 @@
 
         function findSmartAnchor(group) {
             const compareButton = findCompareButtonInGroup(group);
-            if (compareButton) {
-                return {
-                    anchor: compareButton,
-                    placement: 'compare-left'
-                };
-            }
+            if (compareButton) return { anchor: compareButton, placement: 'compare-left' };
 
             const rerollButton = findRerollButtonAnchor(group);
-            if (rerollButton) {
-                return {
-                    anchor: rerollButton,
-                    placement: 'reroll-left'
-                };
-            }
+            if (rerollButton) return { anchor: rerollButton, placement: 'reroll-left' };
 
             const optionAnchor = findMessageOptionAnchor(group);
-            if (optionAnchor) {
-                return {
-                    anchor: optionAnchor,
-                    placement: 'option-left'
-                };
-            }
+            if (optionAnchor) return { anchor: optionAnchor, placement: 'option-left' };
 
-            return {
-                anchor: null,
-                placement: 'fallback'
-            };
+            return { anchor: null, placement: 'fallback' };
+        }
+
+        // 유저 메시지에는 존재하지 않는 AI 고유 기능들만 타깃팅하여 탐지
+        function isAiMessageGroup(group) {
+            return (
+                group.querySelector('button[aria-label="좋아요"], button[aria-label="싫어요"]') ||
+                group.querySelector('button[aria-label="메시지 복사"], button[aria-label="공유"]') ||
+                findRerollButtonAnchor(group) ||
+                findCompareButtonInGroup(group)
+            );
         }
 
         function ensureBadge(group) {
             let badge = group.querySelector(`.${BADGE_CLASS}`);
-
             if (!badge) {
                 badge = document.createElement('span');
                 badge.className = `${BADGE_CLASS}`;
@@ -756,134 +505,57 @@
             }
 
             const { anchor, placement } = findSmartAnchor(group);
-
             if (anchor?.parentElement) {
-                const buttonGroup = anchor.parentElement;
-                const outerRow = buttonGroup.parentElement;
-                if (outerRow) {
-                    // 시간 배지를 우측 버튼 바구니 내부가 아닌, 최외각 줄(outerRow)에서 바구니 왼쪽에 배치
-                    if (badge.parentElement !== outerRow || badge.nextElementSibling !== buttonGroup) {
-                        outerRow.insertBefore(badge, buttonGroup);
-                    }
-                    badge.dataset.placement = placement;
+                const parent = anchor.parentElement;
+                if (badge.parentElement !== parent || parent.firstChild !== badge) {
+                    parent.insertBefore(badge, parent.firstChild);
                 }
+                badge.dataset.placement = placement;
             } else if (badge.parentElement !== group) {
                 group.appendChild(badge);
                 badge.dataset.placement = 'fallback';
             }
-
             return badge;
         }
 
-        function setBadge(group, resolved) {
-            if (!resolved?.date) return;
-
-            const badge = ensureBadge(group);
-            const label = formatBadgeDate(resolved.date);
-            const full = formatFullDate(resolved.date);
-
-            badge.textContent = label;
-            badge.title = `${full}\n${resolved.note || ''}\nmessageId: ${resolved.messageId || ''}`.trim();
-            badge.dataset.source = resolved.source || 'dom';
-
-            if (resolved.source === 'api-current-reroll') {
-                badge.dataset.rerollResolved = 'true';
-            } else {
-                delete badge.dataset.rerollResolved;
-            }
+        function pad2(n) {
+            return String(n).padStart(2, '0');
         }
 
-        async function processGroup(group) {
+        function formatBadgeDate(date) {
+            if (!date) return '';
+            return `${date.getFullYear()}.${pad2(date.getMonth() + 1)}.${pad2(date.getDate())}. ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+        }
+
+        function formatFullDate(date) {
+            if (!date) return '';
+            return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ` +
+                `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+        }
+
+        function processGroup(group) {
             if (!group || !group.matches?.(MESSAGE_SELECTOR)) return;
 
             const domId = getGroupMessageId(group);
             if (!domId) return;
 
-            // 내 메시지(User)인 경우 시간 배지를 생성하지 않고 기존 배지가 있다면 제거
-            try {
-                const { idMap } = await fetchAllMessagesOnce();
-                const msg = idMap.get(domId);
-                if (msg && !isAssistantMessage(msg)) {
-                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
-                    return;
-                }
-            } catch (e) {
-                // API 로딩 지연/실패 시 차선책: AI 전용 기능 버튼 유무로 1차 필터링
-                const hasAiIndicator = group.querySelector('button[aria-label="좋아요"], button[aria-label="싫어요"]') || findRerollButtonAnchor(group) || findCompareButtonInGroup(group);
-                if (!hasAiIndicator) {
-                    group.querySelector(`.${BADGE_CLASS}`)?.remove();
-                    return;
-                }
-            }
-
-            const key = makeCacheKey(group);
-            if (!key) return;
-
-            const cached = resultCache.get(key);
-
-            if (cached) {
-                setBadge(group, cached);
+            // AI 메시지가 아닐 경우(내 입력 등) 배지가 있다면 즉각 제거 후 조기 종료 (실시간 대화 포함)
+            if (!isAiMessageGroup(group)) {
+                group.querySelector(`.${BADGE_CLASS}`)?.remove();
                 return;
             }
 
-            const fallback = resolveByDomId(group);
-            if (fallback.date) {
-                setBadge(group, fallback);
-            }
+            const date = objectIdToDate(domId);
+            if (!date) return;
 
-            const compare = parseCompareButton(group);
-
-            if (RESOLVE_COMPARE_BY_API && compare && compare.total > 1) {
-                resolveCurrentMessageTime(group).then(resolved => {
-                    resultCache.set(key, resolved);
-                    setBadge(group, resolved);
-                });
-            } else {
-                resultCache.set(key, fallback);
-            }
-        }
-
-        function collectGroupsFromNode(node) {
-            if (!node || node.nodeType !== Node.ELEMENT_NODE) return [];
-
-            const el = node;
-            const groups = [];
-
-            if (el.matches?.(MESSAGE_SELECTOR)) groups.push(el);
-            el.querySelectorAll?.(MESSAGE_SELECTOR).forEach(group => groups.push(group));
-
-            return groups;
+            const badge = ensureBadge(group);
+            badge.textContent = formatBadgeDate(date);
+            badge.title = `${formatFullDate(date)}\nDOM ID 기준 생성 시각\nmessageId: ${domId}`.trim();
+            badge.dataset.source = 'dom';
         }
 
         function scanAllVisibleGroups() {
-            resetPageCacheIfNeeded();
             document.querySelectorAll(MESSAGE_SELECTOR).forEach(processGroup);
-        }
-
-        function scheduleScan(nodes = []) {
-            clearTimeout(scanTimer);
-
-            scanTimer = setTimeout(() => {
-                resetPageCacheIfNeeded();
-
-                if (!nodes.length) {
-                    scanAllVisibleGroups();
-                    return;
-                }
-
-                const groups = new Set();
-
-                nodes.forEach(node => {
-                    collectGroupsFromNode(node).forEach(group => groups.add(group));
-                });
-
-                if (!groups.size) {
-                    scanAllVisibleGroups();
-                    return;
-                }
-
-                groups.forEach(processGroup);
-            }, 120);
         }
 
         function injectStyles() {
@@ -894,6 +566,9 @@
                     max-width: 100%;
                     height: 1.5rem;
                     min-height: 1.5rem;
+                    margin: 0 !important;
+                    margin-right: auto !important; /* 배지를 왼쪽 정렬로 밀고 다른 버튼들을 우측으로 정렬 */
+                    margin-left: 0 !important;
                     padding: .25rem .5rem;
                     border: 0 !important;
                     border-radius: 4px;
@@ -918,42 +593,28 @@
                     align-items: center !important;
                     position: relative !important;
                 }
-
                 .${BADGE_CLASS}[data-placement="fallback"] {
                     margin: 4px 10px 0 auto !important;
                 }
-
                 .${BADGE_CLASS}[data-placement="compare-left"],
                 .${BADGE_CLASS}[data-placement="reroll-left"],
                 .${BADGE_CLASS}[data-placement="option-left"] {
-                    margin: 0 !important;
-                    margin-right: auto !important; /* 배지를 맨 왼쪽 끝으로 밀고 다른 버튼들을 오른쪽 끝으로 정렬 */
-                    margin-left: 0 !important;
                     align-self: center;
                 }
-
-                .${BADGE_CLASS}[data-reroll-resolved="true"] {
-                    color: hsl(var(--line-gray-2)) !important;
-                    background-color: var(--transparent) !important;
-                }
-
                 body[data-theme="dark"] .${BADGE_CLASS},
                 [data-theme="dark"] .${BADGE_CLASS} {
                     color: hsl(var(--line-gray-2)) !important;
                 }
-
                 @media (prefers-color-scheme: dark) {
                     body:not([data-theme="light"]) .${BADGE_CLASS} {
                         color: hsl(var(--line-gray-2)) !important;
                     }
                 }
-
                 @media (max-width: 720px) {
                     .${BADGE_CLASS} {
                         font-size: 12px;
                         opacity: 1;
                     }
-
                     .${BADGE_CLASS}[data-placement="fallback"] {
                         margin: 4px 8px 0 auto !important;
                     }
@@ -963,56 +624,36 @@
 
         injectStyles();
 
-        if (document.body) {
+        const startObserver = () => {
             scanAllVisibleGroups();
 
+            // 초경량 감시: 타자 입력(characterData)은 무시하고, 단순 DOM 메시지 추가/삭제(childList)만 감시 (CPU 점유율 거의 0)
             const observer = new MutationObserver(mutations => {
-                const nodes = [];
-
+                let hasNewNodes = false;
                 for (const mutation of mutations) {
-                    mutation.addedNodes?.forEach(node => nodes.push(node));
-
-                    if (mutation.type === 'characterData' && mutation.target?.parentElement) {
-                        nodes.push(mutation.target.parentElement);
+                    if (mutation.addedNodes.length > 0) {
+                        hasNewNodes = true;
+                        break;
                     }
                 }
-
-                scheduleScan(nodes);
+                if (hasNewNodes) {
+                    scanAllVisibleGroups();
+                }
             });
 
             observer.observe(document.body, {
                 childList: true,
-                subtree: true,
-                characterData: true
+                subtree: true
             });
 
-            setInterval(scanAllVisibleGroups, 3500);
+            // 주기적 스캔 주기를 5초로 변경하여 안정적인 보조 역할 수행
+            setInterval(scanAllVisibleGroups, 5000);
+        };
+
+        if (document.body) {
+            startObserver();
         } else {
-            document.addEventListener('DOMContentLoaded', () => {
-                scanAllVisibleGroups();
-
-                const observer = new MutationObserver(mutations => {
-                    const nodes = [];
-
-                    for (const mutation of mutations) {
-                        mutation.addedNodes?.forEach(node => nodes.push(node));
-
-                        if (mutation.type === 'characterData' && mutation.target?.parentElement) {
-                            nodes.push(mutation.target.parentElement);
-                        }
-                    }
-
-                    scheduleScan(nodes);
-                });
-
-                observer.observe(document.body, {
-                    childList: true,
-                    subtree: true,
-                    characterData: true
-                });
-
-                setInterval(scanAllVisibleGroups, 3500);
-            }, { once: true });
+            document.addEventListener('DOMContentLoaded', startObserver, { once: true });
         }
     }
 
