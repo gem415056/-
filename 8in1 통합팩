@@ -2007,7 +2007,7 @@
         textarea.style.cssText = `
             width: 100%; height: 36px; background: transparent; 
             border: none; outline: none; resize: none; 
-            font-family: inherit; font-size: 12pt; line-height: 1.5; 
+            font-family: inherit; font-size: 11pt; line-height: 1.5; 
             padding: 8px 4px; color: inherit; overflow-y: hidden;
             white-space: pre-wrap !important; word-wrap: break-word !important; 
             word-break: break-all !important;
