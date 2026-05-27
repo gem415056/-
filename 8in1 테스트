@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V13.2.0 - 모듈 최적화 배치 및 시간 배지 맨 왼쪽 배치)
+// @name         크랙 9 in 1 통합팩 (V13.3.0 - 리롤 믹서 통합 및 최적화)
 // @namespace    https://crack.wrtn.ai/
-// @version      13.2.0
-// @description  시간 표시 모듈 줄의 맨 왼쪽 왼쪽정렬 최적화 및 안정성 극대화 버전
+// @version      13.3.0
+// @description  리롤 믹서 통합 및 시간 표시 모듈 줄 정렬 최적화 버전
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -1017,7 +1017,1689 @@
     }
 
     // ==========================================
-    // 모듈 6: 입력 도우미
+    // 모듈 6: 리롤 믹서
+    // ==========================================
+    function initRerollMixer() {
+        const API_BASE = 'https://crack-api.wrtn.ai/crack-gen/v3';
+        const SCRIPT_NS = 'crack-reroll-mixer';
+        const MIXER_BUTTON_CLASS = `${SCRIPT_NS}-open-btn`;
+        const MODAL_ID = `${SCRIPT_NS}-modal`;
+        const MESSAGE_LIMIT = 200;
+        const REFRESH_INTERVAL_MS = 1800;
+        const DEBUG = false;
+
+        const MIXER_ICON_HTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M7.5 3.5 10 6 8.9 7.1 7.8 6H6.5A2.5 2.5 0 0 0 4 8.5V10H2.4V8.5A4.1 4.1 0 0 1 6.5 4.4h1.3L6.4 3zm9 0 1.1 1.1-1.4 1.4h1.3a4.1 4.1 0 0 1 4.1 4.1v.7H20v-.7a2.5 2.5 0 0 0-2.5-2.5h-1.3l1.1 1.1L16.2 9.8 13.7 7.3zM2.4 14h1.6v1.5A2.5 2.5 0 0 0 6.5 18h1.3l-1.1-1.1 1.1-1.1 2.5 2.5-2.5 2.5-1.1-1.1L7.8 19.6H6.5a4.1 4.1 0 0 1-4.1-4.1zm17.6 0h1.6v1.5a4.1 4.1 0 0 1-4.1 4.1h-1.3l1.1 1.1-1.1 1.1-2.5-2.5 2.5-2.5 1.1 1.1-1.1 1.1h1.3a2.5 2.5 0 0 0 2.5-2.5zM9 10.2h6v1.6H9zm0 3h6v1.6H9z"/>
+            </svg>
+        `;
+
+        let attachTimer = null;
+        let busy = false;
+        let lastUrlKey = getUrlKey();
+        let activeEditorText = '';
+
+        function log(...args) {
+            if (DEBUG) console.log('[reroll-mixer]', ...args);
+        }
+
+        function getUrlKey() {
+            return location.origin + location.pathname + location.search;
+        }
+
+        function toast(message, type = 'info', ms = 2200) {
+            let box = document.getElementById(`${SCRIPT_NS}-toast`);
+            if (!box) {
+                box = document.createElement('div');
+                box.id = `${SCRIPT_NS}-toast`;
+                document.body.appendChild(box);
+            }
+
+            const item = document.createElement('div');
+            item.className = `${SCRIPT_NS}-toast-item ${type}`;
+            item.textContent = message;
+            box.appendChild(item);
+
+            setTimeout(() => {
+                item.style.opacity = '0';
+                item.style.transform = 'translateY(8px)';
+                setTimeout(() => item.remove(), 240);
+            }, ms);
+        }
+
+        function escapeHtml(value = '') {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function normalizeText(text = '') {
+            return String(text).replace(/\s+/g, ' ').trim();
+        }
+
+        function stripSystemNote(text = '') {
+            return normalizeText(
+                String(text)
+                    .replace(/^\s*\[\/\/\]:[^\n]*(?:\n|$)/gm, ' ')
+                    .replace(/\[\/\/\]:\s*#\s*\([^)]+\)/g, ' ')
+                    .replace(/```[\s\S]*?```/g, '[코드블록]')
+                    .replace(/!\[[^\]]*\]\([^)]+\)/g, '[이미지]')
+            );
+        }
+
+        function shortPreview(text = '', max = 120) {
+            const cleaned = stripSystemNote(text);
+            return cleaned.length > max ? cleaned.slice(0, max) + '…' : cleaned;
+        }
+
+        function getCookie(name) {
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = document.cookie.match(new RegExp('(?:^|; )' + escaped + '=([^;]*)'));
+            return match ? decodeURIComponent(match[1]) : null;
+        }
+
+        function getAccessToken() {
+            return getCookie('access_token');
+        }
+
+        function getCommonHeaders() {
+            const token = getAccessToken();
+            const headers = {
+                accept: 'application/json, text/plain, */*',
+                platform: 'web',
+                'wrtn-locale': 'ko-KR'
+            };
+
+            if (token) headers.authorization = `Bearer ${token}`;
+
+            const wrtnId = getCookie('__w_id');
+            if (wrtnId) headers['x-wrtn-id'] = wrtnId;
+
+            const mixpanelId = getCookie('Mixpanel-Distinct-Id');
+            if (mixpanelId) headers['mixpanel-distinct-id'] = mixpanelId;
+
+            return headers;
+        }
+
+        function extractChatIdFromUrl(url = location.href) {
+            const str = String(url || '');
+            const patterns = [
+                /\/episodes\/([a-f0-9]{24})(?:[/?#]|$)/i,
+                /\/chats\/([a-f0-9]{24})(?:[/?#]|$)/i,
+                /"chatId":"([a-f0-9]{24})"/i
+            ];
+
+            for (const pattern of patterns) {
+                const match = str.match(pattern);
+                if (match) return match[1];
+            }
+
+            return null;
+        }
+
+        function findChatId() {
+            const fromUrl = extractChatIdFromUrl();
+            if (fromUrl) return fromUrl;
+
+            try {
+                const html = document.documentElement.innerHTML;
+                const fromHtml = extractChatIdFromUrl(html);
+                if (fromHtml) return fromHtml;
+            } catch (e) {}
+
+            return null;
+        }
+
+        async function fetchAllMessages(chatId) {
+            const url = `${API_BASE}/chats/${chatId}/messages?limit=${MESSAGE_LIMIT}`;
+            const res = await fetch(url, {
+                method: 'GET',
+                credentials: 'include',
+                headers: getCommonHeaders()
+            });
+
+            if (!res.ok) {
+                throw new Error(`메시지 목록 로드 실패 (${res.status})`);
+            }
+
+            const json = await res.json();
+            const messages = json?.data?.messages || json?.messages || [];
+            return Array.isArray(messages) ? messages : [];
+        }
+
+        async function overwriteMessageOnServer(chatId, messageId, messageText) {
+            const res = await fetch(`${API_BASE}/chats/${chatId}/messages/${messageId}`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: {
+                    ...getCommonHeaders(),
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({ message: messageText })
+            });
+
+            if (!res.ok) {
+                let body = '';
+                try { body = await res.text(); } catch (e) {}
+                throw new Error(`답변 덮어쓰기 실패 (${res.status}) ${body.slice(0, 180)}`);
+            }
+
+            return await res.json().catch(() => ({}));
+        }
+
+        function normalizeForVerify(text = '') {
+            return String(text || '').replace(/\r\n/g, '\n').trim();
+        }
+
+        function saveOverwriteBackup({ chatId, messageId, beforeText, afterText, label }) {
+            try {
+                const key = `${SCRIPT_NS}:overwrite-backups`;
+                const list = JSON.parse(localStorage.getItem(key) || '[]');
+                list.unshift({
+                    savedAt: new Date().toISOString(),
+                    chatId,
+                    messageId,
+                    label,
+                    beforeText,
+                    afterText
+                });
+                localStorage.setItem(key, JSON.stringify(list.slice(0, 30)));
+            } catch (e) {
+                console.warn('[reroll-mixer] backup save failed:', e);
+            }
+        }
+
+        function getMessageGroups() {
+            return Array.from(document.querySelectorAll('div[data-message-group-id]'));
+        }
+
+        function getGroupMessageId(group) {
+            return group?.getAttribute?.('data-message-group-id') || '';
+        }
+
+        function findCompareButtonInGroup(group) {
+            if (!group) return null;
+            const buttons = Array.from(group.querySelectorAll('button'));
+            return buttons.find(btn => /답변\s*비교\s*\d+\s*\/\s*\d+/.test(normalizeText(btn.textContent || ''))) || null;
+        }
+
+        function parseCompareButton(group) {
+            const btn = findCompareButtonInGroup(group);
+            if (!btn) return null;
+
+            const text = normalizeText(btn.textContent || '');
+            const match = text.match(/답변\s*비교\s*(\d+)\s*\/\s*(\d+)/);
+            if (!match) return null;
+
+            return {
+                button: btn,
+                text,
+                current: Number(match[1]),
+                total: Number(match[2]),
+                id: btn.id || ''
+            };
+        }
+
+        function messageIdOf(msg) {
+            return msg?._id || msg?.id || '';
+        }
+
+        function getMessageContent(msg) {
+            return String(msg?.content || msg?.text || msg?.message || msg?.answer || '');
+        }
+
+        function isAssistantMessage(msg) {
+            return String(msg?.role || '').toLowerCase() === 'assistant';
+        }
+
+        function isUserMessage(msg) {
+            return String(msg?.role || '').toLowerCase() === 'user';
+        }
+
+        function getRerollFlag(msg) {
+            const r = msg?.reroll;
+            if (typeof r === 'boolean') return r;
+            if (r && typeof r === 'object') return true;
+            return false;
+        }
+
+        function buildMessageLookup(messages) {
+            const idMap = new Map();
+            const apiIndexMap = new Map();
+
+            messages.forEach((msg, index) => {
+                const id = messageIdOf(msg);
+                if (!id) return;
+                idMap.set(id, msg);
+                apiIndexMap.set(id, index);
+            });
+
+            return { idMap, apiIndexMap };
+        }
+
+        function sortVariantsUiOrder(variants, apiIndexMap) {
+            return [...variants].sort((a, b) => {
+                const ai = apiIndexMap.get(messageIdOf(a)) ?? 0;
+                const bi = apiIndexMap.get(messageIdOf(b)) ?? 0;
+                return bi - ai;
+            });
+        }
+
+        function findVariantBundleByDomGroup(group, messages, lookup) {
+            const domMessageId = getGroupMessageId(group);
+            const compareInfo = parseCompareButton(group);
+            const anchor = lookup.idMap.get(domMessageId);
+
+            if (!compareInfo || !anchor || !isAssistantMessage(anchor) || !anchor.parentTurnId) {
+                return null;
+            }
+
+            const variants = messages.filter(msg =>
+                isAssistantMessage(msg) &&
+                msg.parentTurnId &&
+                msg.parentTurnId === anchor.parentTurnId &&
+                messageIdOf(msg)
+            );
+
+            if (variants.length <= 1) return null;
+
+            const ordered = sortVariantsUiOrder(variants, lookup.apiIndexMap);
+            const totalMatches = compareInfo.total === ordered.length;
+            const currentIndex = compareInfo.current - 1;
+            const userPrompt = messages.find(msg =>
+                isUserMessage(msg) &&
+                msg.turnId &&
+                msg.turnId === anchor.parentTurnId
+            );
+
+            return {
+                group,
+                domMessageId,
+                parentTurnId: anchor.parentTurnId,
+                compareInfo,
+                variants: ordered,
+                totalMatches,
+                currentIndex: totalMatches ? currentIndex : Math.max(0, ordered.findIndex(v => messageIdOf(v) === domMessageId)),
+                userPrompt
+            };
+        }
+
+        function splitIntoParagraphs(raw = '') {
+            const text = String(raw || '')
+                .replace(/\r\n/g, '\n')
+                .trim();
+
+            if (!text) return [];
+
+            const blocks = [];
+            let buffer = [];
+            let inFence = false;
+
+            const flushBuffer = () => {
+                const value = buffer.join('\n').trim();
+                if (value) blocks.push(value);
+                buffer = [];
+            };
+
+            for (const line of text.split('\n')) {
+                if (/^\s*```/.test(line)) {
+                    inFence = !inFence;
+                    buffer.push(line);
+                    continue;
+                }
+
+                if (!inFence && /^\s*\[\/\/\]:/.test(line)) {
+                    flushBuffer();
+                    blocks.push(line.trim());
+                    continue;
+                }
+
+                if (!inFence && line.trim() === '') {
+                    flushBuffer();
+                    continue;
+                }
+
+                buffer.push(line);
+            }
+
+            flushBuffer();
+
+            return blocks
+                .map(block => block.trim())
+                .filter(Boolean);
+        }
+
+        function attachMixerButtons() {
+            const currentUrlKey = getUrlKey();
+            if (currentUrlKey !== lastUrlKey) {
+                lastUrlKey = currentUrlKey;
+                closeModal();
+            }
+
+            for (const group of getMessageGroups()) {
+                const compareInfo = parseCompareButton(group);
+                if (!compareInfo || compareInfo.total <= 1) continue;
+
+                const compareBtn = compareInfo.button;
+                if (!compareBtn || compareBtn.dataset.rerollMixerBound === 'true') continue;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `${MIXER_BUTTON_CLASS} relative inline-flex items-center justify-center gap-1 overflow-hidden whitespace-nowrap font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:fill-current h-6 rounded px-2 py-1 text-xs [&_svg]:size-4 bg-transparent text-line-gray-2 hover:bg-accent active:bg-accent/80`;
+                btn.title = '리롤 답변 믹서 열기';
+                btn.setAttribute('aria-label', '리롤 답변 믹서 열기');
+                btn.innerHTML = `${MIXER_ICON_HTML}<span class="${SCRIPT_NS}-btn-label">믹스</span>`;
+
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await openMixerForGroup(group);
+                });
+
+                compareBtn.insertAdjacentElement('afterend', btn);
+                compareBtn.dataset.rerollMixerBound = 'true';
+            }
+        }
+
+        async function openMixerForGroup(group) {
+            if (busy) return;
+
+            const chatId = findChatId();
+            if (!chatId) {
+                alert('채팅 ID(chatId)를 찾을 수 없습니다.');
+                return;
+            }
+
+            busy = true;
+            toast('리롤 답변을 불러오는 중...', 'info', 1200);
+
+            let messages;
+            let lookup;
+            let bundle;
+
+            try {
+                messages = await fetchAllMessages(chatId);
+                lookup = buildMessageLookup(messages);
+                bundle = findVariantBundleByDomGroup(group, messages, lookup);
+            } catch (err) {
+                console.error(err);
+                alert('리롤 답변을 불러오지 못했습니다.');
+                busy = false;
+                return;
+            }
+
+            busy = false;
+
+            if (!bundle) {
+                alert('이 답변의 리롤 묶음을 찾지 못했습니다.\n답변 비교 버튼이 있는 메시지에서 다시 시도해 주세요.');
+                return;
+            }
+
+            if (!bundle.totalMatches) {
+                alert(`안전 확인 실패: 화면의 답변 수(${bundle.compareInfo.total})와 API 후보 수(${bundle.variants.length})가 다릅니다.`);
+                return;
+            }
+
+            showMixerModal(bundle);
+        }
+
+        function showMixerModal(bundle) {
+            closeModal();
+
+            const overlay = document.createElement('div');
+            overlay.id = MODAL_ID;
+
+            const total = bundle.variants.length;
+            const current = Math.max(0, Math.min(bundle.currentIndex, total - 1));
+            const defaultA = current;
+            const defaultB = current > 0 ? current - 1 : Math.min(1, total - 1);
+
+            const optionHtml = bundle.variants.map((msg, index) => {
+                const preview = shortPreview(getMessageContent(msg), 54);
+                const currentLabel = index === current ? ' · 현재' : '';
+                return `<option value="${index}">답변 ${index + 1}${currentLabel} — ${escapeHtml(preview)}</option>`;
+            }).join('');
+
+            overlay.innerHTML = `
+                <div class="${SCRIPT_NS}-modal-card" role="dialog" aria-modal="true">
+                    <div class="${SCRIPT_NS}-modal-header">
+                        <div>
+                            <div class="${SCRIPT_NS}-modal-title">리롤 믹서 🧩</div>
+                            <div class="${SCRIPT_NS}-modal-desc">
+                                답변 두 개를 나란히 펼쳐 읽고, 마음에 드는 문단을 편집본에 모아요. 편집본은 현재 화면 답변에 덮어쓸 수 있습니다.
+                            </div>
+                        </div>
+                        <button type="button" class="${SCRIPT_NS}-icon-btn" data-close>✕</button>
+                    </div>
+
+                    <div class="${SCRIPT_NS}-topbar">
+                        <label>
+                            <span>A 답변</span>
+                            <select data-select-a>${optionHtml}</select>
+                        </label>
+                        <label>
+                            <span>B 답변</span>
+                            <select data-select-b>${optionHtml}</select>
+                        </label>
+                        <button type="button" class="${SCRIPT_NS}-soft-btn" data-swap>↔ 교체</button>
+                    </div>
+
+                    <div class="${SCRIPT_NS}-mobile-tabs">
+                        <button type="button" class="is-active" data-tab="a">A</button>
+                        <button type="button" data-tab="b">B</button>
+                        <button type="button" data-tab="edit">편집본</button>
+                    </div>
+
+                    <div class="${SCRIPT_NS}-modal-body">
+                        <section class="${SCRIPT_NS}-answer-pane" data-pane="a">
+                            <div class="${SCRIPT_NS}-pane-title ${SCRIPT_NS}-answer-title">
+                                <span>답변 A</span>
+                                <button type="button" class="${SCRIPT_NS}-title-add-all" data-add-whole-a>전체 추가</button>
+                            </div>
+                            <div class="${SCRIPT_NS}-paragraph-list" data-list-a></div>
+                        </section>
+
+                        <section class="${SCRIPT_NS}-answer-pane" data-pane="b">
+                            <div class="${SCRIPT_NS}-pane-title ${SCRIPT_NS}-answer-title">
+                                <span>답변 B</span>
+                                <button type="button" class="${SCRIPT_NS}-title-add-all" data-add-whole-b>전체 추가</button>
+                            </div>
+                            <div class="${SCRIPT_NS}-paragraph-list" data-list-b></div>
+                        </section>
+
+                        <section class="${SCRIPT_NS}-editor-pane" data-pane="edit">
+                            <div class="${SCRIPT_NS}-pane-title ${SCRIPT_NS}-editor-title">
+                                <span>편집본</span>
+                                <small data-overwrite-target>현재 답변에 덮어쓰기</small>
+                            </div>
+                            <textarea data-editor placeholder="마음에 드는 문단을 추가하면 여기에 모입니다. 여기서 직접 고쳐도 돼요."></textarea>
+                            <div class="${SCRIPT_NS}-editor-actions">
+                                <button type="button" class="${SCRIPT_NS}-soft-btn" data-clear-editor>비우기</button>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div class="${SCRIPT_NS}-modal-footer">
+                        <div class="${SCRIPT_NS}-meta" data-meta></div>
+                        <div class="${SCRIPT_NS}-footer-buttons">
+                            <button type="button" class="${SCRIPT_NS}-secondary-btn" data-copy>복사</button>
+                            <button type="button" class="${SCRIPT_NS}-secondary-btn" data-insert>입력창</button>
+                            <button type="button" class="${SCRIPT_NS}-primary-btn" data-overwrite>답변 덮어쓰기</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            const selectA = overlay.querySelector('[data-select-a]');
+            const selectB = overlay.querySelector('[data-select-b]');
+            const listA = overlay.querySelector('[data-list-a]');
+            const listB = overlay.querySelector('[data-list-b]');
+            const editor = overlay.querySelector('[data-editor]');
+            const meta = overlay.querySelector('[data-meta]');
+            const overwriteTarget = overlay.querySelector('[data-overwrite-target]');
+
+            selectA.value = String(defaultA);
+            selectB.value = String(defaultB);
+            editor.value = activeEditorText || '';
+
+            const addedParagraphKeys = new Map();
+
+            const getEditorText = () => editor.value;
+            const setEditorText = (value) => {
+                editor.value = value;
+                activeEditorText = value;
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+            };
+
+            function makeParagraphKey(answerIndex, pIndex) {
+                return `${answerIndex}:${pIndex}`;
+            }
+
+            function normalizeEditorBlock(text = '') {
+                return String(text || '')
+                    .replace(/\r\n/g, '\n')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim();
+            }
+
+            function splitEditorBlocks(text = '') {
+                const normalized = normalizeEditorBlock(text);
+                if (!normalized) return [];
+                return normalized
+                    .split(/\n{2,}/)
+                    .map(block => block.trim())
+                    .filter(Boolean);
+            }
+
+            function editorContainsParagraph(paragraph = '') {
+                const target = normalizeEditorBlock(paragraph);
+                if (!target) return false;
+                return splitEditorBlocks(getEditorText()).some(block => normalizeEditorBlock(block) === target);
+            }
+
+            function removeParagraphFromEditor(paragraph = '') {
+                const target = normalizeEditorBlock(paragraph);
+                if (!target) return false;
+
+                const blocks = splitEditorBlocks(getEditorText());
+                const index = blocks.findIndex(block => normalizeEditorBlock(block) === target);
+
+                if (index < 0) return false;
+
+                blocks.splice(index, 1);
+                setEditorText(blocks.join('\n\n'));
+                return true;
+            }
+
+            function getAnswerParagraphs(answerIndex) {
+                const msg = bundle.variants[answerIndex];
+                if (!msg) return [];
+                return splitIntoParagraphs(getMessageContent(msg)).filter(Boolean);
+            }
+
+            function getAnswerAddedCount(answerIndex) {
+                return getAnswerParagraphs(answerIndex).reduce((count, paragraph) => {
+                    return count + (editorContainsParagraph(paragraph) ? 1 : 0);
+                }, 0);
+            }
+
+            function updateAnswerBulkButton(btn, answerIndex, sideLabel = '') {
+                if (!btn) return;
+
+                const total = getAnswerParagraphs(answerIndex).length;
+                const addedCount = getAnswerAddedCount(answerIndex);
+                const hasAdded = addedCount > 0;
+
+                btn.dataset.bulkMode = hasAdded ? 'remove' : 'add';
+                btn.classList.toggle('is-remove', hasAdded);
+                btn.textContent = hasAdded ? '전체 제거' : '전체 추가';
+                btn.disabled = total <= 0;
+                btn.title = hasAdded
+                    ? `${sideLabel || '이'} 답변에서 편집본에 들어간 문단 ${addedCount}개 제거`
+                    : `${sideLabel || '이'} 답변 전체를 편집본에 추가`;
+            }
+
+            function updateAnswerBulkButtons() {
+                const aIndex = Number(selectA.value);
+                const bIndex = Number(selectB.value);
+
+                updateAnswerBulkButton(overlay.querySelector('[data-add-whole-a]'), aIndex, 'A');
+                updateAnswerBulkButton(overlay.querySelector('[data-add-whole-b]'), bIndex, 'B');
+            }
+
+            function syncParagraphButtons() {
+                overlay.querySelectorAll('[data-paragraph-key]').forEach(btn => {
+                    const key = btn.dataset.paragraphKey || '';
+                    const text = addedParagraphKeys.get(key) || btn.dataset.paragraphText || '';
+                    const isAdded = !!key && addedParagraphKeys.has(key) && editorContainsParagraph(text);
+
+                    if (key && addedParagraphKeys.has(key) && !isAdded) {
+                        addedParagraphKeys.delete(key);
+                    }
+
+                    btn.classList.toggle('is-added', isAdded);
+                    btn.textContent = isAdded ? '- 제거' : '+ 추가';
+                    btn.title = isAdded ? '편집본에서 이 문단 제거' : '편집본에 이 문단 추가';
+                    btn.setAttribute('aria-pressed', isAdded ? 'true' : 'false');
+                });
+
+                updateAnswerBulkButtons();
+            }
+
+            function appendToEditor(text, key = '') {
+                const clean = String(text || '').trim();
+                if (!clean) return;
+
+                if (editorContainsParagraph(clean)) {
+                    if (key) addedParagraphKeys.set(key, clean);
+                    syncParagraphButtons();
+                    toast('이미 편집본에 있는 문단이야.', 'info', 900);
+                    return;
+                }
+
+                const currentText = getEditorText().trim();
+                const next = currentText ? `${currentText}\n\n${clean}` : clean;
+                setEditorText(next);
+
+                if (key) addedParagraphKeys.set(key, clean);
+
+                syncParagraphButtons();
+                toast('편집본에 추가했어.', 'success', 900);
+            }
+
+            function removeFromEditor(text, key = '') {
+                const clean = String(text || '').trim();
+                if (!clean) return;
+
+                const removed = removeParagraphFromEditor(clean);
+
+                if (key) addedParagraphKeys.delete(key);
+
+                syncParagraphButtons();
+
+                if (removed) {
+                    toast('편집본에서 제거했어.', 'success', 900);
+                } else {
+                    toast('편집본에서 원문 문단을 찾지 못했어.', 'info', 1400);
+                }
+            }
+
+            function toggleParagraphInEditor(text, key = '') {
+                const clean = String(text || '').trim();
+                if (!clean) return;
+
+                const alreadyAdded = key && addedParagraphKeys.has(key) && editorContainsParagraph(clean);
+
+                if (alreadyAdded) {
+                    removeFromEditor(clean, key);
+                } else {
+                    appendToEditor(clean, key);
+                }
+            }
+
+            function addWholeAnswerToEditor(answerIndex, sideLabel = '') {
+                const paragraphs = getAnswerParagraphs(answerIndex);
+
+                if (!paragraphs.length) {
+                    toast('추가할 문단을 찾지 못했어.', 'info', 1000);
+                    return;
+                }
+
+                let added = 0;
+                let duplicated = 0;
+
+                paragraphs.forEach((paragraph, pIndex) => {
+                    const clean = String(paragraph || '').trim();
+                    if (!clean) return;
+
+                    const key = makeParagraphKey(answerIndex, pIndex);
+
+                    if (editorContainsParagraph(clean)) {
+                        addedParagraphKeys.set(key, clean);
+                        duplicated++;
+                        return;
+                    }
+
+                    const currentText = getEditorText().trim();
+                    const next = currentText ? `${currentText}\n\n${clean}` : clean;
+                    setEditorText(next);
+                    addedParagraphKeys.set(key, clean);
+                    added++;
+                });
+
+                syncParagraphButtons();
+
+                if (added > 0) {
+                    toast(`${sideLabel || `답변 ${answerIndex + 1}`} 전체에서 ${added}개 문단을 추가했어.`, 'success', 1300);
+                } else if (duplicated > 0) {
+                    toast('이미 편집본에 들어간 답변이야.', 'info', 1100);
+                } else {
+                    toast('추가할 문단을 찾지 못했어.', 'info', 1100);
+                }
+            }
+
+            function removeWholeAnswerFromEditor(answerIndex, sideLabel = '') {
+                const paragraphs = getAnswerParagraphs(answerIndex);
+
+                if (!paragraphs.length) {
+                    toast('제거할 문단을 찾지 못했어.', 'info', 1000);
+                    return;
+                }
+
+                let removed = 0;
+
+                paragraphs.forEach((paragraph, pIndex) => {
+                    const key = makeParagraphKey(answerIndex, pIndex);
+
+                    if (removeParagraphFromEditor(paragraph)) {
+                        removed++;
+                    }
+
+                    addedParagraphKeys.delete(key);
+                });
+
+                syncParagraphButtons();
+
+                if (removed > 0) {
+                    toast(`${sideLabel || `답변 ${answerIndex + 1}`}에서 ${removed}개 문단을 제거했어.`, 'success', 1300);
+                } else {
+                    toast('편집본에서 원문 문단을 찾지 못했어.', 'info', 1400);
+                }
+            }
+
+            function toggleWholeAnswerInEditor(answerIndex, sideLabel = '') {
+                if (getAnswerAddedCount(answerIndex) > 0) {
+                    removeWholeAnswerFromEditor(answerIndex, sideLabel);
+                } else {
+                    addWholeAnswerToEditor(answerIndex, sideLabel);
+                }
+            }
+
+            function renderList(listEl, answerIndex, sideLabel) {
+                const msg = bundle.variants[answerIndex];
+                const content = getMessageContent(msg);
+                const paragraphs = splitIntoParagraphs(content);
+                const isCurrent = answerIndex === current;
+                const reroll = getRerollFlag(msg);
+
+                if (!paragraphs.length) {
+                    listEl.innerHTML = `<div class="${SCRIPT_NS}-empty">문단을 찾지 못했어요.</div>`;
+                    return;
+                }
+
+                listEl.innerHTML = `
+                    <div class="${SCRIPT_NS}-answer-info">
+                        <div class="${SCRIPT_NS}-answer-info-main">
+                            <b>${sideLabel} · 답변 ${answerIndex + 1}</b>
+                            ${isCurrent ? '<span class="badge current">현재 화면</span>' : ''}
+                            ${reroll ? '<span class="badge reroll">reroll</span>' : '<span class="badge original">original</span>'}
+                            <code>${escapeHtml(messageIdOf(msg))}</code>
+                        </div>
+                    </div>
+                    ${paragraphs.map((paragraph, pIndex) => {
+                        const paragraphKey = makeParagraphKey(answerIndex, pIndex);
+                        const isAdded = addedParagraphKeys.has(paragraphKey) && editorContainsParagraph(paragraph);
+                        const isCommentBlock = /^\s*\[\/\/\]:/.test(paragraph);
+                        return `
+                            <article class="${SCRIPT_NS}-paragraph-card ${isCommentBlock ? 'is-comment-block' : ''}">
+                                <div class="${SCRIPT_NS}-paragraph-head">
+                                    <span>${sideLabel}-${pIndex + 1}${isCommentBlock ? ' · 주석' : ''}</span>
+                                    <button
+                                        type="button"
+                                        class="${isAdded ? 'is-added' : ''}"
+                                        data-add-paragraph="${pIndex}"
+                                        data-paragraph-key="${escapeHtml(paragraphKey)}"
+                                        data-paragraph-text="${escapeHtml(paragraph)}"
+                                        aria-pressed="${isAdded ? 'true' : 'false'}"
+                                        title="${isAdded ? '편집본에서 이 문단 제거' : '편집본에 이 문단 추가'}"
+                                    >${isAdded ? '- 제거' : '+ 추가'}</button>
+                                </div>
+                                <pre>${escapeHtml(paragraph)}</pre>
+                            </article>
+                        `;
+                    }).join('')}
+                `;
+
+                listEl.querySelectorAll('[data-add-paragraph]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const pIndex = Number(btn.dataset.addParagraph);
+                        const key = btn.dataset.paragraphKey || makeParagraphKey(answerIndex, pIndex);
+                        toggleParagraphInEditor(paragraphs[pIndex] || '', key);
+                    });
+                });
+
+                syncParagraphButtons();
+            }
+
+            function renderAll() {
+                const aIndex = Number(selectA.value);
+                const bIndex = Number(selectB.value);
+                renderList(listA, aIndex, 'A');
+                renderList(listB, bIndex, 'B');
+
+                const promptPreview = bundle.userPrompt ? shortPreview(getMessageContent(bundle.userPrompt), 80) : '';
+                const targetId = messageIdOf(bundle.variants[current]);
+                meta.textContent = `총 ${total}개 리롤 · 현재 답변 ${current + 1}/${total}${promptPreview ? ` · 입력: ${promptPreview}` : ''}`;
+                if (overwriteTarget) overwriteTarget.textContent = `덮어쓰기 대상: 현재 답변 ${current + 1}/${total}`;
+                if (overwriteTarget) overwriteTarget.title = targetId;
+            }
+
+            function setMobileTab(tabName) {
+                overlay.querySelectorAll('[data-tab]').forEach(btn => {
+                    btn.classList.toggle('is-active', btn.dataset.tab === tabName);
+                });
+                overlay.dataset.mobileTab = tabName;
+            }
+
+            selectA.addEventListener('change', renderAll);
+            selectB.addEventListener('change', renderAll);
+            editor.addEventListener('input', () => {
+                activeEditorText = editor.value;
+                syncParagraphButtons();
+            });
+
+            overlay.querySelector('[data-swap]').addEventListener('click', () => {
+                const oldA = selectA.value;
+                selectA.value = selectB.value;
+                selectB.value = oldA;
+                renderAll();
+            });
+
+            overlay.querySelector('[data-add-whole-a]')?.addEventListener('click', () => {
+                toggleWholeAnswerInEditor(Number(selectA.value), 'A 답변');
+            });
+
+            overlay.querySelector('[data-add-whole-b]')?.addEventListener('click', () => {
+                toggleWholeAnswerInEditor(Number(selectB.value), 'B 답변');
+            });
+
+            overlay.querySelector('[data-clear-editor]').addEventListener('click', () => {
+                const ok = !editor.value.trim() || confirm('편집본을 비울까요?');
+                if (!ok) return;
+                setEditorText('');
+            });
+
+            overlay.querySelector('[data-copy]').addEventListener('click', async () => {
+                const text = editor.value.trim();
+                if (!text) return alert('복사할 편집본이 비어 있어요.');
+                await copyText(text);
+            });
+
+            overlay.querySelector('[data-insert]').addEventListener('click', () => {
+                const text = editor.value.trim();
+                if (!text) return alert('입력창에 넣을 편집본이 비어 있어요.');
+                const ok = insertTextIntoComposer(text);
+                if (ok) {
+                    toast('입력창에 넣었어. 전송 전 확인해줘!', 'success', 1600);
+                    closeModal();
+                } else {
+                    alert('입력창을 찾지 못했습니다. 편집본 복사를 사용해 주세요.');
+                }
+            });
+
+            overlay.querySelector('[data-overwrite]').addEventListener('click', async () => {
+                const text = editor.value.trim();
+                if (!text) return alert('답변 덮어쓰기에 사용할 편집본이 비어 있어요.');
+
+                const chatId = findChatId();
+                const targetMsg = bundle.variants[current];
+                const targetId = messageIdOf(targetMsg);
+
+                if (!chatId || !targetId) {
+                    alert('채팅 ID 또는 답변 ID를 찾지 못해서 중단했어요.');
+                    return;
+                }
+
+                const beforePreview = shortPreview(getMessageContent(targetMsg), 150);
+                const afterPreview = shortPreview(text, 150);
+                const ok = confirm([
+                    `현재 화면 답변 ${current + 1}/${total}에 편집본을 덮어쓸까요?`,
+                    '',
+                    `대상 ID: ${targetId}`,
+                    '',
+                    `기존: ${beforePreview}`,
+                    '',
+                    `변경: ${afterPreview}`,
+                    '',
+                    '덮어쓴 답변은 크랙 서버의 채팅 내용에 반영됩니다.'
+                ].join('\n'));
+
+                if (!ok) return;
+
+                const btn = overlay.querySelector('[data-overwrite]');
+                const oldLabel = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = '덮어쓰는 중...';
+
+                try {
+                    saveOverwriteBackup({
+                        chatId,
+                        messageId: targetId,
+                        label: `현재 답변 ${current + 1}/${total}`,
+                        beforeText: getMessageContent(targetMsg),
+                        afterText: text
+                    });
+
+                    await overwriteMessageOnServer(chatId, targetId, text);
+
+                    const refreshed = await fetchAllMessages(chatId);
+                    const updated = refreshed.find(msg => messageIdOf(msg) === targetId);
+                    const verified = updated && normalizeForVerify(getMessageContent(updated)) === normalizeForVerify(text);
+
+                    if (!verified) {
+                        alert('요청은 성공했지만, 다시 확인했을 때 내용이 완전히 일치하지 않았어요. 새로고침 후 확인해 주세요.');
+                    } else {
+                        toast('답변 덮어쓰기 완료. 새로고침할게.', 'success', 1300);
+                    }
+
+                    setTimeout(() => location.reload(), 650);
+                } catch (err) {
+                    console.error('[reroll-mixer] overwrite failed:', err);
+                    alert(err?.message || '답변 덮어쓰기에 실패했어요.');
+                    btn.disabled = false;
+                    btn.textContent = oldLabel;
+                }
+            });
+
+            overlay.querySelectorAll('[data-close]').forEach(btn => {
+                btn.addEventListener('click', closeModal);
+            });
+
+            overlay.querySelectorAll('[data-tab]').forEach(btn => {
+                btn.addEventListener('click', () => setMobileTab(btn.dataset.tab));
+            });
+
+            overlay.addEventListener('mousedown', e => {
+                if (e.target === overlay) closeModal();
+            });
+
+            renderAll();
+            setMobileTab('a');
+        }
+
+        async function copyText(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                toast('편집본을 복사했어.', 'success');
+                return true;
+            } catch (err) {
+                console.warn('[reroll-mixer] clipboard failed:', err);
+                fallbackCopy(text);
+                return true;
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            textarea.style.top = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                toast('편집본을 복사했어.', 'success');
+            } catch (e) {
+                alert('복사에 실패했습니다. 편집창에서 직접 복사해 주세요.');
+            }
+            textarea.remove();
+        }
+
+        function findComposer() {
+            const selectors = [
+                '.tiptap.ProseMirror[contenteditable="true"]',
+                '[contenteditable="true"][data-placeholder*="메시지"]',
+                '[contenteditable="true"][aria-label*="메시지"]',
+                'textarea[placeholder*="메시지"]',
+                'textarea'
+            ];
+
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el) return el;
+            }
+
+            return null;
+        }
+
+        function insertTextIntoComposer(text) {
+            const composer = findComposer();
+            if (!composer) return false;
+
+            composer.focus();
+
+            if (composer.tagName === 'TEXTAREA' || composer.tagName === 'INPUT') {
+                composer.value = text;
+                composer.dispatchEvent(new Event('input', { bubbles: true }));
+                composer.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+
+            try {
+                document.execCommand('selectAll', false, null);
+                const inserted = document.execCommand('insertText', false, text);
+                composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+                if (inserted) return true;
+            } catch (e) {
+                log('execCommand insert failed', e);
+            }
+
+            try {
+                composer.textContent = text;
+                composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById(MODAL_ID)?.remove();
+        }
+
+        function injectStyles() {
+            GM_addStyle(`
+                .${MIXER_BUTTON_CLASS} {
+                    margin-left: 4px !important;
+                    color: inherit;
+                }
+
+                .${MIXER_BUTTON_CLASS} .${SCRIPT_NS}-btn-label {
+                    font-size: 11px;
+                    font-weight: 800;
+                }
+
+                #${SCRIPT_NS}-toast {
+                    position: fixed;
+                    right: 22px;
+                    bottom: 122px;
+                    z-index: 2147483001;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                    pointer-events: none;
+                }
+
+                .${SCRIPT_NS}-toast-item {
+                    max-width: 320px;
+                    padding: 10px 12px;
+                    border-radius: 12px;
+                    background: rgba(24,24,27,.94);
+                    color: #fff;
+                    font-size: 13px;
+                    line-height: 1.4;
+                    box-shadow: 0 8px 24px rgba(0,0,0,.24);
+                    transition: opacity .22s ease, transform .22s ease;
+                    backdrop-filter: blur(10px);
+                }
+
+                .${SCRIPT_NS}-toast-item.success {
+                    background: rgba(24, 128, 72, .94);
+                }
+
+                #${MODAL_ID} {
+                    --rrm-overlay: rgba(0, 0, 0, .42);
+                    --rrm-bg: #ffffff;
+                    --rrm-panel: #f7f7f8;
+                    --rrm-card: #ffffff;
+                    --rrm-text: #18181b;
+                    --rrm-strong: #0f0f12;
+                    --rrm-muted: #6f7178;
+                    --rrm-faint: #8b8e97;
+                    --rrm-border: rgba(16, 18, 24, .13);
+                    --rrm-soft: rgba(16, 18, 24, .065);
+                    --rrm-soft-hover: rgba(16, 18, 24, .105);
+                    --rrm-input: #ffffff;
+                    --rrm-primary: #ff4432;
+                    --rrm-primary-hover: #ff5b4b;
+                    --rrm-primary-text: #ffffff;
+                    --rrm-blue-bg: rgba(37, 99, 235, .12);
+                    --rrm-blue-text: #1d4ed8;
+                    --rrm-shadow: 0 20px 80px rgba(0,0,0,.28);
+                    position: fixed;
+                    inset: 0;
+                    z-index: 2147483002;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 18px;
+                    background: var(--rrm-overlay);
+                    backdrop-filter: blur(5px);
+                    color: var(--rrm-text);
+                }
+
+                body[data-theme="dark"] #${MODAL_ID},
+                [data-theme="dark"] #${MODAL_ID} {
+                    --rrm-overlay: rgba(0, 0, 0, .58);
+                    --rrm-bg: #18181c;
+                    --rrm-panel: #202027;
+                    --rrm-card: #24242b;
+                    --rrm-text: #f4f4f5;
+                    --rrm-strong: #ffffff;
+                    --rrm-muted: rgba(255,255,255,.68);
+                    --rrm-faint: rgba(255,255,255,.46);
+                    --rrm-border: rgba(255,255,255,.12);
+                    --rrm-soft: rgba(255,255,255,.085);
+                    --rrm-soft-hover: rgba(255,255,255,.14);
+                    --rrm-input: #18181c;
+                    --rrm-blue-bg: rgba(92, 154, 255, .18);
+                    --rrm-blue-text: #9fc4ff;
+                    --rrm-shadow: 0 20px 80px rgba(0,0,0,.48);
+                }
+
+                @media (prefers-color-scheme: dark) {
+                    body:not([data-theme="light"]) #${MODAL_ID} {
+                        --rrm-overlay: rgba(0, 0, 0, .58);
+                        --rrm-bg: #18181c;
+                        --rrm-panel: #202027;
+                        --rrm-card: #24242b;
+                        --rrm-text: #f4f4f5;
+                        --rrm-strong: #ffffff;
+                        --rrm-muted: rgba(255,255,255,.68);
+                        --rrm-faint: rgba(255,255,255,.46);
+                        --rrm-border: rgba(255,255,255,.12);
+                        --rrm-soft: rgba(255,255,255,.085);
+                        --rrm-soft-hover: rgba(255,255,255,.14);
+                        --rrm-input: #18181c;
+                        --rrm-blue-bg: rgba(92, 154, 255, .18);
+                        --rrm-blue-text: #9fc4ff;
+                        --rrm-shadow: 0 20px 80px rgba(0,0,0,.48);
+                    }
+                }
+
+                .${SCRIPT_NS}-modal-card {
+                    width: min(1240px, calc(100vw - 28px));
+                    height: min(860px, calc(100vh - 28px));
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    border-radius: 18px;
+                    border: 1px solid var(--rrm-border);
+                    background: var(--rrm-bg);
+                    color: var(--rrm-text);
+                    box-shadow: var(--rrm-shadow);
+                }
+
+                .${SCRIPT_NS}-modal-header {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 14px;
+                    padding: 15px 18px 11px;
+                    border-bottom: 1px solid var(--rrm-border);
+                    background: var(--rrm-bg);
+                }
+
+                .${SCRIPT_NS}-modal-title {
+                    font-size: 18px;
+                    line-height: 1.2;
+                    font-weight: 900;
+                    color: var(--rrm-strong);
+                }
+
+                .${SCRIPT_NS}-modal-desc {
+                    margin-top: 6px;
+                    color: var(--rrm-muted);
+                    font-size: 13px;
+                    line-height: 1.45;
+                }
+
+                .${SCRIPT_NS}-icon-btn {
+                    flex: 0 0 auto;
+                    width: 32px;
+                    height: 32px;
+                    border: 1px solid var(--rrm-border);
+                    border-radius: 999px;
+                    background: var(--rrm-soft);
+                    color: var(--rrm-text);
+                    cursor: pointer;
+                    font-size: 16px;
+                }
+
+                .${SCRIPT_NS}-icon-btn:hover {
+                    background: var(--rrm-soft-hover);
+                }
+
+                .${SCRIPT_NS}-topbar {
+                    display: grid;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+                    gap: 10px;
+                    align-items: end;
+                    padding: 12px 18px;
+                    border-bottom: 1px solid var(--rrm-border);
+                    background: var(--rrm-panel);
+                }
+
+                .${SCRIPT_NS}-topbar label {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 5px;
+                    min-width: 0;
+                }
+
+                .${SCRIPT_NS}-topbar label span {
+                    font-size: 12px;
+                    color: var(--rrm-muted);
+                    font-weight: 800;
+                }
+
+                .${SCRIPT_NS}-topbar select {
+                    width: 100%;
+                    min-height: 34px;
+                    border: 1px solid var(--rrm-border);
+                    border-radius: 10px;
+                    background: var(--rrm-input);
+                    color: var(--rrm-text);
+                    padding: 0 10px;
+                    font-size: 13px;
+                    outline: none;
+                }
+
+                .${SCRIPT_NS}-topbar select option {
+                    background: var(--rrm-bg);
+                    color: var(--rrm-text);
+                }
+
+                .${SCRIPT_NS}-mobile-tabs {
+                    display: none;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 6px;
+                    padding: 10px 12px 0;
+                    background: var(--rrm-bg);
+                }
+
+                .${SCRIPT_NS}-mobile-tabs button {
+                    min-height: 34px;
+                    border: 1px solid var(--rrm-border);
+                    border-radius: 999px;
+                    background: var(--rrm-soft);
+                    color: var(--rrm-muted);
+                    font-weight: 900;
+                }
+
+                .${SCRIPT_NS}-mobile-tabs button.is-active {
+                    background: var(--rrm-primary);
+                    color: var(--rrm-primary-text);
+                    border-color: transparent;
+                }
+
+                .${SCRIPT_NS}-modal-body {
+                    flex: 1;
+                    min-height: 0;
+                    display: grid;
+                    grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(280px, .82fr);
+                    gap: 12px;
+                    padding: 14px 18px;
+                    overflow: hidden;
+                    background: var(--rrm-bg);
+                }
+
+                .${SCRIPT_NS}-answer-pane,
+                .${SCRIPT_NS}-editor-pane {
+                    min-height: 0;
+                    min-width: 0;
+                    display: flex;
+                    flex-direction: column;
+                    border: 1px solid var(--rrm-border);
+                    border-radius: 14px;
+                    background: var(--rrm-panel);
+                    color: var(--rrm-text);
+                    overflow: hidden;
+                }
+
+                .${SCRIPT_NS}-pane-title {
+                    flex: 0 0 auto;
+                    padding: 10px 12px;
+                    border-bottom: 1px solid var(--rrm-border);
+                    font-size: 14px;
+                    font-weight: 900;
+                    color: var(--rrm-strong);
+                    background: var(--rrm-panel);
+                }
+
+                .${SCRIPT_NS}-answer-title {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                }
+
+                .${SCRIPT_NS}-title-add-all {
+                    flex: 0 0 auto;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 28px;
+                    min-height: 28px;
+                    border: 1px solid var(--rrm-primary);
+                    border-radius: 999px;
+                    padding: 0 11px;
+                    background: var(--rrm-primary);
+                    color: var(--rrm-primary-text) !important;
+                    font-size: 12px;
+                    font-weight: 900;
+                    line-height: 1;
+                    cursor: pointer;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                    box-sizing: border-box;
+                }
+
+                .${SCRIPT_NS}-title-add-all:hover {
+                    background: var(--rrm-primary-hover);
+                    color: var(--rrm-primary-text) !important;
+                }
+
+                .${SCRIPT_NS}-title-add-all.is-remove {
+                    background: var(--rrm-soft);
+                    color: var(--rrm-primary) !important;
+                    border-color: color-mix(in srgb, var(--rrm-primary) 42%, transparent);
+                }
+
+                .${SCRIPT_NS}-title-add-all.is-remove:hover {
+                    background: var(--rrm-soft-hover);
+                    color: var(--rrm-primary) !important;
+                }
+
+                .${SCRIPT_NS}-title-add-all:disabled {
+                    opacity: .55;
+                    cursor: not-allowed;
+                }
+
+                .${SCRIPT_NS}-editor-title {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .${SCRIPT_NS}-editor-title small {
+                    min-width: 0;
+                    color: var(--rrm-muted);
+                    font-size: 11px;
+                    font-weight: 800;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .${SCRIPT_NS}-paragraph-list {
+                    flex: 1 1 auto;
+                    min-height: 0;
+                    overflow-y: auto;
+                    overflow-x: hidden;
+                    padding: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    overscroll-behavior: contain;
+                }
+
+                .${SCRIPT_NS}-answer-info {
+                    display: flex;
+                    gap: 8px;
+                    align-items: center;
+                    padding: 8px 9px;
+                    border-radius: 11px;
+                    background: var(--rrm-soft);
+                    color: var(--rrm-text);
+                    font-size: 12px;
+                }
+
+                .${SCRIPT_NS}-answer-info-main {
+                    min-width: 0;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 7px;
+                    align-items: center;
+                }
+
+                .${SCRIPT_NS}-answer-info code {
+                    color: var(--rrm-faint);
+                    word-break: break-all;
+                }
+
+                .${SCRIPT_NS}-paragraph-card {
+                    flex: 0 0 auto;
+                    position: relative;
+                    border: 1px solid var(--rrm-border);
+                    border-radius: 13px;
+                    background: var(--rrm-card);
+                    overflow: visible;
+                }
+
+                .${SCRIPT_NS}-paragraph-card.is-comment-block {
+                    border-style: dashed;
+                    background: color-mix(in srgb, var(--rrm-card) 88%, var(--rrm-primary) 12%);
+                }
+
+                .${SCRIPT_NS}-paragraph-head {
+                    position: sticky;
+                    top: 0;
+                    z-index: 3;
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 8px;
+                    align-items: center;
+                    padding: 8px 9px;
+                    border-bottom: 1px solid var(--rrm-border);
+                    border-radius: 13px 13px 0 0;
+                    background: color-mix(in srgb, var(--rrm-card) 94%, transparent);
+                    backdrop-filter: blur(8px);
+                }
+
+                .${SCRIPT_NS}-paragraph-head span {
+                    font-size: 12px;
+                    font-weight: 900;
+                    color: var(--rrm-muted);
+                }
+
+                .${SCRIPT_NS}-paragraph-head button,
+                .${SCRIPT_NS}-soft-btn,
+                .${SCRIPT_NS}-secondary-btn,
+                .${SCRIPT_NS}-primary-btn {
+                    min-height: 30px;
+                    border: 1px solid transparent;
+                    border-radius: 9px;
+                    padding: 0 10px;
+                    font-size: 12px;
+                    font-weight: 900;
+                    cursor: pointer;
+                    transition: background .16s ease, opacity .16s ease, transform .16s ease;
+                }
+
+                .${SCRIPT_NS}-paragraph-head button,
+                .${SCRIPT_NS}-primary-btn {
+                    background: var(--rrm-primary);
+                    color: var(--rrm-primary-text);
+                }
+
+                .${SCRIPT_NS}-paragraph-head button:hover,
+                .${SCRIPT_NS}-primary-btn:hover {
+                    background: var(--rrm-primary-hover);
+                }
+
+                .${SCRIPT_NS}-paragraph-head button.is-added {
+                    background: var(--rrm-soft);
+                    color: var(--rrm-primary);
+                    border-color: color-mix(in srgb, var(--rrm-primary) 42%, transparent);
+                }
+
+                .${SCRIPT_NS}-paragraph-head button.is-added:hover {
+                    background: var(--rrm-soft-hover);
+                    color: var(--rrm-primary);
+                }
+
+                .${SCRIPT_NS}-soft-btn,
+                .${SCRIPT_NS}-secondary-btn {
+                    background: var(--rrm-soft);
+                    color: var(--rrm-text);
+                    border-color: var(--rrm-border);
+                }
+
+                .${SCRIPT_NS}-soft-btn:hover,
+                .${SCRIPT_NS}-secondary-btn:hover {
+                    background: var(--rrm-soft-hover);
+                }
+
+                .${SCRIPT_NS}-primary-btn:disabled,
+                .${SCRIPT_NS}-secondary-btn:disabled,
+                .${SCRIPT_NS}-soft-btn:disabled {
+                    opacity: .55;
+                    cursor: wait;
+                }
+
+                .${SCRIPT_NS}-paragraph-card pre {
+                    display: block !important;
+                    visibility: visible !important;
+                    height: auto !important;
+                    max-height: none !important;
+                    margin: 0;
+                    padding: 11px 12px 12px;
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                    overflow-wrap: anywhere;
+                    overflow: visible;
+                    font-family: inherit;
+                    font-size: 13px;
+                    line-height: 1.66;
+                    color: var(--rrm-text);
+                }
+
+                .${SCRIPT_NS}-editor-pane textarea {
+                    flex: 1;
+                    min-height: 0;
+                    resize: none;
+                    border: none;
+                    outline: none;
+                    background: var(--rrm-input);
+                    color: var(--rrm-text);
+                    padding: 12px;
+                    font-family: inherit;
+                    font-size: 13px;
+                    line-height: 1.55;
+                    white-space: pre-wrap;
+                }
+
+                .${SCRIPT_NS}-editor-pane textarea::placeholder {
+                    color: var(--rrm-faint);
+                }
+
+                .${SCRIPT_NS}-editor-actions {
+                    display: flex;
+                    gap: 8px;
+                    padding: 10px;
+                    border-top: 1px solid var(--rrm-border);
+                    background: var(--rrm-panel);
+                }
+
+                .${SCRIPT_NS}-modal-footer {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 10px;
+                    align-items: center;
+                    padding: 12px 18px 16px;
+                    border-top: 1px solid var(--rrm-border);
+                    background: var(--rrm-bg);
+                }
+
+                .${SCRIPT_NS}-meta {
+                    min-width: 0;
+                    color: var(--rrm-muted);
+                    font-size: 12px;
+                    line-height: 1.4;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .${SCRIPT_NS}-footer-buttons {
+                    display: flex;
+                    gap: 8px;
+                    flex: 0 0 auto;
+                }
+
+                .badge {
+                    display: inline-flex;
+                    align-items: center;
+                    height: 19px;
+                    padding: 0 7px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    line-height: 1;
+                }
+
+                .badge.current {
+                    background: var(--rrm-primary);
+                    color: var(--rrm-primary-text);
+                }
+
+                .badge.reroll {
+                    background: var(--rrm-blue-bg);
+                    color: var(--rrm-blue-text);
+                }
+
+                .badge.original {
+                    background: var(--rrm-soft);
+                    color: var(--rrm-muted);
+                }
+
+                .${SCRIPT_NS}-empty {
+                    padding: 14px;
+                    color: var(--rrm-muted);
+                    font-size: 13px;
+                }
+
+                @media (max-width: 860px) {
+                    #${MODAL_ID} {
+                        padding: 8px;
+                        align-items: flex-end;
+                    }
+
+                    .${SCRIPT_NS}-modal-card {
+                        width: 100%;
+                        height: min(92vh, 840px);
+                        border-radius: 18px 18px 10px 10px;
+                    }
+
+                    .${SCRIPT_NS}-modal-header {
+                        padding: 14px 14px 10px;
+                    }
+
+                    .${SCRIPT_NS}-modal-desc {
+                        font-size: 12px;
+                    }
+
+                    .${SCRIPT_NS}-topbar {
+                        grid-template-columns: 1fr;
+                        padding: 10px 12px;
+                    }
+
+                    .${SCRIPT_NS}-mobile-tabs {
+                        display: grid;
+                    }
+
+                    .${SCRIPT_NS}-modal-body {
+                        display: block;
+                        padding: 10px 12px;
+                        overflow: hidden;
+                    }
+
+                    .${SCRIPT_NS}-answer-pane,
+                    .${SCRIPT_NS}-editor-pane {
+                        height: 100%;
+                        display: none;
+                    }
+
+                    #${MODAL_ID}[data-mobile-tab="a"] [data-pane="a"],
+                    #${MODAL_ID}[data-mobile-tab="b"] [data-pane="b"],
+                    #${MODAL_ID}[data-mobile-tab="edit"] [data-pane="edit"] {
+                        display: flex;
+                    }
+
+                    .${SCRIPT_NS}-modal-footer {
+                        flex-direction: column;
+                        align-items: stretch;
+                        padding: 10px 12px 12px;
+                    }
+
+                    .${SCRIPT_NS}-meta {
+                        white-space: normal;
+                    }
+
+                    .${SCRIPT_NS}-footer-buttons {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                    }
+
+                    .${SCRIPT_NS}-footer-buttons [data-overwrite] {
+                        grid-column: 1 / -1;
+                    }
+                }
+            `);
+        }
+
+        injectStyles();
+        attachMixerButtons();
+
+        attachTimer = setInterval(() => {
+            attachMixerButtons();
+        }, REFRESH_INTERVAL_MS);
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+    }
+
+    // ==========================================
+    // 모듈 7: 입력 도우미
     // ==========================================
     function positionModal() {
         const modal = document.getElementById('igx-shortcut-modal');
@@ -1412,7 +3094,7 @@
     }
 
     // ==========================================
-    // 모듈 7: 크래커 계산기
+    // 모듈 8: 크래커 계산기
     // ==========================================
     function initTurnCracker() {
         const SELECTOR = {
@@ -1605,7 +3287,7 @@
     }
 
     // ==========================================
-    // 모듈 8: 라디오존데
+    // 모듈 9: 라디오존데
     // ==========================================
     function initRadiosonde() {
         const MODELS = [
@@ -1827,16 +3509,17 @@
         }, 1000);
 
         try {
-            try { initSendHold();          } catch (e) { console.error("[ 8in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
-            try { initRerollHold();        } catch (e) { console.error("[ 8in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
-            try { initDoubleClick();       } catch (e) { console.error("[ 8in1 통합팩 ] 더블클릭 수정 모듈 오류:", e); }
-            try { initAutoScroll();        } catch (e) { console.error("[ 8in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
-            try { initMessageTimeBadge();  } catch (e) { console.error("[ 8in1 통합팩 ] 메시지 시간 표기 모듈 오류:", e); }
-            try { initRPToolbar();         } catch (e) { console.error("[ 8in1 통합팩 ] 입력 도우미 모듈 오류:", e); }
-            try { initTurnCracker();       } catch (e) { console.error("[ 8in1 통합팩 ] 크래커 계산기 모듈 오류:", e); }
-            try { initRadiosonde();        } catch (e) { console.error("[ 8in1 통합팩 ] 라디오존데 모듈 오류:", e); }
+            try { initSendHold();          } catch (e) { console.error("[ 9in1 통합팩 ] 전송 홀드 모듈 오류:", e); }
+            try { initRerollHold();        } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 홀드 모듈 오류:", e); }
+            try { initDoubleClick();       } catch (e) { console.error("[ 9in1 통합팩 ] 더블클릭 수정 모듈 오류:", e); }
+            try { initAutoScroll();        } catch (e) { console.error("[ 9in1 통합팩 ] 오토스크롤 모듈 오류:", e); }
+            try { initMessageTimeBadge();  } catch (e) { console.error("[ 9in1 통합팩 ] 메시지 시간 표기 모듈 오류:", e); }
+            try { initRerollMixer();       } catch (e) { console.error("[ 9in1 통합팩 ] 리롤 믹서 모듈 오류:", e); }
+            try { initRPToolbar();         } catch (e) { console.error("[ 9in1 통합팩 ] 입력 도우미 모듈 오류:", e); }
+            try { initTurnCracker();       } catch (e) { console.error("[ 9in1 통합팩 ] 크래커 계산기 모듈 오류:", e); }
+            try { initRadiosonde();        } catch (e) { console.error("[ 9in1 통합팩 ] 라디오존데 모듈 오류:", e); }
         } catch(e) {
-            console.error("[ 8in1 통합팩 ] 치명적인 시작 오류 발생:", e);
+            console.error("[ 9in1 통합팩 ] 치명적인 시작 오류 발생:", e);
         }
     }
 
