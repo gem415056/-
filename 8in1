@@ -758,12 +758,15 @@
             const { anchor, placement } = findSmartAnchor(group);
 
             if (anchor?.parentElement) {
-                const parent = anchor.parentElement;
-                // 안전성 극대화: 시간 배지를 항상 버튼 묶음의 맨 첫 자식(맨 왼쪽)으로 삽입
-                if (badge.parentElement !== parent || parent.firstChild !== badge) {
-                    parent.insertBefore(badge, parent.firstChild);
+                const buttonGroup = anchor.parentElement;
+                const outerRow = buttonGroup.parentElement;
+                if (outerRow) {
+                    // 시간 배지를 버튼 바구니 내부가 아니라, 바깥쪽 최외각 줄(outerRow)에서 바구니 왼쪽에 배치
+                    if (badge.parentElement !== outerRow || badge.nextElementSibling !== buttonGroup) {
+                        outerRow.insertBefore(badge, buttonGroup);
+                    }
+                    badge.dataset.placement = placement;
                 }
-                badge.dataset.placement = placement;
             } else if (badge.parentElement !== group) {
                 group.appendChild(badge);
                 badge.dataset.placement = 'fallback';
@@ -871,9 +874,6 @@
                     max-width: 100%;
                     height: 1.5rem;
                     min-height: 1.5rem;
-                    margin: 0 !important;
-                    margin-right: auto !important; /* 배지를 맨 왼쪽으로 보내고 다른 버튼들을 오른쪽 끝으로 정렬 */
-                    margin-left: 0 !important;
                     padding: .25rem .5rem;
                     border: 0 !important;
                     border-radius: 4px;
@@ -906,6 +906,9 @@
                 .${BADGE_CLASS}[data-placement="compare-left"],
                 .${BADGE_CLASS}[data-placement="reroll-left"],
                 .${BADGE_CLASS}[data-placement="option-left"] {
+                    margin: 0 !important;
+                    margin-right: auto !important; /* 배지를 맨 왼쪽 끝으로 밀고 다른 버튼들을 오른쪽 끝으로 정렬 */
+                    margin-left: 0 !important;
                     align-self: center;
                 }
 
