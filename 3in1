@@ -1557,7 +1557,7 @@
             document.head.appendChild(s);
         }
 
-        // 알리미 정중앙 가로채기 엔진 스타일과 일치시킨 AI 요약 전용 독립 토스트 시스템 (정중앙 68px 위)
+        // 알리미 정중앙 가로채기 엔진 스타일과 일치시킨 AI 요약 전용 독립 토스트 시스템 (정중앙 101px 위)
         function showToast(message) {
             const toastId = "crack-ext-summary-toast";
             
@@ -1571,7 +1571,7 @@
             wrapperNode.className = "crack-ext-summary-toast-wrapper";
             wrapperNode.style.cssText = `
                 position: fixed;
-                top: calc(50% - 68px);
+                top: calc(50% - 101px);
                 left: 50%;
                 transform: translate(-50%, -50%) scale(0.9);
                 opacity: 0;
