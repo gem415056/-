@@ -2617,17 +2617,18 @@
                     font-size: 13px;
                 }
 
-                @media (max-width: 860px) {
-                    #${MODAL_ID} {
-                        padding: 8px;
-                        align-items: flex-end;
-                    }
+            @media (max-width: 860px) {
+                #${MODAL_ID} {
+                    padding: 12px;
+                    align-items: center;
+                    justify-content: center;
+                }
 
-                    .${SCRIPT_NS}-modal-card {
-                        width: 100%;
-                        height: min(92vh, 840px);
-                        border-radius: 18px 18px 10px 10px;
-                    }
+                .${SCRIPT_NS}-modal-card {
+                    width: min(600px, calc(100vw - 24px));
+                    height: min(80vh, 720px);
+                    border-radius: 18px;
+                }
 
                     .${SCRIPT_NS}-modal-header {
                         padding: 14px 14px 10px;
