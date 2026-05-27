@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         크랙 8 in 1 통합팩 (V15.0.0 - 리롤 믹서 추가 및 모듈 최적화 배치)
+// @name         크랙 8 in 1 통합팩 (V15.1.0 - 리롤 믹서 추가 및 모듈 최적화 배치)
 // @namespace    https://crack.wrtn.ai/
-// @version      15.0.0
-// @description  리롤 믹서가 추가된 8 in 1 통합 최적화 및 안정성 극대화 버전
+// @version      15.1.0
+// @description  텍스트 입력창 크기 수정
 // @author       User & Gemini (수정)
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -1971,7 +1971,7 @@
         cancelBtn.textContent = "취소";
         cancelBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
-            border-radius: 6px; font-size: 11px; font-weight: 500;
+            border-radius: 6px; font-size: 12px; font-weight: 500;
             border: 1px solid rgba(128,128,128,0.2); background: transparent;
             color: inherit; cursor: pointer; width: 52px; height: 24px; box-sizing: border-box;
         `;
@@ -1981,7 +1981,7 @@
         sendBtn.textContent = "입력";
         sendBtn.style.cssText = `
             display: inline-flex; align-items: center; justify-content: center;
-            border-radius: 6px; font-size: 11px; font-weight: 600;
+            border-radius: 6px; font-size: 12px; font-weight: 600;
             border: none; background-color: #D5C2DE;
             color: #000000; cursor: pointer; width: 52px; height: 24px; box-sizing: border-box;
             transition: opacity 0.15s ease;
@@ -2007,7 +2007,7 @@
         textarea.style.cssText = `
             width: 100%; height: 36px; background: transparent; 
             border: none; outline: none; resize: none; 
-            font-family: inherit; font-size: 10pt; line-height: 1.5; 
+            font-family: inherit; font-size: 12pt; line-height: 1.5; 
             padding: 8px 4px; color: inherit; overflow-y: hidden;
             white-space: pre-wrap !important; word-wrap: break-word !important; 
             word-break: break-all !important;
