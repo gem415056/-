@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         크랙 AI요약 & 북마크 & 키워드노트 통합본 (3 in 1)
 // @namespace    https://crack.wrtn.ai/
-// @version      4.7.0
-// @description  키워드노트 실시간 동기화 + 삭제 명령어 제거 + 모듈별 독립 커스텀 색상(북마크 연노랑, 요약 연분홍) 완벽 적용
+// @version      4.7.1
+// @description  키워드노트 실시간 동기화 + 삭제 명령어 제거 + 모듈별 독립 커스텀 색상(북마크 연노랑, 요약 연분홍) 완벽 적용 + 알리미 스타일 알림 토스트 연동 (중앙 68px 위)
 // @author       Assistant
 // @match        https://crack.wrtn.ai/*
 // @grant        GM_addStyle
@@ -1557,16 +1557,83 @@
             document.head.appendChild(s);
         }
 
+        // 알리미 정중앙 가로채기 엔진 스타일과 일치시킨 AI 요약 전용 독립 토스트 시스템 (정중앙 68px 위)
         function showToast(message) {
-            var old = document.getElementById('crack-ext-toast');
-            if (old) old.remove();
-            var toast = document.createElement('div');
-            toast.id = 'crack-ext-toast';
-            toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-10px);z-index:999999999;background:#1a1a1a;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,0.25);transition:opacity 0.3s,transform 0.3s;';
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateX(-50%) translateY(0)'; });
-            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(-50%) translateY(-10px)'; setTimeout(() => toast.remove(), 300); }, 3000);
+            const toastId = "crack-ext-summary-toast";
+            
+            const existing = document.getElementById(toastId);
+            if (existing) {
+                existing.remove();
+            }
+
+            const wrapperNode = document.createElement("div");
+            wrapperNode.id = toastId;
+            wrapperNode.className = "crack-ext-summary-toast-wrapper";
+            wrapperNode.style.cssText = `
+                position: fixed;
+                top: calc(50% - 68px);
+                left: 50%;
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0;
+                transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2), opacity 0.15s ease;
+                z-index: 999999999 !important;
+                pointer-events: none;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: fit-content;
+                height: fit-content;
+            `;
+
+            const containerNode = document.createElement("div");
+            containerNode.style.cssText = `
+                background-color: #BCD0D7;
+                border: 1.5px solid #486D7A;
+                padding: 9px 14px;
+                border-radius: 9999px;
+                display: inline-flex;
+                justify-content: center;
+                align-items: center;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+                box-sizing: border-box;
+            `;
+
+            const textNode = document.createElement("p");
+            textNode.textContent = message;
+            textNode.style.cssText = `
+                color: #486D7A;
+                text-align: center;
+                font-size: 12px;
+                font-weight: 700;
+                line-height: 100%;
+                margin: 0;
+                padding: 0;
+                white-space: nowrap;
+                user-select: none;
+            `;
+
+            containerNode.append(textNode);
+            wrapperNode.append(containerNode);
+            document.body.appendChild(wrapperNode);
+
+            /* 스르륵 페이드 인 효과 */
+            setTimeout(() => {
+                wrapperNode.style.transform = "translate(-50%, -50%) scale(1)";
+                wrapperNode.style.opacity = "1";
+            }, 20);
+
+            /* 수명 만료 후 퇴장 소멸 */
+            setTimeout(() => {
+                if (document.body.contains(wrapperNode)) {
+                    wrapperNode.style.transform = "translate(-50%, -50%) scale(0.93)";
+                    wrapperNode.style.opacity = "0";
+                    setTimeout(() => {
+                        if (document.body.contains(wrapperNode)) {
+                            wrapperNode.remove();
+                        }
+                    }, 200);
+                }
+            }, 3000);
         }
 
         function refreshCurrentTab(dialog) {
